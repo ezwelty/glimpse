@@ -4,12 +4,13 @@ import warnings
 
 class Camera(object):
     
-    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0]):
+    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=[]):
         """
         Create a camera.
         
         All camera propperties are coerced to numpy arrays.
         
+        # Independent
         xyz: Position in world coordinates [x, y, z]
         viewdir: View direction in degrees [yaw, pitch, roll]
             yaw: clockwise rotation about z-axis (0 = look north)
@@ -21,55 +22,106 @@ class Camera(object):
         k: Radial distortion coefficients [k1, ..., k6]
         p: Tangential distortion coefficients [p1, p2]
         
+        # Dependent
+        fmm: Focal length in mm [fx, fy] (sets f)
         R: Rotation matrix (read-only)
         """
         self.xyz = xyz
         self.viewdir = viewdir
         self.imgsz = imgsz
+        self.sensorsz = sensorsz
         self.f = f
         self.c = c
         self.k = k
         self.p = p
 
-    # ---- Properties ----
+    # ---- Properties (independent) ----
     
     xyz = property(operator.attrgetter('_xyz'))
+    viewdir = property(operator.attrgetter('_viewdir'))
+    imgsz = property(operator.attrgetter('_imgsz'))
+    sensorsz = property(operator.attrgetter('_sensorsz'))
+    f = property(operator.attrgetter('_f'))
+    c = property(operator.attrgetter('_c'))
+    k = property(operator.attrgetter('_k'))
+    p = property(operator.attrgetter('_p'))
+    
     @xyz.setter
     def xyz(self, value):
         self._xyz = get_float_array(value, n=3, fill=True)
-        
-    viewdir = property(operator.attrgetter('_viewdir'))
-    R = property(operator.attrgetter('_R'))
+    
     @viewdir.setter
     def viewdir(self, value):
         self._viewdir = get_float_array(value, n=3, fill=True)
-        self._R = compute_R(self.viewdir)
     
-    f = property(operator.attrgetter('_f'))
+    @imgsz.setter
+    def imgsz(self, value):
+        self._imgsz = get_float_array(value, n=2, fill=False)
+
+    @sensorsz.setter
+    def sensorsz(self, value):
+        self._sensorsz = get_float_array(value, n=2, fill=False)
+
     @f.setter
     def f(self, value):
         self._f = get_float_array(value, n=2, fill=False)
     
-    imgsz = property(operator.attrgetter('_imgsz'))
-    @imgsz.setter
-    def imgsz(self, value):
-        self._imgsz = get_float_array(value, n=2, fill=False)
-    
-    c = property(operator.attrgetter('_c'))
     @c.setter
     def c(self, value):
         self._c = get_float_array(value, n=2, fill=True)
 
-    k = property(operator.attrgetter('_k'))
     @k.setter
     def k(self, value):
         self._k = get_float_array(value, n=6, fill=True)
 
-    p = property(operator.attrgetter('_p'))
     @p.setter
     def p(self, value):
         self._p = get_float_array(value, n=3, fill=True)
-        
+    
+    # ---- Properties (dependent) ----
+    
+    @property
+    def fmm(self):
+        if len(self.f) > 0 and len(self.sensorsz) > 0 and len(self.imgsz) > 0:
+            return(self.f * self.sensorsz / self.imgsz)
+        else:
+            raise AttributeError("Missing required attributes (f, sensorsz, imgsz)")
+            
+    @fmm.setter
+    def fmm(self, value):
+        if len(self.sensorsz) > 0 and len(self.imgsz) > 0:
+            fmm = get_float_array(value, n=2, fill=False)
+            self.f = fmm * self.imgsz / self.sensorsz
+        else:
+            raise AttributeError("Missing required attributes (sensorsz, imgsz)")
+    
+    @property
+    def R(self):
+        if len(self.viewdir) > 0:
+            # Initial rotations of camera reference frame
+            # (camera +z pointing up, with +x east and +y north)
+            # Point camera north: -90 deg counterclockwise rotation about x-axis
+            #   ri = [1 0 0; 0 cosd(-90) sind(-90); 0 -sind(-90) cosd(-90)];
+            # (camera +z now pointing north, with +x east and +y down)
+            # yaw: counterclockwise rotation about y-axis (relative to north, from above: +cw, - ccw)
+            #   ry = [C1 0 -S1; 0 1 0; S1 0 C1];
+            # pitch: counterclockwise rotation about x-axis (relative to horizon: + up, - down)
+            #   rp = [1 0 0; 0 C2 S2; 0 -S2 C2];
+            # roll: counterclockwise rotation about z-axis (from behind camera: + ccw, - cw)
+            #   rr = [C3 S3 0; -S3 C3 0; 0 0 1];
+            # Apply all rotations in order
+            #   R = rr * rp * ry * ri;
+            radians = np.deg2rad(self.viewdir)
+            C = np.cos(radians)
+            S = np.sin(radians)
+            return(np.array([
+                [C[0] * C[2] + S[0] * S[1] * S[2],  C[0] * S[1] * S[2] - C[2] * S[0], -C[1] * S[2]],
+                [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
+                [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
+            ]))
+        else:
+            raise AttributeError("Missing required attributes (viewdir)")
+            
     # ---- Methods (public) ----
     
     def idealize(self):
@@ -327,3 +379,4 @@ def get_sensor_size(make, model):
         return(np.array(sensor_sizes[make_model]))
     except :
         raise KeyError("No sensor size found for " + make_model)
+    

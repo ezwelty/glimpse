@@ -304,3 +304,26 @@ def compute_R(viewdir):
         [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
         [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
     ]))
+
+def get_sensor_size(make, model):
+    """
+    Get a camera model's CCD sensor width and height in mm.
+    Data is from Digital Photography Review (https://dpreview.com).
+    See also https://www.dpreview.com/articles/8095816568/sensorsizes.
+    make: (str) Camera make (EXIF Make)
+    model: (str) Camera model (EXIF Model)
+    """
+    make_model = make.strip() + " " + model.strip()
+    # Sensor sizes (mm)
+    sensor_sizes = {
+        "NIKON CORPORATION NIKON D2X": [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
+        "NIKON CORPORATION NIKON D200": [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
+        "NIKON CORPORATION NIKON D300S": [23.6, 15.8], # https://www.dpreview.com/reviews/nikond300s/2
+        "NIKON E8700": [8.8, 6.6], # https://www.dpreview.com/reviews/nikoncp8700/2
+        "Canon Canon EOS 20D": [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
+        "Canon Canon EOS 40D": [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
+    }
+    try:
+        return(np.array(sensor_sizes[make_model]))
+    except :
+        raise KeyError("No sensor size found for " + make_model)

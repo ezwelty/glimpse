@@ -10,3 +10,4 @@ Thumbs.db
 # Python generated files
 *.pyc
 __pycache__/
+.cache/

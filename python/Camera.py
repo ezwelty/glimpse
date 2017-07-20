@@ -145,13 +145,17 @@ class Camera(object):
         self.c *= scale
         self.imgsz *= scale
         
-    def project(self, xyz, directions = False):
+    def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.
-        xyz: (array:float) World coordinates (Nx3)
+        xyz: (array:float) World coordinates (Nx3) or camera coordinates (Nx2)
         directions: (bool) Whether absolute coordinates (False) or ray directions (True)
         """
-        xy = self.world2camera(xyz, directions = directions)
+        if xyz.shape[1] == 3:
+            xy = self.world2camera(xyz, directions=directions)
+        else:
+            xy = xyz
+        xy = self.world2camera(xyz, directions=directions)
         uv = self.camera2image(xy)
         return(uv)
         
@@ -164,6 +168,71 @@ class Camera(object):
         xy = self.image2camera(uv)
         xyz = self.camera2world(xy)
         return(xyz)
+    
+    # ---- Methods (optimization) ----
+    
+    def infront(self, xyz, directions=False):
+        """
+        Test whether world coordinates are in front of the camera.
+        xyz: (array:float) World coordinates (Nx3)
+        directions: (bool) Whether absolute coordinates (False) or ray directions (True)
+        """
+        if directions:
+            dxyz = xyz
+        else:
+            dxyz = xyz - self.xyz
+        z = np.dot(dxyz, self.R.T)[:, 2]
+        return(z > 0)
+    
+    def inframe(self, uv):
+        """
+        Test whether image coordinates are in (or on) the image frame.
+        uv: (array:float) Image coordinates (Nx2)
+        """
+        return(np.all((uv >= 0) & (uv <= self.imgsz), axis=1))
+        
+    # def clip_line_inview(self, xyz):
+    #     # in = cam.inview(xyz);
+    #     # lines = splitmat(xyz, in);
+    
+    def projerror_points(self, uv, xyz, directions=False, normalize=False):
+        """
+        Calculate pixel reprojection errors for points.
+        Points are matched by index.
+        uv: (array:float) Image coordinates (Nx2)
+        xyz: (array:float) World coordinates (Nx3) or camera coordinates (Nx2)
+        directions: (bool) Whether absolute coordinates (False) or ray directions (True)
+        normalize: (bool) Whether to return pixels (False) or normalize by mean focal length (True)
+        """
+        puv = self.project(xyz, directions=directions)
+        duv = puv - uv
+        if normalize:
+            duv /= self.f.mean()
+        return(duv)
+    
+    # def projerror_lines(self, luv, lxyz, directions=False, normalize=False):
+    #     """
+    #     Calculate pixel reprojection errors for lines.
+    #     Lines are matched by proximity.
+    #     luv: (list:array:float) List of image coordinates [Nx2, ...]
+    #     lxyz: (list:array:float) List of world coordinates [Nx3, ...] or camera coordinates [Nx2, ...]
+    #     directions: (bool) Whether absolute coordinates (False) or ray directions (True)
+    #     normalize: (bool) Whether to return pixels (False) or normalize by mean focal length (True)
+    #     """
+    #     # lxyz:
+    #     # Extract line segments within camera view
+    #     # Project to camera
+    #     # Resample? by length * max(self.f)
+    #     # Project to image
+    #     # Convert to points
+    #     # Decimate?
+    #     # Extract line segments within image frame
+        
+    #     # lxyz vs. luv
+    #     # Euclidean distance matrix
+    #     # Return nearest distance for each point
+    #     # -or-
+    #     # Try again: Nearest distance to line?
     
     # ---- Methods (private) ----
     
@@ -258,11 +327,11 @@ class Camera(object):
         if not directions:
             # Convert coordinates to ray directions
             xyz -= self.xyz
-        xyz = np.dot(xyz, np.transpose(self.R))
+        xyz = np.dot(xyz, self.R.T)
         # Normalize by perspective division
         xy = xyz[:, 0:2] / xyz[:, 2][:, None]
         # Set points behind camera to NaN
-        behind = xyz[:, 2] < 0
+        behind = xyz[:, 2] <= 0
         xy[behind, :] = np.nan
         return(xy)
     

@@ -3,13 +3,13 @@ import operator
 import warnings
 
 class Camera(object):
-    
+
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=[]):
         """
         Create a camera.
-        
-        All camera propperties are coerced to numpy arrays.
-        
+
+        All camera properties are coerced to numpy arrays.
+
         # Independent
         xyz: Position in world coordinates [x, y, z]
         viewdir: View direction in degrees [yaw, pitch, roll]
@@ -21,9 +21,9 @@ class Camera(object):
         c: Principal point offset from center in pixels [dx, dy]
         k: Radial distortion coefficients [k1, ..., k6]
         p: Tangential distortion coefficients [p1, p2]
-        
+
         # Dependent
-        fmm: Focal length in mm [fx, fy] (sets f)
+        fmm: Focal length in mm [fx, fy] (sets f if sensorsz set)
         R: Rotation matrix (read-only)
         """
         self.xyz = xyz
@@ -36,7 +36,7 @@ class Camera(object):
         self.p = p
 
     # ---- Properties (independent) ----
-    
+
     xyz = property(operator.attrgetter('_xyz'))
     viewdir = property(operator.attrgetter('_viewdir'))
     imgsz = property(operator.attrgetter('_imgsz'))
@@ -45,15 +45,15 @@ class Camera(object):
     c = property(operator.attrgetter('_c'))
     k = property(operator.attrgetter('_k'))
     p = property(operator.attrgetter('_p'))
-    
+
     @xyz.setter
     def xyz(self, value):
         self._xyz = get_float_array(value, n=3, fill=True)
-    
+
     @viewdir.setter
     def viewdir(self, value):
         self._viewdir = get_float_array(value, n=3, fill=True)
-    
+
     @imgsz.setter
     def imgsz(self, value):
         self._imgsz = get_float_array(value, n=2, fill=False)
@@ -65,7 +65,7 @@ class Camera(object):
     @f.setter
     def f(self, value):
         self._f = get_float_array(value, n=2, fill=False)
-    
+
     @c.setter
     def c(self, value):
         self._c = get_float_array(value, n=2, fill=True)
@@ -77,16 +77,16 @@ class Camera(object):
     @p.setter
     def p(self, value):
         self._p = get_float_array(value, n=3, fill=True)
-    
+
     # ---- Properties (dependent) ----
-    
+
     @property
     def fmm(self):
         if len(self.f) > 0 and len(self.sensorsz) > 0 and len(self.imgsz) > 0:
             return(self.f * self.sensorsz / self.imgsz)
         else:
             raise AttributeError("Missing required attributes (f, sensorsz, imgsz)")
-            
+
     @fmm.setter
     def fmm(self, value):
         if len(self.sensorsz) > 0 and len(self.imgsz) > 0:
@@ -94,7 +94,7 @@ class Camera(object):
             self.f = fmm * self.imgsz / self.sensorsz
         else:
             raise AttributeError("Missing required attributes (sensorsz, imgsz)")
-    
+
     @property
     def R(self):
         if len(self.viewdir) > 0:
@@ -121,9 +121,9 @@ class Camera(object):
             ]))
         else:
             raise AttributeError("Missing required attributes (viewdir)")
-            
+
     # ---- Methods (public) ----
-    
+
     def idealize(self):
         """
         Set camera distortion to zero.
@@ -144,7 +144,7 @@ class Camera(object):
         self.f *= scale
         self.c *= scale
         self.imgsz *= scale
-        
+
     def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.
@@ -158,7 +158,7 @@ class Camera(object):
         xy = self.world2camera(xyz, directions=directions)
         uv = self.camera2image(xy)
         return(uv)
-        
+
     def invproject(self, uv):
         """
         Project image coordinates to world ray directions.
@@ -168,9 +168,9 @@ class Camera(object):
         xy = self.image2camera(uv)
         xyz = self.camera2world(xy)
         return(xyz)
-    
+
     # ---- Methods (optimization) ----
-    
+
     def infront(self, xyz, directions=False):
         """
         Test whether world coordinates are in front of the camera.
@@ -183,18 +183,18 @@ class Camera(object):
             dxyz = xyz - self.xyz
         z = np.dot(dxyz, self.R.T)[:, 2]
         return(z > 0)
-    
+
     def inframe(self, uv):
         """
         Test whether image coordinates are in (or on) the image frame.
         uv: (array:float) Image coordinates (Nx2)
         """
         return(np.all((uv >= 0) & (uv <= self.imgsz), axis=1))
-        
+
     # def clip_line_inview(self, xyz):
     #     # in = cam.inview(xyz);
     #     # lines = splitmat(xyz, in);
-    
+
     def projerror_points(self, uv, xyz, directions=False, normalize=False):
         """
         Calculate pixel reprojection errors for points.
@@ -209,7 +209,7 @@ class Camera(object):
         if normalize:
             duv /= self.f.mean()
         return(duv)
-    
+
     # def projerror_lines(self, luv, lxyz, directions=False, normalize=False):
     #     """
     #     Calculate pixel reprojection errors for lines.
@@ -227,15 +227,15 @@ class Camera(object):
     #     # Convert to points
     #     # Decimate?
     #     # Extract line segments within image frame
-        
+
     #     # lxyz vs. luv
     #     # Euclidean distance matrix
     #     # Return nearest distance for each point
     #     # -or-
     #     # Try again: Nearest distance to line?
-    
+
     # ---- Methods (private) ----
-    
+
     def radial_distortion(self, r2):
         """
         Compute radial distortion multipler [dr].
@@ -248,7 +248,7 @@ class Camera(object):
         if any(self.k[3:6]):
             dr /= 1 + self.k[3] * r2 + self.k[4] * r2**2 + self.k[5] * r2**3
         return(dr[:, None]) # column
-    
+
     def tangential_distortion(self, xy, r2):
         """
         Compute tangential distortion additive [dtx, dty].
@@ -262,7 +262,7 @@ class Camera(object):
         dty = self.p[0] * (r2 + 2 * xy[:, 1]**2) + 2 * xty * self.p[1]
         dt = np.column_stack((dtx, dty))
         return(dt)
-        
+
     def distort(self, xy):
         """
         Apply distortion to normalized camera coordinates.
@@ -276,7 +276,7 @@ class Camera(object):
         if any(self.p):
             xy += self.tangential_distortion(xy, r2)
         return(xy)
-    
+
     def undistort(self, xy):
         """
         Remove distortion from normalized camera coordinates.
@@ -317,7 +317,7 @@ class Camera(object):
                     if any(self.k):
                         xy /= self.radial_distortion(r2)
         return(xy)
-    
+
     def world2camera(self, xyz, directions = False):
         """
         Project world coordinates to camera coordinates.
@@ -334,7 +334,7 @@ class Camera(object):
         behind = xyz[:, 2] <= 0
         xy[behind, :] = np.nan
         return(xy)
-    
+
     def camera2world(self, xy):
         """
         Project camera coordinates to world ray directions.
@@ -344,7 +344,7 @@ class Camera(object):
         xy_z = np.c_[xy, ones]
         dxyz = np.dot(xy_z, self.R)
         return(dxyz)
-    
+
     def camera2image(self, xy):
         """
         Project camera to image coordinates
@@ -353,7 +353,7 @@ class Camera(object):
         xy = self.distort(xy)
         uv = xy * self.f + (self.imgsz / 2 + self.c)
         return(uv)
-        
+
     def image2camera(self, uv):
         """
         Project image to camera coordinates
@@ -448,4 +448,3 @@ def get_sensor_size(make, model):
         return(np.array(sensor_sizes[make_model]))
     except :
         raise KeyError("No sensor size found for " + make_model)
-    

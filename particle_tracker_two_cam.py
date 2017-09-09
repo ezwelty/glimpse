@@ -4,28 +4,28 @@ import datetime
 import cPickle
 import gzip
 import os
-import gdal
+import gdal # only for Open()
 import sys
-import cv2
+import cv2 # only for matchTemplate()
 
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+import matplotlib.gridspec as gridspec # unused
 import scipy.interpolate as si
 import scipy.optimize as so
 import scipy.misc as sm
 import scipy.spatial as ssp
-import scipy.ndimage.filters as filts 
-import scipy.ndimage as snd
+import scipy.ndimage.filters as filts
+import scipy.ndimage as snd # unused
 import skimage.feature as skif
-import filterpy.kalman as fpk
+import filterpy.kalman as fpk # unused
 import sklearn.decomposition as sde
 import matplotlib.patches as patches
 
-import multiprocess as mp
-import camera
+import multiprocess as mp # unused
+import camera # unused
 import sharedmem
 
-from fractions import gcd
+from fractions import gcd # unused
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -82,7 +82,7 @@ def hist_match(source, template):
 class ParticleTracker(object):
     """
     Implements a constant velocity model particle filter
-    """    
+    """
     def __init__(self):
         pass
 
@@ -130,13 +130,13 @@ class ParticleTracker(object):
         ax = wx*np.random.randn(N)  # x acceleration
         ay = wy*np.random.randn(N)  # y acceleration
         particles[:,0] += dt*particles[:,2] + 0.5*ax*dt**2  # 2nd order update
-        particles[:,1] += dt*particles[:,3] + 0.5*ay*dt**2 
-        particles[:,2] += dt*ax*np.random.randn(N) 
+        particles[:,1] += dt*particles[:,3] + 0.5*ay*dt**2
+        particles[:,2] += dt*ax*np.random.randn(N)
         particles[:,3] += dt*ay*np.random.randn(N)
 
         # Z is DEM value plus systematic plus random errors
         particles[:,4] = self.z_interpolant(particles[:,0],particles[:,1],grid=False) + particles[:,5]
-        #particles[:,5] = dt*np.random.randn(N)*wz*np.sqrt(particles[:,2]**2 + particles[:,3]**2)                               
+        #particles[:,5] = dt*np.random.randn(N)*wz*np.sqrt(particles[:,2]**2 + particles[:,3]**2)
 
     @staticmethod
     def update(particles,weights,log_likelihoods):
@@ -145,7 +145,7 @@ class ParticleTracker(object):
         weights *= np.exp(-sum(log_likelihoods))
         weights += 1e-300
         weights /= weights.sum()
-     
+
     @staticmethod
     def estimate(particles,weights):
         # return weighted means and covariances
@@ -158,7 +158,7 @@ class ParticleTracker(object):
         # implement systematic resampling of particles (kills unlikely particles, and reproduces likely ones)
         N = len(weights)
 
-        # make N subdivisions, choose positions 
+        # make N subdivisions, choose positions
         # with a consistent random offset
         positions = (np.arange(N) + np.random.random()) / N
 
@@ -173,7 +173,7 @@ class ParticleTracker(object):
                 j += 1
         return indexes
 
-    @staticmethod    
+    @staticmethod
     def resample_from_index(particles, weights, indexes):
         particles[:] = particles[indexes]
         weights[:] = weights[indexes]
@@ -186,7 +186,7 @@ class ParticleTracker(object):
 
         self.z_interpolant = si.RectBivariateSpline(self.x[x_index-50:x_index+50],self.y[::-1][y_index-50:y_index+50],(np.nan_to_num(self.Z_filtered[::-1,:]).T)[x_index-50:x_index+50,y_index-50:y_index+50],kx=3,ky=3)
 
-        # Initialize particles according to initial guesses of uncertainty values.  
+        # Initialize particles according to initial guesses of uncertainty values.
         self.particles = np.zeros((N,6))
 
         self.particles[:,0] = x + sigma_x0*np.random.randn(N)
@@ -201,7 +201,7 @@ class ParticleTracker(object):
 
         # Get mean of estimated state
         p,c = self.estimate(self.particles,self.weights)
- 
+
         tic = time.time()
         for j in range(n_iterations):
         # We run the observation procedure several times, starting with refined velocity estimates as an initial guess.
@@ -210,12 +210,12 @@ class ParticleTracker(object):
                 observer.initialize(p[0],p[1],p[4])
             self.particles[:,0] = x + sigma_x0*np.random.randn(N)
             self.particles[:,1] = y + sigma_y0*np.random.randn(N)
-            self.particles[:,4] = self.z_interpolant(self.particles[:,0],self.particles[:,1],grid=False) + self.particles[:,5] 
+            self.particles[:,4] = self.z_interpolant(self.particles[:,0],self.particles[:,1],grid=False) + self.particles[:,5]
             # Log the mean and covariance at each step
             mean,cov = self.estimate(self.particles,self.weights)
             self.means = [mean]
             self.covs = [cov]
-            
+
             if do_plot:
                 self.initialize_plot()
 
@@ -229,12 +229,12 @@ class ParticleTracker(object):
                 # Compute likelihoods from image tracking
                 likelihoods = [observer.compute_likelihood(pmean,self.particles,t) for observer in self.observers]
 
-                # Update particle weights 
+                # Update particle weights
                 self.update(self.particles,self.weights,likelihoods)
 
                 # Resample particle weights
                 indexes = self.systematic_resample(self.weights)
-                self.resample_from_index(self.particles, self.weights, indexes) 
+                self.resample_from_index(self.particles, self.weights, indexes)
 
                 new_mean,new_cov = self.estimate(self.particles,self.weights)
                 self.means.append(new_mean)
@@ -266,25 +266,25 @@ class ParticleTracker(object):
         self.pa_plot.remove()
         self.meplot = self.ax[0].scatter([m[0] for m in self.means],[m[1] for m in self.means],s=50,c='red')
         self.pa_plot = self.ax[0].scatter(self.particles[:,0],self.particles[:,1],s=10,c=np.sqrt(self.particles[:,2]**2+self.particles[:,3]**2),cmap=plt.cm.gnuplot2,vmin=0,vmax=20,alpha=0.5,linewidths=0)
-    
+
         for a,o in zip(self.ax[1:],self.observers):
             o.update_plot(t)
         plt.pause(0.1)
 
 
 class Observer(object):
-    """  
-    Observer class acts as a camera model and more!  Has several functions:  First, it computes perturbations in image 
-    coordinates from wind/thermal expansion, etc.  Second it finds the normalized cross correlation peak (and stats 
-    related to the uniqueness of that peak).  Finally it computes the (log) likelihood function for each particle 
-    based on this observation.  
+    """
+    Observer class acts as a camera model and more!  Has several functions:  First, it computes perturbations in image
+    coordinates from wind/thermal expansion, etc.  Second it finds the normalized cross correlation peak (and stats
+    related to the uniqueness of that peak).  Finally it computes the (log) likelihood function for each particle
+    based on this observation.
     """
     def __init__(self,cam,times,images,sigma_1=50.,sigma_0=0.3,B=0.3,outlier_tol_pixels=3):
         # Camera model is precomputed (see optimize_camera.py)
         self.cam = cam
         self.images = images
         self.times = times
-    
+
         # This is used for histogram equalization of image chips.
         self.ref_template = None
 
@@ -298,7 +298,7 @@ class Observer(object):
         self.outlier_tol_pixels = outlier_tol_pixels   # Pixel distance at which peak is disregarded as an outlier
 
     def initialize(self,x,y,z,hw_row=15,hw_col=15,sd_row=20,sd_col=20):
-        # Initialize image-space arrays 
+        # Initialize image-space arrays
         row_0,col_0 = self.observe(np.array(x),np.array(y),np.array(z))[0]
 
         self.rows_predicted = [row_0]
@@ -320,9 +320,9 @@ class Observer(object):
         self.sd_col = sd_col
 
         # Set reference template
-        self.ref_template = self.images[0][row_nearest-sd_row:1+row_nearest+sd_row,col_nearest-sd_col:1+col_nearest+sd_col] 
+        self.ref_template = self.images[0][row_nearest-sd_row:1+row_nearest+sd_row,col_nearest-sd_col:1+col_nearest+sd_col]
 
-        # Set reference sub-image (chip) based on first image  
+        # Set reference sub-image (chip) based on first image
         self.ref_chip = self.get_chip(row_nearest,col_nearest,hw_row,hw_col,0)
 
     def observe(self,x,y,z):
@@ -336,15 +336,15 @@ class Observer(object):
         tdist = np.abs(t-self.times)
         closest_time = np.argmin(tdist)
         time_mismatch = np.min(tdist)
-        rcmean = self.observe(pmean[0],pmean[1],pmean[4]) 
+        rcmean = self.observe(pmean[0],pmean[1],pmean[4])
         row_prediction = rcmean[0][0]
-        col_prediction = rcmean[0][1] 
+        col_prediction = rcmean[0][1]
         self.rows_predicted.append(row_prediction)
         self.cols_predicted.append(col_prediction)
         if time_mismatch>0.0001:
         # If not, return a constant likelihood (aka doesn't change particle weights)
             return 0.0
-        
+
         # Compute the correction for camera motion
         row_offset = self.row_predict(self.rows_predicted[0],self.cols_predicted[0],self.correction_parameters[closest_time])-self.rows_predicted[0]
         col_offset = self.col_predict(self.rows_predicted[0],self.cols_predicted[0],self.correction_parameters[closest_time])-self.cols_predicted[0]
@@ -361,7 +361,7 @@ class Observer(object):
             rc = self.observe(particles[:,0],particles[:,1],particles[:,4])
 
         # Weighted least squares log likelihood
-        #r_dist = row_n - rc[:,0] 
+        #r_dist = row_n - rc[:,0]
         #c_dist = col_n - rc[:,1]
         #log_like = (r_dist**2 + c_dist**2)/(meas_err**2)
             log_like = like_interpolant(rc[:,0],rc[:,1],grid=False)/0.3**2
@@ -372,7 +372,7 @@ class Observer(object):
             log_like = 1.
 
         return log_like
-        
+
     @staticmethod
     def generate_ref_chips(corrpoints,hw,ref_image,median_filter_size=(5,5)):
         # Generate the reference subimages for tracking stationary targets.  See get_chip() for img processing steps
@@ -399,7 +399,7 @@ class Observer(object):
         # Extract the subimage
         chip = self.images[image_index][row-hw_row:1+row+hw_row,col-hw_col:1+col+hw_col].copy()
         if self.ref_template is not None:
-            # If a reference template has been defined, perform histogram matching.  This is 
+            # If a reference template has been defined, perform histogram matching.  This is
             # very helpful for ameliorating the effects of illumination changes.
             chip[:,:,0] = hist_match(chip[:,:,0],self.ref_template[:,:,0])
             chip[:,:,1] = hist_match(chip[:,:,1],self.ref_template[:,:,1])
@@ -417,17 +417,17 @@ class Observer(object):
         chip_lowpass = filts.median_filter(chip,(median_filter_size[0],median_filter_size[1]))
         chip -= chip_lowpass
         return chip
-    
+
     def get_best_offset(self,row_prediction,col_prediction,row_diff_0,col_diff_0,ref_chip,test_image_index,row_offset,col_offset,median_filter_window=(5,5)):
         # Find the best image offset estimate in pixel space
 
         # Round the prediction to the nearest integer
         row_nearest = int(np.rint(row_prediction))
         col_nearest = int(np.rint(col_prediction))
-                    
+
         # Extract a sub-image
         test_chip = self.get_chip(row_nearest,col_nearest,self.sd_row,self.sd_col,test_image_index)
-       
+
         # Compute normalized correlation coefficients
         rhos = cv2.matchTemplate(test_chip.astype('float32'),ref_chip.astype('float32'),method=cv2.TM_SQDIFF)
         rhos/=(ref_chip.shape[0]*ref_chip.shape[1])
@@ -436,7 +436,7 @@ class Observer(object):
         # Find optimal value
         row_n0,col_n0 = np.unravel_index(rhos.argmin(),rhos.shape)
         rho_opt = rhos[row_n0,col_n0]
-                
+
         rcoords = row_nearest - (self.sd_row-self.hw_row) + np.array(range(rhos.shape[0])) - row_offset - row_diff_0
         ccoords = col_nearest - (self.sd_col-self.hw_col) + np.array(range(rhos.shape[1])) - col_offset - col_diff_0
         row_n0 += row_nearest - (self.sd_row-self.hw_row) - row_offset - row_diff_0
@@ -451,7 +451,7 @@ class Observer(object):
         # Track ostensibly non-mobile points for the purpose of correcting camera motion
         # Takes as an argument ref_chips object, which is a list of tuples, each containing
         # the point and the subimage to correlate (this way so that you can provide not the
-        # first image in the sequence if so desired.) 
+        # first image in the sequence if so desired.)
         pca = sde.PCA(n_components=1,svd_solver='arpack',whiten=True)
         self.correction_model = correction_model
         self.ref_chips = ref_chips
@@ -463,7 +463,7 @@ class Observer(object):
             hw = (ref_chip.shape[0]-1)/2
             row,col = corrpoints
             corrpoint_list.append(corrpoints)
-            
+
             rowlist = []
             collist = []
             rowlist_float = []
@@ -475,7 +475,7 @@ class Observer(object):
                 if self.images[i] is not None:
                     img_1 = self.images[i].copy()
                     test_chip = self.get_chip(row,col,sd,sd,i)
-                    
+
                     # Find the best offset and save relevant statistics
                     rhos = skif.match_template(test_chip,ref_chip)
                     row_n0,col_n0 = np.unravel_index(rhos.argmax(),rhos.shape)
@@ -496,7 +496,7 @@ class Observer(object):
 
                     row_n = row - (sd-hw) + xopt[0]# - row_avg[i]
                     col_n = col - (sd-hw) + xopt[1]# - col_avg[i]
-             
+
                     row_b = int(np.rint(row_n))
                     col_b = int(np.rint(col_n))
 
@@ -552,7 +552,7 @@ class Observer(object):
             outliers = np.invert(inliers)
             rows_obs[outliers] = rows_known[outliers]
             cols_obs[outliers] = cols_known[outliers]
-            weights[outliers] = gamma 
+            weights[outliers] = gamma
             I = np.sum(weights*np.abs(rows_predicted - rows_obs)**2 + weights*np.abs(cols_predicted - cols_obs)**2)/np.sum(weights)
             return I
 
@@ -580,7 +580,7 @@ class Observer(object):
                 po.append(np.sqrt(popt['fun']))
             else:
                 ps.append(None)
-                po.append(None)    
+                po.append(None)
 
         if plot:
             for i in range(rows.shape[0]):
@@ -599,11 +599,11 @@ class Observer(object):
             fig,axs = plt.subplots()
             axs.imshow(self.images[0],interpolation='none')
             axs.plot(self.col_predict(2104,3327,ps[0]),self.row_predict(2104,3327,ps[0]),'ro')
-                
+
             fig,axs = plt.subplots()
             axs.imshow(self.images[10],interpolation='none')
             axs.plot(self.col_predict(2104,3327,ps[10]),self.row_predict(2104,3327,ps[10]),'ro')
-            
+
             fig,axs = plt.subplots()
             axs.imshow(self.images[20],interpolation='none')
             axs.plot(self.col_predict(2104,3327,ps[20]),self.row_predict(2104,3327,ps[20]),'ro')
@@ -670,7 +670,7 @@ class Observer(object):
         self.spobs = self.ax.scatter(self.cols_observed,self.rows_observed,s=50,c=self.observation_strength,vmin=0,vmax=2,cmap=plt.cm.inferno,marker='x')
         #self.spupd = self.ax.scatter(self.cols_updated,self.rows_updated,s=50,c='red')
         self.spprd = self.ax.scatter(self.cols_predicted,self.rows_predicted,s=50,c='green')
-        
+
         self.re.set_bounds(self.cols_predicted[-1]-self.hw_col,self.rows_predicted[-1]-self.hw_row,2*self.hw_col+1,2*self.hw_row+1)
 
 
@@ -684,7 +684,7 @@ if __name__=='__main__':
     year_end = int(sys.argv[4])
     month_end = int(sys.argv[5])
     day_end = int(sys.argv[6])
-   
+
     start_time_dt = datetime.datetime(year_start,month_start,day_start,20,0,0)
     end_time_dt = datetime.datetime(year_end,month_end,day_end,20,0,0)
     start_time = time.mktime(start_time_dt.timetuple())
@@ -711,7 +711,7 @@ if __name__=='__main__':
         Z = dem.ReadAsArray()
         Z[Z<-10000] = np.nan
         geotransform = dem.GetGeoTransform()
-    
+
         # Define map coordinates
         originX = geotransform[0]
         originY = geotransform[3]
@@ -734,7 +734,7 @@ if __name__=='__main__':
         Z = Z[y_index,:][:,x_index]
 
         return x,y,Z
-            
+
     dem_list = os.listdir(simulation_directory+'dem')
     dem_list = [n for n in dem_list if 'geo' in n]
     dem_list.sort()
@@ -758,14 +758,14 @@ if __name__=='__main__':
         x = x0*d1/t_interval + x1*d0/t_interval
         y = y0*d1/t_interval + y1*d0/t_interval
         Z = Z0*d1/t_interval + Z1*d0/t_interval
-    
+
     def get_image_times(img_dir):
         img_names = np.sort(os.listdir(img_dir))
         img_names.sort()
         datetimes = [datetime.datetime(int(n[6:10]),int(n[10:12]),int(n[12:14]),int(n[15:17]),int(n[17:19]),int(n[19:21])) for n in img_names]
         times = np.array([time.mktime(dd.timetuple()) for dd in datetimes])#/(60**2*24)
         return img_names,times
-        
+
     cam_0 = cPickle.load(open(simulation_directory+'camera_model/cam_AK01.p'))
     cam_1 = cPickle.load(open(simulation_directory+'camera_model/cam_AK10.p'))
     img_dir_0 = simulation_directory+'images/AK01/unprocessed/'
@@ -774,7 +774,7 @@ if __name__=='__main__':
     #img_dir_1 = simulation_directory+'images/unprocessed/AK10/'
     names_0,times_0 = get_image_times(img_dir_0)
     names_1,times_1 = get_image_times(img_dir_1)
-    
+
     indices_0 = np.array([t>=start_time and t<=end_time for t in times_0])
     indices_1 = np.array([t>=start_time and t<=end_time for t in times_1])
 
@@ -786,7 +786,7 @@ if __name__=='__main__':
         imgs_0.append(arr)
 
     times_0 = times_0[indices_0]/(60**2*24)
-    
+
     images_1 = [sm.imread(img_dir_1+img_name) for img_name,ii in zip(names_1,indices_1) if ii]
     imgs_1 = []
     for i in images_1:
@@ -823,14 +823,14 @@ if __name__=='__main__':
 
     observer_0.track_corrections(ref_chips_0,correction_model='rotation_translation',outlier_tol=10,plot=False)
     observer_1.track_corrections(ref_chips_1,correction_model='rotation_translation',outlier_tol=10,plot=False)
-    
+
     pixel_buffer = 100
 
     row_min_0 = pixel_buffer
     col_min_0 = pixel_buffer
     row_max_0 = imgs_0[0].shape[0]-pixel_buffer
     col_max_0 = imgs_0[0].shape[1]-pixel_buffer
-   
+
     row_min_1 = pixel_buffer
     col_min_1 = pixel_buffer
     row_max_1 = imgs_1[0].shape[0]-pixel_buffer
@@ -844,7 +844,7 @@ if __name__=='__main__':
         xs = np.linspace(x_cam,x,n_samples)[20:]
         ys = np.linspace(y_cam,y,n_samples)[20:]
         zs = np.linspace(z_cam,z,n_samples)[20:]
-        zt = tracker.z_interpolant(xs,ys,grid=False) 
+        zt = tracker.z_interpolant(xs,ys,grid=False)
         return np.any(zt>zs)
 
     for x,y in xys:
@@ -859,7 +859,7 @@ if __name__=='__main__':
         col = uv[0][0]
         good_row_1 = row>row_min_1 and row<row_max_1
         good_col_1 = col>col_min_1 and col<col_max_1
- 
+
         good = good_row_0*good_col_0*good_row_1*good_col_1
         if good:
             xys_good.append((x,y))
@@ -957,4 +957,3 @@ if __name__=='__main__':
     #ax[1].set_xlim(496000,499500)
     #ax[1].set_ylim(6.779e6,6.779e6+5000)
     #fig.savefig('dual_camera_2013/_plots/dual/tsx_comparison_{0:04d}{1:02d}{2:02d}.pdf'.format(start_time_dt.year,start_time_dt.month,start_time_dt.day))
-

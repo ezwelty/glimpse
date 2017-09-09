@@ -3,28 +3,29 @@ import operator
 import warnings
 
 class Camera(object):
+    """
+    A `Camera` converts between 3D world coordinates and 2D image coordinates.
+
+    Attributes:
+        xyz (array): Position in world coordinates [x, y, z]
+        viewdir (array): View direction in degrees [yaw, pitch, roll]
+
+            - yaw: clockwise rotation about z-axis (0 = look north)
+            - pitch: rotation from horizon (+ look up, - look down)
+            - roll: rotation about optical axis (+ down right, - down left, from behind)
+
+        imgsz (array): Image size in pixels [nx, ny]
+        f (array): Focal length in pixels [fx, fy]
+        c (array): Principal point offset from center in pixels [dx, dy]
+        k (array): Radial distortion coefficients [k1, ..., k6]
+        p (array): Tangential distortion coefficients [p1, p2]
+    """
 
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=[]):
         """
         Create a camera.
 
         All camera properties are coerced to numpy arrays.
-
-        # Independent
-        xyz: Position in world coordinates [x, y, z]
-        viewdir: View direction in degrees [yaw, pitch, roll]
-            yaw: clockwise rotation about z-axis (0 = look north)
-            pitch: rotation from horizon (+ look up, - look down)
-            roll: rotation about optical axis (+ down right, - down left, from behind)
-        imgsz: Image size in pixels [nx|ncols|width, ny|nrows|height]
-        f: Focal length in pixels [fx, fy]
-        c: Principal point offset from center in pixels [dx, dy]
-        k: Radial distortion coefficients [k1, ..., k6]
-        p: Tangential distortion coefficients [p1, p2]
-
-        # Dependent
-        fmm: Focal length in mm [fx, fy] (sets f if sensorsz set)
-        R: Rotation matrix (read-only)
         """
         self.xyz = xyz
         self.viewdir = viewdir
@@ -148,8 +149,18 @@ class Camera(object):
     def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.
-        xyz: (array:float) World coordinates (Nx3) or camera coordinates (Nx2)
-        directions: (bool) Whether absolute coordinates (False) or ray directions (True)
+
+        Arguments:
+            xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
+            directions (bool): Whether absolute coordinates (False) or ray directions (True)
+
+        Returns:
+            array: Image coordinates (Nx2)
+            
+        >>> xyz = np.array([[0., 1., 0.]])
+        >>> cam = Camera(xyz = [0, 0, 0], viewdir = [0, 0, 0])
+        >>> cam.project(xyz)
+        array([[ 50.,  50.]])
         """
         if xyz.shape[1] == 3:
             xy = self.world2camera(xyz, directions=directions)

@@ -1,8 +1,53 @@
 # glimpse: Glacier Image Particle Sequencer
 
+## Development
+
+### Documentation
+
+Docstrings should follow the [Khan Academy style guide](https://github.com/Khan/style-guides/blob/master/style/python.md#docstrings), ending with the following special sections:
+
+- `Arguments:` (or `Attributes:` for classes) List each parameter in the format "name (type): description". The description can span several lines using a hanging indent.
+- `Returns:` (or `Yields:` for generators) Describe the return value in the format "type: description" or skip if returns `None`.
+
+Examples should be formatted for testing by [doctest](https://docs.pytest.org).
+
+```python
+"""
+Project world coordinates to image coordinates.
+
+Arguments:
+    xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
+    directions (bool): Whether absolute coordinates (False) or ray directions (True)
+
+Returns:
+    array: Image coordinates (Nx2)
+
+>>> xyz = np.array([[0., 1., 0.]])
+>>> cam = Camera(xyz = [0, 0, 0], viewdir = [0, 0, 0])
+>>> cam.project(xyz)
+array([[ 50.,  50.]])
+"""
+```
+
+### Testing
+
+Tests are written using [pytest](https://docs.pytest.org), and currently live in `tests.py`. To run tests:
+
+```bash
+pip install pytest
+pytest tests.py
+```
+
+To run doctests, use:
+
+```bash
+python -m doctest Camera.py # one module
+pytest --doctest-modules # all modules
+```
+
 ## Classes
 
-An overview of the core properties and methods of the object classes.
+An overview of the core attributes and methods of the object classes.
 
 ### Camera
 
@@ -91,15 +136,10 @@ The `ParticleTracker` implements a constant velocity model particle filter.
 **Properties**
 
 - `observers` - Array of `Observer` objects
-- `dems` [`elevations`] - Array of `DEM` objects
+- `dems` - Array of `DEM` objects
 
 **Methods**
 
 - `ParticleTracker` - Create a new `ParticleTracker`.
 - `predict` - Predict future particle locations.
 - `track` - Track particles through time.
-
-## TODO
-
-- [ ] Choose a license and add a LICENSE file
-- [ ] Add [Sphinx](http://www.sphinx-doc.org/) documentation

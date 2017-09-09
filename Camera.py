@@ -1,6 +1,6 @@
-import numpy as np
 import operator
 import warnings
+import numpy as np
 
 class Camera(object):
     """

@@ -1,6 +1,6 @@
+import numpy as np
 import operator
 import warnings
-import numpy as np
 
 class Camera(object):
     """
@@ -156,11 +156,6 @@ class Camera(object):
 
         Returns:
             array: Image coordinates (Nx2)
-            
-        >>> xyz = np.array([[0., 1., 0.]])
-        >>> cam = Camera(xyz = [0, 0, 0], viewdir = [0, 0, 0])
-        >>> cam.project(xyz)
-        array([[ 50.,  50.]])
         """
         if xyz.shape[1] == 3:
             xy = self.world2camera(xyz, directions=directions)
@@ -409,53 +404,3 @@ def get_float_list(obj, n=1, fill=True):
             assert n % len(obj) == 0
             obj = obj * ((n) / len(obj))
     return([float(i) for i in obj[0:n]])
-
-def compute_R(viewdir):
-    """
-    Compute the camera rotation matrix.
-    viewdir: (array:float) View direction in degrees [yaw, pitch, roll]
-    """
-    # Initial rotations of camera reference frame
-    # (camera +z pointing up, with +x east and +y north)
-    # Point camera north: -90 deg counterclockwise rotation about x-axis
-    #   ri = [1 0 0; 0 cosd(-90) sind(-90); 0 -sind(-90) cosd(-90)];
-    # (camera +z now pointing north, with +x east and +y down)
-    # yaw: counterclockwise rotation about y-axis (relative to north, from above: +cw, - ccw)
-    #   ry = [C1 0 -S1; 0 1 0; S1 0 C1];
-    # pitch: counterclockwise rotation about x-axis (relative to horizon: + up, - down)
-    #   rp = [1 0 0; 0 C2 S2; 0 -S2 C2];
-    # roll: counterclockwise rotation about z-axis (from behind camera: + ccw, - cw)
-    #   rr = [C3 S3 0; -S3 C3 0; 0 0 1];
-    # Apply all rotations in order
-    #   R = rr * rp * ry * ri;
-    radians = np.deg2rad(viewdir)
-    C = np.cos(radians)
-    S = np.sin(radians)
-    return(np.array([
-        [C[0] * C[2] + S[0] * S[1] * S[2],  C[0] * S[1] * S[2] - C[2] * S[0], -C[1] * S[2]],
-        [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
-        [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
-    ]))
-
-def get_sensor_size(make, model):
-    """
-    Get a camera model's CCD sensor width and height in mm.
-    Data is from Digital Photography Review (https://dpreview.com).
-    See also https://www.dpreview.com/articles/8095816568/sensorsizes.
-    make: (str) Camera make (EXIF Make)
-    model: (str) Camera model (EXIF Model)
-    """
-    make_model = make.strip() + " " + model.strip()
-    # Sensor sizes (mm)
-    sensor_sizes = {
-        "NIKON CORPORATION NIKON D2X": [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
-        "NIKON CORPORATION NIKON D200": [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
-        "NIKON CORPORATION NIKON D300S": [23.6, 15.8], # https://www.dpreview.com/reviews/nikond300s/2
-        "NIKON E8700": [8.8, 6.6], # https://www.dpreview.com/reviews/nikoncp8700/2
-        "Canon Canon EOS 20D": [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
-        "Canon Canon EOS 40D": [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
-    }
-    try:
-        return(np.array(sensor_sizes[make_model]))
-    except :
-        raise KeyError("No sensor size found for " + make_model)

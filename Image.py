@@ -2,6 +2,7 @@ from datetime import datetime
 import numpy as np
 import exifread
 import scipy.misc
+import math
 from Camera import Camera
 
 class Image(object):
@@ -10,11 +11,14 @@ class Image(object):
 
     Attributes:
         path (str): Path to the image file
-        time (datetime): Capture date and time
+        info (dict): Image file metadata
+        datetime (datetime): Capture date and time
+        epoch (float): Capture date and time as seconds since 1970-01-01 00:00:00
         size (array): Size of the original image in pixels [nx, ny]
         shutter (float): Shutter speed in seconds
-        aperture (float): Lens aperture
+        aperture (float): Lens aperture size as f-number
         iso (float): Film speed
+        ev (float): Exposure value
         cam (Camera): Camera object
     """
     
@@ -64,7 +68,12 @@ class Image(object):
     @property
     def iso(self):
         return(parse_exif_tag(self.info['EXIF ISOSpeedRatings']))
-        
+    
+    @property
+    def ev(self):
+        # https://en.wikipedia.org/wiki/Exposure_value
+        return(math.log(1000 * self.aperture ** 2 / (self.iso * self.shutter), 2))
+    
     @property
     def fmm(self):
         return(parse_exif_tag(self.info['EXIF FocalLength']))
@@ -132,24 +141,3 @@ def fmm_to_fpx(fmm, sensorsz, imgsz):
 def fpx_to_fmm(fpx, sensorsz, imgsz):
     """Convert focal length in pixels to millimeters."""
     return(fpx * sensorsz / imgsz)
-
-# def image_size_to_scale(original_size, target_size):
-#     """Calculate the scale that achieves a target size."""
-#     original_size = np.array(original_size).round()
-#     target_size = np.array(target_size).round()
-#     scale_bounds = target_size / original_size;
-    
-    
-#     if np.array_equal(original_size, target_size):
-#         return(float(1))
-    
-#      if all(original_size == target_size)
-#         scale = 1;
-#         return
-#       end
-#       scale_bounds = target_size ./ original_size;
-#       error_function = @(scale) sum(abs(round(original_size * scale) - target_size));
-#       [scale, value] = fminbnd(error_function, min(scale_bounds), max(scale_bounds));
-#       if value > 0
-#         error('No scale can achieve the target size.');
-#       end

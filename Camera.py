@@ -21,7 +21,7 @@ class Camera(object):
         p (array): Tangential distortion coefficients [p1, p2]
     """
 
-    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=[]):
+    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=None):
         """
         Create a camera.
 
@@ -30,11 +30,11 @@ class Camera(object):
         self.xyz = xyz
         self.viewdir = viewdir
         self.imgsz = imgsz
-        self.sensorsz = sensorsz
         self.f = f
         self.c = c
         self.k = k
         self.p = p
+        self.sensorsz = sensorsz
 
     # ---- Properties (independent) ----
 
@@ -83,14 +83,14 @@ class Camera(object):
 
     @property
     def fmm(self):
-        if len(self.f) > 0 and len(self.sensorsz) > 0 and len(self.imgsz) > 0:
+        if self.f is not None and self.sensorsz is not None and self.imgsz is not None:
             return(self.f * self.sensorsz / self.imgsz)
         else:
-            raise AttributeError("Missing required attributes (f, sensorsz, imgsz)")
+            return(None)
 
     @fmm.setter
     def fmm(self, value):
-        if len(self.sensorsz) > 0 and len(self.imgsz) > 0:
+        if self.sensorsz is not None and self.imgsz is not None:
             fmm = get_float_array(value, n=2, fill=False)
             self.f = fmm * self.imgsz / self.sensorsz
         else:
@@ -98,7 +98,7 @@ class Camera(object):
 
     @property
     def R(self):
-        if len(self.viewdir) > 0:
+        if self.viewdir is not None:
             # Initial rotations of camera reference frame
             # (camera +z pointing up, with +x east and +y north)
             # Point camera north: -90 deg counterclockwise rotation about x-axis
@@ -121,7 +121,7 @@ class Camera(object):
                 [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
             ]))
         else:
-            raise AttributeError("Missing required attributes (viewdir)")
+            return(None)
 
     # ---- Methods (public) ----
 
@@ -131,7 +131,7 @@ class Camera(object):
         """
         self.k = [0, 0, 0, 0, 0, 0]
         self.p = [0, 0]
-        cam.c = [0, 0]
+        self.c = [0, 0]
 
     def resize(self, scale):
         """
@@ -369,7 +369,6 @@ class Camera(object):
         xy = self.undistort(xy)
         return(xy)
 
-
 # ---- Static methods ----
 
 def get_float_array(obj, n=1, fill=True):
@@ -379,6 +378,8 @@ def get_float_array(obj, n=1, fill=True):
     n: (int) Array length
     fill: (bool) Whether to repeat array (False) or fill with zeroes (True)
     """
+    if obj is None:
+        return(obj)
     if isinstance(obj, np.ndarray):
         obj = list(obj)
     obj = get_float_list(obj, n=n, fill=fill)
@@ -391,6 +392,8 @@ def get_float_list(obj, n=1, fill=True):
     n: (int) List length
     fill: (bool) Whether to repeat list (False) or fill list with zeroes (True)
     """
+    if obj is None:
+        return(obj)
     if not isinstance(obj, list):
         obj = [obj]
     if len(obj) < n:

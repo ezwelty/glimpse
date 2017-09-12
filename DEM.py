@@ -223,7 +223,7 @@ class DEM(object):
             self.Z = Z
             self.xlim = new_xlim
             self.ylim = new_ylim
-            
+    
     def resize(self, scale, copy=True):
         """
         Resize a `DEM`.
@@ -294,6 +294,41 @@ class DEM(object):
             return DEM(Z, x, y)
         else:
             self.Z = Z
+    
+    def visible(self, xyz):
+        X = self.X.flatten() - xyz[0]
+        Y = self.Y.flatten() - xyz[1]
+        Z = self.Z.flatten() - xyz[2]
+        # NOTE: Compute dx, dz, then elevation angle instead?
+        d = (X ** 2 + Y ** 2 + Z ** 2) ** 0.5
+        x = (np.arctan2(Y, X) + np.pi) / (np.pi * 2) # ???
+        y = Z / d
+        # Slow:
+        ix = np.lexsort((
+                x,
+                np.round(((X / abs(self.d[0])) ** 2 + (Y / abs(self.d[1])) ** 2) ** 0.5),
+            ))
+        loopix = np.argwhere(np.diff(x[ix]) < 0).flatten()
+        vis = np.ones(len(x), dtype=bool)
+        maxd = d.max()
+        # Number of points in voxel horizon:
+        N = np.ceil(2 * np.pi / (abs(self.d[0]) / maxd))
+        voxx = np.linspace(0, 1, int(N) + 1)
+        voxy = np.zeros(len(voxx)) - np.inf
+        for k in range(len(loopix) - 1):
+            lp = ix[(loopix[k] + 1):(loopix[k + 1] + 1)]
+            lp = np.hstack(([lp[-1]], lp, [lp[0]]))
+            yy = y[lp]
+            xx = x[lp]
+            # Why?:
+            xx[0] -= 1
+            xx[-1] += 1
+            # ---
+            end = len(lp) - 1
+            if k: # Skip on first iteration (all visible)
+                vis[lp[1:end]] = np.interp(xx[1:end], voxx, voxy) < yy[1:end]
+            voxy = np.maximum(voxy, np.interp(voxx, xx, yy))
+        return vis.reshape(self.Z.shape)
     
     # ---- Methods (private) ----
     

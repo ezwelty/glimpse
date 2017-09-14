@@ -21,7 +21,7 @@ class Camera(object):
         p (array): Tangential distortion coefficients [p1, p2]
     """
 
-    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0], sensorsz=None):
+    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0]):
         """
         Create a camera.
 
@@ -34,14 +34,12 @@ class Camera(object):
         self.c = c
         self.k = k
         self.p = p
-        self.sensorsz = sensorsz
 
     # ---- Properties (independent) ----
 
     xyz = property(operator.attrgetter('_xyz'))
     viewdir = property(operator.attrgetter('_viewdir'))
     imgsz = property(operator.attrgetter('_imgsz'))
-    sensorsz = property(operator.attrgetter('_sensorsz'))
     f = property(operator.attrgetter('_f'))
     c = property(operator.attrgetter('_c'))
     k = property(operator.attrgetter('_k'))
@@ -59,10 +57,6 @@ class Camera(object):
     def imgsz(self, value):
         self._imgsz = get_float_array(value, n=2, fill=False)
 
-    @sensorsz.setter
-    def sensorsz(self, value):
-        self._sensorsz = get_float_array(value, n=2, fill=False)
-
     @f.setter
     def f(self, value):
         self._f = get_float_array(value, n=2, fill=False)
@@ -78,24 +72,9 @@ class Camera(object):
     @p.setter
     def p(self, value):
         self._p = get_float_array(value, n=3, fill=True)
-
+    
     # ---- Properties (dependent) ----
-
-    @property
-    def fmm(self):
-        if self.f is not None and self.sensorsz is not None and self.imgsz is not None:
-            return(self.f * self.sensorsz / self.imgsz)
-        else:
-            return(None)
-
-    @fmm.setter
-    def fmm(self, value):
-        if self.sensorsz is not None and self.imgsz is not None:
-            fmm = get_float_array(value, n=2, fill=False)
-            self.f = fmm * self.imgsz / self.sensorsz
-        else:
-            raise AttributeError("Missing required attributes (sensorsz, imgsz)")
-
+    
     @property
     def R(self):
         if self.viewdir is not None:

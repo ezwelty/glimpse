@@ -1,28 +1,110 @@
+import datetime
 import pytest
 import numpy as np
+import scipy.misc
+import image
+import dem as DEM
 
 # ---- Camera ----
 
-import Camera
-reload(Camera)
+reload(image)
 
-def test_reprojection_ideal():
-    cam = Camera.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30])
+def test_camera_init_with_fmm(fmm=[10, 10], sensorsz=[30, 20]):
+    cam = image.Camera(fmm=fmm, sensorsz=sensorsz)
+    assert np.array_equal(cam.f, fmm * cam.imgsz / sensorsz)
+
+def test_camera_resize(imgsz=[100, 100]):
+    cam = image.Camera(imgsz=imgsz)
+    cam.resize(0.5, copy=False)
+    assert np.array_equiv(cam.imgsz * 2, imgsz)
+    cam = cam.resize(2)
+    assert np.array_equiv(cam.imgsz, imgsz)
+
+def test_camera_idealize(k=1, c=1, p=1):
+    cam = image.Camera(k=k, c=c, p=p)
+    cam.idealize(copy=False)
+    assert cam.k[0] == 0
+    cam = image.Camera(k=k, c=c, p=p).idealize()
+    assert cam.k[0] == 0
+
+def test_camera_reprojection_ideal(tol=1e-13):
+    cam = image.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30])
     uv = np.random.rand(1000, 2) * cam.imgsz
     dxyz = cam.invproject(uv)
     uv2 = cam.project(dxyz, directions=True)
-    assert np.abs(uv - uv2).max() < 1e-13
+    assert np.abs(uv - uv2).max() < tol
     
-def test_reprojection_distorted():
-    cam = Camera.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30], k = [0.1, -0.1] * 3, p = [0.01, -0.01])
+def test_camera_reprojection_distorted(tol=0.2):
+    cam = image.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30], k = [0.1, -0.1] * 3, p = [0.01, -0.01])
     uv = np.random.rand(1000, 2) * cam.imgsz
     dxyz = cam.invproject(uv)
     uv2 = cam.project(dxyz, directions=True)
-    assert np.abs(uv - uv2).max() < 0.2
+    assert np.abs(uv - uv2).max() < tol
 
+# ---- Exif ----
+
+reload(image)
+
+def test_exif_test_image():
+    path = "tests/20141013_020336.jpg"
+    exif = image.Exif(path)
+    assert np.array_equiv(exif.size, scipy.misc.imread(path).shape[0:2][::-1])
+    assert exif.fmm == 20
+    assert exif.make == "NIKON CORPORATION"
+    assert exif.model == "NIKON D200"
+    assert exif.iso == 200
+    assert exif.shutter == 0.0125
+    assert exif.aperture == 8
+    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
+
+def text_exif_subecond():
+    path = "tests/20141013_020336.jpg"
+    exif = image.Exif(path)
+    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
+    exif.tags['EXIF SubSecTimeOriginal'] = None
+    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36)
+
+# ---- Image ----
+
+reload(image)
+
+def test_image_init():
+    path = "tests/20141013_020336.jpg"
+    # Defaults
+    img = image.Image(path)
+    assert img.path == path
+    assert img.datetime == img.exif.datetime
+    assert all(img.cam.imgsz == img.exif.size)
+    sensorsz = image.get_sensor_size(img.exif.make, img.exif.model)
+    assert all(img.cam.f == img.exif.fmm * img.exif.size / sensorsz)
+    # Override defaults
+    img_time = datetime.datetime(2014, 10, 13)
+    camera_args = {'imgsz': [100, 100], 'sensorsz': [10, 10]}
+    img = image.Image(path, datetime=img_time, camera_args=camera_args)
+    assert img.datetime == img_time
+    assert all(img.cam.imgsz == camera_args['imgsz'])
+    assert all(img.cam.f == img.exif.fmm * np.divide(camera_args['imgsz'], camera_args['sensorsz']))
+
+def test_image_read():
+    path = "tests/20141013_020336.jpg"
+    # Default size
+    img = image.Image(path)
+    I = img.read()
+    assert all(I.shape[0:2][::-1] == img.cam.imgsz)
+    # Resize camera
+    img.cam.resize(0.5, copy=False)
+    I = img.read()
+    assert all(I.shape[0:2][::-1] == img.cam.imgsz)
+    # Override size (scalar)
+    I = img.read(size=1)
+    assert all(I.shape[0:2][::-1] == img.exif.size)
+    # Override size (nx, ny)
+    size = np.array([20, 10])
+    I = img.read(size=size)
+    assert all(I.shape[0:2][::-1] == size)
+    
 # ---- DEM ----
 
-import DEM
 reload(DEM)
 
 def test_dem_defaults():

@@ -170,7 +170,7 @@ class DEM(object):
         Arguments:
             xlim (array_like): Cropping bounds in x 
             ylim (array_like): Cropping bounds in y
-            copy (bool): Whether to return a copy of the input `DEM`
+            copy (bool): Whether to return result as new `DEM`
         
         Returns:
             DEM: New object (if `copy=True`)
@@ -230,7 +230,7 @@ class DEM(object):
         
         Arguments:
             scale (float): Fraction of current size
-            copy (bool): Whether to return a copy of the input `DEM`
+            copy (bool): Whether to return result as new `DEM`
         
         Returns:
             DEM: New object (if `copy=True`)
@@ -248,7 +248,7 @@ class DEM(object):
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-            copy (bool): Whether to return a copy of the input `DEM`
+            copy (bool): Whether to return result as new `DEM`
         
         Returns:
             DEM: New object (if `copy=True`)
@@ -273,7 +273,7 @@ class DEM(object):
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-            copy (bool): Whether to return a copy of the input `DEM`
+            copy (bool): Whether to return result as new `DEM`
             
         Returns:
             DEM: New object (if `copy=True`)

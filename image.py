@@ -125,7 +125,7 @@ class Camera(object):
         self._c = value[10:12]
         self._k = value[12:18]
         self._p = value[18:20]
-        
+    
     # ---- Methods (public) ----
 
     def idealize(self, copy=True):
@@ -171,7 +171,27 @@ class Camera(object):
             self.imgsz *= scale
             self.f *= scale
             self.c *= scale
-
+    
+    def optimize(self, uv, xyz, params={'viewdir': True}):
+        """
+        Calibrate a camera from paired image-world coordinates.
+        
+        Points `uv` and `xyz` are matched by row index.
+        
+        Arguments:
+            uv (array): Image coordinates (Nx2)
+            xyz (array): World coordinates (Nx3)
+            params (set): Parameters to optimize
+         """
+        mask = self._model_mask(params)
+        uv = np.asarray(uv, dtype = float)
+        xyz = np.asarray(xyz, dtype = float)
+        def minfun(values):
+            self._update_model(values, mask)
+            return self._projerror_points(uv, xyz).flatten()
+        result = scipy.optimize.root(minfun, self._model[mask], method='lm')
+        self._update_model(result['x'], mask)
+    
     def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.
@@ -187,7 +207,6 @@ class Camera(object):
             xy = self._world2camera(xyz, directions=directions)
         else:
             xy = xyz
-        xy = self._world2camera(xyz, directions=directions)
         uv = self._camera2image(xy)
         return uv
 
@@ -204,21 +223,6 @@ class Camera(object):
         xy = self._image2camera(uv)
         xyz = self._camera2world(xy)
         return xyz
-
-    # def optimize(self, uv, xyz, params=['viewdir']):
-    #     """
-    #     Calibrate a camera from paired image-world coordinates.
-        
-    #     Points `uv` and `xyz` are matched by row index.
-        
-    #     Arguments:
-    #         uv (array): Image coordinates (Nx2)
-    #         xyz (array): World coordinates (Nx3)
-    #         params (set): Parameters to optimize
-    #      """
-    
-    # def orient(self, uv, uv_ref):
-        
     
     # ---- Methods (private) ----
     
@@ -264,6 +268,25 @@ class Camera(object):
             duv /= self.f.mean()
         return duv
 
+    def _model_mask(self, params={}):
+        names = ['xyz', 'imgsz', 'viewdir', 'f', 'c', 'k', 'p']
+        indices = [0, 3, 5, 8, 10, 12, 18, 20]
+        selected = np.zeros(20, dtype = bool)
+        for name, value in params.items():
+            if (value or value == 0) and name in names:
+                start = names.index(name)
+                if value is True:
+                    selected[indices[start]:indices[start + 1]] = True
+                else:
+                    value = np.array(value)
+                    selected[indices[start] + value] = True
+        return selected
+    
+    def _update_model(self, values, mask):
+        new_model = self._model
+        new_model[mask] = values
+        self._model = new_model
+    
     # def _clip_line_inview(self, xyz):
     #     # in = cam.inview(xyz);
     #     # lines = splitmat(xyz, in);
@@ -389,14 +412,16 @@ class Camera(object):
             xyz (array): World coordinates (Nx3)
             directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
         """
-        if not directions:
+        if directions:
+            dxyz = xyz
+        else:
             # Convert coordinates to ray directions
-            xyz -= self.xyz
-        xyz = np.dot(xyz, self._R.T)
+            dxyz = xyz - self.xyz
+        xyz_c = np.dot(dxyz, self._R.T)
         # Normalize by perspective division
-        xy = xyz[:, 0:2] / xyz[:, 2][:, None]
+        xy = xyz_c[:, 0:2] / xyz_c[:, 2][:, None]
         # Set points behind camera to NaN
-        behind = xyz[:, 2] <= 0
+        behind = xyz_c[:, 2] <= 0
         xy[behind, :] = np.nan
         return xy
 

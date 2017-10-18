@@ -12,6 +12,7 @@ class Camera(object):
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
     All attributes are coerced to numpy arrays during initialization or when individually set.
     The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if these are both provided.
+    If `vector` is provided, all other arguments are ignored. 
     
     Arguments:
         fmm (array_like): Focal length in millimeters [fx, fy]
@@ -30,20 +31,25 @@ class Camera(object):
         c (array): Principal point offset from center in pixels [dx, dy]
         k (array): Radial distortion coefficients [k1, ..., k6]
         p (array): Tangential distortion coefficients [p1, p2]
+        vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
+        
     """
 
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
-        fmm=None, sensorsz=None):
-        self.xyz = xyz
-        self.viewdir = viewdir
-        self.imgsz = imgsz
-        if fmm and sensorsz:
-            self.f = fmm_to_fpx(fmm, sensorsz, imgsz)
+        fmm=None, sensorsz=None, vector=None):
+        if vector:
+            self.vector = vector
         else:
-            self.f = f
-        self.c = c
-        self.k = k
-        self.p = p
+            self.xyz = xyz
+            self.viewdir = viewdir
+            self.imgsz = imgsz
+            if fmm and sensorsz:
+                self.f = fmm_to_fpx(fmm, sensorsz, imgsz)
+            else:
+                self.f = f
+            self.c = c
+            self.k = k
+            self.p = p
 
     # ---- Properties (independent) ----
 

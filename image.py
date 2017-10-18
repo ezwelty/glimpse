@@ -114,13 +114,13 @@ class Camera(object):
 
     @property
     def _model(self):
-        return np.concatenate((self.xyz, self.imgsz, self.viewdir, self.f, self.c, self.k, self.p))
+        return np.concatenate((self.xyz, self.viewdir, self.imgsz, self.f, self.c, self.k, self.p))
     
     @_model.setter
     def _model(self, value):
         self._xyz = value[0:3]
-        self._imgsz = value[3:5]
-        self._viewdir = value[5:8]
+        self._viewdir = value[3:6]
+        self._imgsz = value[6:8]
         self._f = value[8:10]
         self._c = value[10:12]
         self._k = value[12:18]
@@ -269,8 +269,8 @@ class Camera(object):
         return duv
 
     def _model_mask(self, params={}):
-        names = ['xyz', 'imgsz', 'viewdir', 'f', 'c', 'k', 'p']
-        indices = [0, 3, 5, 8, 10, 12, 18, 20]
+        names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+        indices = [0, 3, 6, 8, 10, 12, 18, 20]
         selected = np.zeros(20, dtype = bool)
         for name, value in params.items():
             if (value or value == 0) and name in names:

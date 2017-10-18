@@ -37,7 +37,7 @@ class Camera(object):
 
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
         fmm=None, sensorsz=None, vector=None):
-        if vector:
+        if vector is not None:
             self.vector = vector
         else:
             self.xyz = xyz
@@ -179,7 +179,7 @@ class Camera(object):
             self.f *= scale
             self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}):
+    def optimize(self, uv, xyz, params={'viewdir': True}, copy=True):
         """
         Calibrate a camera from paired image-world coordinates.
         
@@ -189,15 +189,26 @@ class Camera(object):
             uv (array): Image coordinates (Nx2)
             xyz (array): World coordinates (Nx3)
             params (set): Parameters to optimize
+            copy (bool): Whether to return result as new `Camera`
+            
+        Returns:
+            Camera: New object (if `copy=True`)
          """
-        mask = self._vector_mask(params)
         uv = np.asarray(uv, dtype = float)
         xyz = np.asarray(xyz, dtype = float)
+        mask = self._vector_mask(params)
+        cam = Camera(vector=self.vector)
         def minfun(values):
-            self._update_vector(mask, values)
-            return self._projerror_points(uv, xyz).flatten()
-        result = scipy.optimize.root(minfun, self.vector[mask], method='lm')
-        self._update_vector(mask, result['x'])
+            cam._update_vector(mask, values)
+            return cam._projerror_points(uv, xyz).flatten()
+        result = scipy.optimize.root(minfun, cam.vector[mask], method='lm')
+        cam._update_vector(mask, result['x'])
+        if not result['success']:
+            raise RuntimeError(result['message'])
+        if copy:
+            return cam
+        else:
+            self.vector = cam.vector
     
     def project(self, xyz, directions=False):
         """

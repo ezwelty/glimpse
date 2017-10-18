@@ -179,17 +179,26 @@ class Camera(object):
             self.f *= scale
             self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}, copy=True):
+    def optimize(self, uv, xyz, params={'viewdir': True}, copy=True, tol=None, options=None):
         """
         Calibrate a camera from paired image-world coordinates.
         
         Points `uv` and `xyz` are matched by row index.
+        The Levenberg-Marquardt algorithm is used to find the camera parameters that minimize the distance between
+        `uv` and the projection of `xyz` into the camera.
         
         Arguments:
             uv (array): Image coordinates (Nx2)
             xyz (array): World coordinates (Nx3)
-            params (set): Parameters to optimize
+            params (dict): Parameters to optimize. For example:
+                
+                - {'viewdir': True} : All `viewdir` elements
+                - {'viewdir': 0} : First `viewdir` element
+                - {'viewdir': [0, 1]} : First and second `viewdir` elements
+            
             copy (bool): Whether to return result as new `Camera`
+            tol (float): Tolerance for termination (see scipy.optimize.root)
+            options (dict): Solver options (see scipy.optimize.root)
             
         Returns:
             Camera: New object (if `copy=True`)
@@ -201,7 +210,7 @@ class Camera(object):
         def minfun(values):
             cam._update_vector(mask, values)
             return cam._projerror_points(uv, xyz).flatten()
-        result = scipy.optimize.root(minfun, cam.vector[mask], method='lm')
+        result = scipy.optimize.root(minfun, cam.vector[mask], method='lm', tol=tol, options=options)
         cam._update_vector(mask, result['x'])
         if not result['success']:
             raise RuntimeError(result['message'])

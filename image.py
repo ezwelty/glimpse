@@ -113,18 +113,19 @@ class Camera(object):
             return None
 
     @property
-    def _model(self):
+    def vector(self):
         return np.concatenate((self.xyz, self.viewdir, self.imgsz, self.f, self.c, self.k, self.p))
     
-    @_model.setter
-    def _model(self, value):
-        self._xyz = value[0:3]
-        self._viewdir = value[3:6]
-        self._imgsz = value[6:8]
-        self._f = value[8:10]
-        self._c = value[10:12]
-        self._k = value[12:18]
-        self._p = value[18:20]
+    @vector.setter
+    def vector(self, value):
+        temp = np.array(value[0:20], dtype=float)
+        self._xyz = temp[0:3]
+        self._viewdir = temp[3:6]
+        self._imgsz = temp[6:8]
+        self._f = temp[8:10]
+        self._c = temp[10:12]
+        self._k = temp[12:18]
+        self._p = temp[18:20]
     
     # ---- Methods (public) ----
 
@@ -183,14 +184,14 @@ class Camera(object):
             xyz (array): World coordinates (Nx3)
             params (set): Parameters to optimize
          """
-        mask = self._model_mask(params)
+        mask = self._vector_mask(params)
         uv = np.asarray(uv, dtype = float)
         xyz = np.asarray(xyz, dtype = float)
         def minfun(values):
-            self._update_model(values, mask)
+            self._update_vector(mask, values)
             return self._projerror_points(uv, xyz).flatten()
-        result = scipy.optimize.root(minfun, self._model[mask], method='lm')
-        self._update_model(result['x'], mask)
+        result = scipy.optimize.root(minfun, self.vector[mask], method='lm')
+        self._update_vector(mask, result['x'])
     
     def project(self, xyz, directions=False):
         """
@@ -268,7 +269,7 @@ class Camera(object):
             duv /= self.f.mean()
         return duv
 
-    def _model_mask(self, params={}):
+    def _vector_mask(self, params={}):
         names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
         indices = [0, 3, 6, 8, 10, 12, 18, 20]
         selected = np.zeros(20, dtype = bool)
@@ -282,10 +283,10 @@ class Camera(object):
                     selected[indices[start] + value] = True
         return selected
     
-    def _update_model(self, values, mask):
-        new_model = self._model
-        new_model[mask] = values
-        self._model = new_model
+    def _update_vector(self, mask, values):
+        vector = self.vector
+        vector[mask] = values
+        self.vector = vector
     
     # def _clip_line_inview(self, xyz):
     #     # in = cam.inview(xyz);

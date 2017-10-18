@@ -179,7 +179,7 @@ class Camera(object):
             self.f *= scale
             self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}, copy=True, tol=None, options=None):
+    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, copy=True, tol=None, options=None):
         """
         Calibrate a camera from paired image-world coordinates.
         
@@ -196,20 +196,24 @@ class Camera(object):
                 - {'viewdir': 0} : First `viewdir` element
                 - {'viewdir': [0, 1]} : First and second `viewdir` elements
             
+            directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True).
+                If True, 'xyz' cannot be in `params`.
             copy (bool): Whether to return result as new `Camera`
             tol (float): Tolerance for termination (see scipy.optimize.root)
             options (dict): Solver options (see scipy.optimize.root)
             
         Returns:
             Camera: New object (if `copy=True`)
-         """
+        """
         uv = np.asarray(uv, dtype = float)
         xyz = np.asarray(xyz, dtype = float)
+        if directions and 'xyz' in params:
+            raise ValueError("'xyz' cannot be in `params` when `directions` is True")
         mask = self._vector_mask(params)
         cam = Camera(vector=self.vector)
         def minfun(values):
             cam._update_vector(mask, values)
-            return cam._projerror_points(uv, xyz).flatten()
+            return cam._projerror_points(uv, xyz, directions=directions).flatten()
         result = scipy.optimize.root(minfun, cam.vector[mask], method='lm', tol=tol, options=options)
         cam._update_vector(mask, result['x'])
         if not result['success']:
@@ -431,7 +435,7 @@ class Camera(object):
                         xy /= self._radial_distortion(r2)
         return xy
 
-    def _world2camera(self, xyz, directions = False):
+    def _world2camera(self, xyz, directions=False):
         """
         Project world coordinates to camera coordinates.
         

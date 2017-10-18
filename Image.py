@@ -81,7 +81,7 @@ class Camera(object):
 
     @p.setter
     def p(self, value):
-        self._p = _format_list(value, length=3, default=0)
+        self._p = _format_list(value, length=2, default=0)
     
     # ---- Properties (dependent) ----
     
@@ -112,6 +112,20 @@ class Camera(object):
         else:
             return None
 
+    @property
+    def _model(self):
+        return np.concatenate((self.xyz, self.imgsz, self.viewdir, self.f, self.c, self.k, self.p))
+    
+    @_model.setter
+    def _model(self, value):
+        self._xyz = value[0:3]
+        self._imgsz = value[3:5]
+        self._viewdir = value[5:8]
+        self._f = value[8:10]
+        self._c = value[10:12]
+        self._k = value[12:18]
+        self._p = value[18:20]
+        
     # ---- Methods (public) ----
 
     def idealize(self, copy=True):
@@ -191,8 +205,23 @@ class Camera(object):
         xyz = self._camera2world(xy)
         return xyz
 
+    # def optimize(self, uv, xyz, params=['viewdir']):
+    #     """
+    #     Calibrate a camera from paired image-world coordinates.
+        
+    #     Points `uv` and `xyz` are matched by row index.
+        
+    #     Arguments:
+    #         uv (array): Image coordinates (Nx2)
+    #         xyz (array): World coordinates (Nx3)
+    #         params (set): Parameters to optimize
+    #      """
+    
+    # def orient(self, uv, uv_ref):
+        
+    
     # ---- Methods (private) ----
-
+    
     def _infront(self, xyz, directions=False):
         """
         Test whether world coordinates are in front of the camera.

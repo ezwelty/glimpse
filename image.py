@@ -4,6 +4,7 @@ from datetime import datetime
 import numpy as np
 import exifread
 import scipy.misc
+import scipy.interpolate
 
 class Camera(object):
     """
@@ -633,6 +634,38 @@ class Image(object):
             # TODO: Throw warning if `imgsz` has different aspect ratio than file size.
             I = scipy.misc.imresize(I, size=size)
         return I
+    
+    def project(self, cam, method="linear"):
+        """
+        Project image data into a `Camera`.
+        
+        Arguments:
+            cam (Camera): Target `Camera`
+            method (str): Interpolation method, either "linear" or "nearest"
+        """
+        if not np.all(cam.xyz == self.cam.xyz):
+            raise ValueError("Current and target cameras must have the same position ('xyz')")
+        # Construct grid in target image
+        u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
+        v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))
+        U, V = np.meshgrid(u, v)
+        uv = np.column_stack((U.flatten(), V.flatten()))
+        # Project grid out target image
+        dxyz = cam.invproject(uv)
+        # Project grid onto image
+        puv = self.cam.project(dxyz, directions=True)
+        pvu = np.fliplr(puv)
+        # Sample image at grid
+        I = self.read()
+        if I.ndim < 3:
+            I = np.expand_dims(I, axis=2)
+        pI = np.full((int(cam.imgsz[1]), int(cam.imgsz[0]), I.shape[2]), np.nan, dtype=I.dtype)
+        pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, int(self.cam.imgsz[0]))
+        pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, int(self.cam.imgsz[1]))
+        for i in range(pI.shape[2]):
+            f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
+            pI[:, :, i] = f(pvu).reshape(I.shape[0:2])
+        return pI
 
 # ---- Static methods (public) ----
 

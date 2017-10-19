@@ -613,26 +613,18 @@ class Image(object):
                 camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
         self.cam = Camera(**camera_args)
     
-    def read(self, size=None):
+    def read(self):
         """
         Read image data from file.
         
-        Arguments:
-            size (scalar or list): Fraction of original size (scalar) or target size [nx, ny].
-                If `None` (default), self.cam.imgsz is used (if set) or the image is returned as-is.
+        If the camera image size (self.cam.imgsz) differs from the original image size (self.exif.size),
+        the image is resized to fit the camera image size.
         """
         I = scipy.misc.imread(self.path)
-        if size is None and self.cam.imgsz is not None:
-            size = self.cam.imgsz
-        if size is not None:
-            size = np.array(size)
-            if size.size > 1:
-                # Switch from (x, y) to (y, x) for scipy.misc.imresize()
-                size = size.astype(int)[::-1]
-            else:
-                size = float(size)
-            # TODO: Throw warning if `imgsz` has different aspect ratio than file size.
-            I = scipy.misc.imresize(I, size=size)
+        if self.cam.imgsz is not None and not np.array_equal(self.cam.imgsz, self.exif.size):
+            # Resize to match camera model
+            # Switch from (x, y) to (y, x) for scipy.misc.imresize()
+            I = scipy.misc.imresize(I, size=np.flip(self.cam.imgsz))
         return I
     
     def project(self, cam, method="linear"):

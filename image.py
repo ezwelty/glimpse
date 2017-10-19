@@ -644,16 +644,23 @@ class Image(object):
         uv = np.column_stack((U.flatten(), V.flatten()))
         # Project grid out target image
         dxyz = cam.invproject(uv)
-        # Project grid onto image
-        puv = self.cam.project(dxyz, directions=True)
-        pvu = np.fliplr(puv)
-        # Sample image at grid
+        # Project target grid onto source image (flip for RegularGridInterpolator)
+        pvu = np.fliplr(self.cam.project(dxyz, directions=True))
+        # Construct grid in source image
+        if cam.imgsz[0] is self.cam.imgsz[0]:
+            pu = u
+        else:
+            pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, int(self.cam.imgsz[0]))
+        if cam.imgsz[1] is self.cam.imgsz[1]:
+            pv = v
+        else:
+            pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, int(self.cam.imgsz[1]))
+        # Prepare source image
         I = self.read()
         if I.ndim < 3:
             I = np.expand_dims(I, axis=2)
         pI = np.full((int(cam.imgsz[1]), int(cam.imgsz[0]), I.shape[2]), np.nan, dtype=I.dtype)
-        pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, int(self.cam.imgsz[0]))
-        pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, int(self.cam.imgsz[1]))
+        # Sample source image at target grid
         for i in range(pI.shape[2]):
             f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
             pI[:, :, i] = f(pvu).reshape(I.shape[0:2])

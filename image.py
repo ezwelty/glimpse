@@ -617,8 +617,8 @@ class Image(object):
         Read image data from file.
         
         Arguments:
-            resize (scalar or list): Fraction of current size (scalar) or size of output image [nx, ny].
-                If `None` (default), 
+            size (scalar or list): Fraction of original size (scalar) or target size [nx, ny].
+                If `None` (default), self.cam.imgsz is used (if set) or the image is returned as-is.
         """
         I = scipy.misc.imread(self.path)
         if size is None and self.cam.imgsz is not None:

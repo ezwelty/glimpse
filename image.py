@@ -1,5 +1,6 @@
 import operator
 import warnings
+import ransac
 from datetime import datetime
 import numpy as np
 import exifread
@@ -33,7 +34,6 @@ class Camera(object):
         k (array): Radial distortion coefficients [k1, ..., k6]
         p (array): Tangential distortion coefficients [p1, p2]
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
-        
     """
 
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
@@ -180,7 +180,8 @@ class Camera(object):
             self.f *= scale
             self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, copy=True, tol=None, options=None):
+    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, copy=True, tol=None, options=None,
+        use_ransac=False, max_error=2, sample_size=8, min_inliers=10, iterations=500):
         """
         Calibrate a camera from paired image-world coordinates.
         
@@ -202,27 +203,24 @@ class Camera(object):
             copy (bool): Whether to return result as new `Camera`
             tol (float): Tolerance for termination (see scipy.optimize.root)
             options (dict): Solver options (see scipy.optimize.root)
-            
+            use_ransac (bool): Whether to filter inputs with Random Sample Consensus (RANSAC)
+            ...: RANSAC options (see ransac.ransac)
+        
         Returns:
             Camera: New object (if `copy=True`)
         """
-        uv = np.asarray(uv, dtype = float)
-        xyz = np.asarray(xyz, dtype = float)
-        if directions and 'xyz' in params:
-            raise ValueError("'xyz' cannot be in `params` when `directions` is True")
-        mask = self._vector_mask(params)
-        cam = Camera(vector=self.vector)
-        def minfun(values):
-            cam._update_vector(mask, values)
-            return cam._projerror_points(uv, xyz, directions=directions).flatten()
-        result = scipy.optimize.root(minfun, cam.vector[mask], method='lm', tol=tol, options=options)
-        cam._update_vector(mask, result['x'])
-        if not result['success']:
-            raise RuntimeError(result['message'])
-        if copy:
-            return cam
+        data = np.column_stack((uv, xyz)).astype(float)
+        model = ransac.Camera(cam=Camera(vector=self.vector), params=params, directions=directions, tol=tol, options=options)
+        if use_ransac:
+            params, idx = ransac.ransac(data, model,
+                max_error=max_error, sample_size=sample_size, min_inliers=min_inliers, iterations=iterations)
         else:
-            self.vector = cam.vector
+            params = model.fit(data)
+        model.cam._update_vector(model.mask, params)
+        if copy:
+            return model.cam
+        else:
+            self.vector = model.cam.vector
     
     def project(self, xyz, directions=False):
         """
@@ -314,10 +312,13 @@ class Camera(object):
                     selected[indices[start] + value] = True
         return selected
     
-    def _update_vector(self, mask, values):
+    def _update_vector(self, mask, values, copy=False):
         vector = self.vector
         vector[mask] = values
-        self.vector = vector
+        if copy:
+            return Camera(vector=vector)
+        else:
+            self.vector = vector
     
     # def _clip_line_inview(self, xyz):
     #     # in = cam.inview(xyz);
@@ -624,19 +625,19 @@ class Image(object):
         if self.cam.imgsz is not None and not np.array_equal(self.cam.imgsz, self.exif.size):
             # Resize to match camera model
             # Switch from (x, y) to (y, x) for scipy.misc.imresize()
-            I = scipy.misc.imresize(I, size=np.flip(self.cam.imgsz))
+            I = scipy.misc.imresize(I, size=np.flipud(self.cam.imgsz).astype(int))
         return I
     
     def project(self, cam, method="linear"):
         """
-        Project image data into a `Camera`.
+        Project image into another `Camera`.
         
         Arguments:
             cam (Camera): Target `Camera`
             method (str): Interpolation method, either "linear" or "nearest"
         """
         if not np.all(cam.xyz == self.cam.xyz):
-            raise ValueError("Current and target cameras must have the same position ('xyz')")
+            raise ValueError("Source and target cameras must have the same position ('xyz')")
         # Construct grid in target image
         u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
         v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))

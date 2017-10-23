@@ -4,6 +4,7 @@ import numpy as np
 import scipy.misc
 import image
 import dem as DEM
+import ransac
 
 # ---- Camera ----
 
@@ -95,14 +96,7 @@ def test_image_read():
     img.cam.resize(0.5, copy=False)
     I = img.read()
     assert all(I.shape[0:2][::-1] == img.cam.imgsz)
-    # Override size (scalar)
-    I = img.read(size=1)
-    assert all(I.shape[0:2][::-1] == img.exif.size)
-    # Override size (nx, ny)
-    size = np.array([20, 10])
-    I = img.read(size=size)
-    assert all(I.shape[0:2][::-1] == size)
-    
+
 # ---- DEM ----
 
 reload(DEM)
@@ -224,3 +218,70 @@ def test_dem_resize():
     rdem = dem.resize(2)
     assert np.array_equal(rdem.d, dem.d / 2)
     assert np.array_equal(rdem.xlim, dem.xlim)
+
+# ---- RANSAC (test models) ----
+
+def test_ransac_polynomial():
+    model = ransac.Polynomial(1)
+    data = np.array([
+        [0, 0],
+        [1.1, 1.0],
+        [1.9, 2.0],
+        [3.1, 3.1],
+        [3.0, 0.1],
+        [0.1, 3.0],
+        [4.1, 4.0]])
+    inliers = [0, 1, 2, 3, 6]
+    rparams, idx = ransac.ransac(data, model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
+    assert np.isin(idx, inliers).all()
+    # # Plot
+    # plt.figure()
+    # plt.scatter(data[:, 0], data[:, 1], c='grey')
+    # params = model.fit(data)
+    # plt.plot(data[:, 0], model.predict(params, data), c='grey')
+    # rparams, idx = ransac.ransac(data, model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
+    # plt.scatter(data[idx, 0], data[idx, 1], c='red')
+    # plt.plot(data[:, 0], model.predict(rparams, data), c='red')
+
+# ---- RANSAC (camera models) ----
+
+# Rotate camera
+img = image.Image("tests/20141013_020336.jpg")
+cam = image.Camera(vector=img.cam.vector)
+cam.viewdir = [2, 2, 2]
+# Project image
+Ia = img.read()
+Ib = img.project(cam)
+# Match features
+import cv2
+sift = cv2.SIFT()
+Ka, Da = sift.detectAndCompute(Ia, None)
+Kb, Db = sift.detectAndCompute(Ib, None)
+index_params = dict(algorithm = 0, trees = 5)
+search_params = dict(checks = 50)
+flann = cv2.FlannBasedMatcher(index_params, search_params)
+matches = flann.knnMatch(Da, Db, k=2)
+A = np.array([Ka[m.queryIdx].pt for m,n in matches])
+B = np.array([Kb[m.trainIdx].pt for m,n in matches])
+
+def test_ransac_camera_viewdir(tol=0.001):
+    # Optimize viewdir with ransac.ransac
+    data = np.column_stack((B, img.cam.invproject(A)))
+    model = ransac.Camera(cam=image.Camera(vector=img.cam.vector), directions=True, params={'viewdir': True})
+    rparams, idx = ransac.ransac(data, model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
+    assert np.all((rparams - cam.viewdir) < abs(tol))
+    err = model.errors(rparams, data)[idx]
+    rmse = (np.sum(err ** 2) / len(err)) ** 0.5
+    assert rmse < 0.5
+    # # Plot
+    # plt.figure(figsize=(12,8))
+    # plt.imshow(Ia)
+    # plt.imshow(Ib, alpha=0.5)
+    # plt.quiver(A[:, 0], A[:, 1], B[:, 0] - A[:, 0], B[:, 1] - A[:, 1], color = 'green', scale=1, scale_units='xy', angles='xy')
+    
+def test_camera_optimize_viewdir(tol=0.001):
+    # Optimize viewdir with Camera.optimize
+    uv = B
+    dxyz = img.cam.invproject(A)
+    ransac_cam = img.cam.optimize(uv, dxyz, directions=True, params={'viewdir': True}, use_ransac=True, iterations=1e3)
+    assert np.all((ransac_cam.viewdir - cam.viewdir) < abs(tol))

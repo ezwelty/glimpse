@@ -5,6 +5,8 @@ import scipy.misc
 import image
 import dem as DEM
 import ransac
+import matplotlib.pyplot as plt
+import cv2
 
 # ---- Camera ----
 
@@ -253,7 +255,6 @@ cam.viewdir = [2, 2, 2]
 Ia = img.read()
 Ib = img.project(cam)
 # Match features
-import cv2
 sift = cv2.SIFT()
 Ka, Da = sift.detectAndCompute(Ia, None)
 Kb, Db = sift.detectAndCompute(Ib, None)
@@ -278,7 +279,8 @@ def test_ransac_camera_viewdir(tol=0.001):
     # plt.imshow(Ia)
     # plt.imshow(Ib, alpha=0.5)
     # plt.quiver(A[:, 0], A[:, 1], B[:, 0] - A[:, 0], B[:, 1] - A[:, 1], color = 'green', scale=1, scale_units='xy', angles='xy')
-    
+    # plt.quiver(A[idx, 0], A[idx, 1], B[idx, 0] - A[idx, 0], B[idx, 1] - A[idx, 1], color = 'red', scale=1, scale_units='xy', angles='xy')
+
 def test_camera_optimize_viewdir(tol=0.001):
     # Optimize viewdir with Camera.optimize
     uv = B

@@ -49,7 +49,7 @@ def test_camera_reprojection_distorted(tol=0.2):
 reload(image)
 
 def test_exif_test_image():
-    path = "tests/20141013_020336.jpg"
+    path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
     assert np.array_equiv(exif.size, scipy.misc.imread(path).shape[0:2][::-1])
     assert exif.fmm == 20
@@ -61,7 +61,7 @@ def test_exif_test_image():
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
 
 def text_exif_subecond():
-    path = "tests/20141013_020336.jpg"
+    path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
     exif.tags['EXIF SubSecTimeOriginal'] = None
@@ -72,7 +72,7 @@ def text_exif_subecond():
 reload(image)
 
 def test_image_init():
-    path = "tests/20141013_020336.jpg"
+    path = "tests/AK10b_20141013_020336.JPG"
     # Defaults
     img = image.Image(path)
     assert img.path == path
@@ -89,7 +89,7 @@ def test_image_init():
     assert all(img.cam.f == img.exif.fmm * np.divide(camera_args['imgsz'], camera_args['sensorsz']))
 
 def test_image_read():
-    path = "tests/20141013_020336.jpg"
+    path = "tests/AK10b_20141013_020336.JPG"
     # Default size
     img = image.Image(path)
     I = img.read()
@@ -248,7 +248,7 @@ def test_ransac_polynomial():
 # ---- RANSAC (camera models) ----
 
 # Rotate camera
-img = image.Image("tests/20141013_020336.jpg")
+img = image.Image("tests/AK10b_20141013_020336.JPG")
 cam = image.Camera(vector=img.cam.vector)
 cam.viewdir = [2, 2, 2]
 # Project image

@@ -136,26 +136,20 @@ class Camera(object):
     
     # ---- Methods (public) ----
 
-    def idealize(self, copy=True):
+    def copy(self):
+        return Camera(vector=self.vector)
+    
+    def idealize(self):
         """
         Set distortion to zero.
         
         Radial distortion (`k`), tangential distortion (`p`), and principal point offset (`c`) are set to zero.
-        
-        Arguments:
-            copy (bool): Whether to return result as new `Camera`
-        
-        Returns:
-            Camera: New object (if `copy=True`)
         """
-        if copy:
-            return Camera(xyz=self.xyz, viewdir=self.viewdir, imgsz=self.imgsz, f=self.f)
-        else:
-            self.k = [0, 0, 0, 0, 0, 0]
-            self.p = [0, 0]
-            self.c = [0, 0]
+        self.k = np.zeros(6, dtype=float)
+        self.p = np.zeros(2, dtype=float)
+        self.c = np.zeros(2, dtype=float)
 
-    def resize(self, scale, copy=True):
+    def resize(self, scale):
         """
         Resize a camera by a scale factor.
         
@@ -163,24 +157,14 @@ class Camera(object):
         
         Arguments:
             scale (scalar): Scale factor
-            copy (bool): Whether to return result as new `Camera`
-        
-        Returns:
-            Camera: New object (if `copy=True`)
         """
         target_size = np.round(self.imgsz * float(scale))
         scale = target_size / self.imgsz
-        if copy:
-            return Camera(
-                xyz=self.xyz, viewdir=self.viewdir, imgsz=self.imgsz * scale,
-                f=self.f * scale, c=self.c * scale, k=self.k, p=self.p
-                )
-        else:
-            self.imgsz *= scale
-            self.f *= scale
-            self.c *= scale
+        self.imgsz *= scale
+        self.f *= scale
+        self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, copy=True, tol=None, options=None,
+    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, tol=None, options=None,
         use_ransac=False, max_error=2, sample_size=8, min_inliers=10, iterations=500):
         """
         Calibrate a camera from paired image-world coordinates.
@@ -200,14 +184,10 @@ class Camera(object):
             
             directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True).
                 If True, 'xyz' cannot be in `params`.
-            copy (bool): Whether to return result as new `Camera`
             tol (float): Tolerance for termination (see scipy.optimize.root)
             options (dict): Solver options (see scipy.optimize.root)
             use_ransac (bool): Whether to filter inputs with Random Sample Consensus (RANSAC)
             ...: RANSAC options (see ransac.ransac)
-        
-        Returns:
-            Camera: New object (if `copy=True`)
         """
         data = np.column_stack((uv, xyz)).astype(float)
         model = ransac.Camera(cam=Camera(vector=self.vector), params=params, directions=directions, tol=tol, options=options)
@@ -217,10 +197,7 @@ class Camera(object):
         else:
             params = model.fit(data)
         model.cam._update_vector(model.mask, params)
-        if copy:
-            return model.cam
-        else:
-            self.vector = model.cam.vector
+        self.vector = model.cam.vector
     
     def project(self, xyz, directions=False):
         """
@@ -312,13 +289,10 @@ class Camera(object):
                     selected[indices[start] + value] = True
         return selected
     
-    def _update_vector(self, mask, values, copy=False):
+    def _update_vector(self, mask, values):
         vector = self.vector
         vector[mask] = values
-        if copy:
-            return Camera(vector=vector)
-        else:
-            self.vector = vector
+        self.vector = vector
     
     # def _clip_line_inview(self, xyz):
     #     # in = cam.inview(xyz);

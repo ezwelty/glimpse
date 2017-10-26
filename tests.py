@@ -18,14 +18,14 @@ def test_camera_init_with_fmm(fmm=[10, 10], sensorsz=[30, 20]):
 
 def test_camera_resize(imgsz=[100, 100]):
     cam = image.Camera(imgsz=imgsz)
-    cam.resize(0.5, copy=False)
+    cam.resize(0.5)
     assert np.array_equiv(cam.imgsz * 2, imgsz)
     cam = cam.resize(2)
     assert np.array_equiv(cam.imgsz, imgsz)
 
 def test_camera_idealize(k=1, c=1, p=1):
     cam = image.Camera(k=k, c=c, p=p)
-    cam.idealize(copy=False)
+    cam.idealize()
     assert cam.k[0] == 0
     cam = image.Camera(k=k, c=c, p=p).idealize()
     assert cam.k[0] == 0
@@ -95,7 +95,7 @@ def test_image_read():
     I = img.read()
     assert all(I.shape[0:2][::-1] == img.cam.imgsz)
     # Resize camera
-    img.cam.resize(0.5, copy=False)
+    img.cam.resize(0.5)
     I = img.read()
     assert all(I.shape[0:2][::-1] == img.cam.imgsz)
 
@@ -249,7 +249,7 @@ def test_ransac_polynomial():
 
 # Rotate camera
 img = image.Image("tests/AK10b_20141013_020336.JPG")
-cam = image.Camera(vector=img.cam.vector)
+cam = img.cam.copy()
 cam.viewdir = [2, 2, 2]
 # Project image
 Ia = img.read()
@@ -268,7 +268,7 @@ B = np.array([Kb[m.trainIdx].pt for m,n in matches])
 def test_ransac_camera_viewdir(tol=0.001):
     # Optimize viewdir with ransac.ransac
     data = np.column_stack((B, img.cam.invproject(A)))
-    model = ransac.Camera(cam=image.Camera(vector=img.cam.vector), directions=True, params={'viewdir': True})
+    model = ransac.Camera(cam=img.cam.copy(), directions=True, params={'viewdir': True})
     rparams, idx = ransac.ransac(data, model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
     assert np.all((rparams - cam.viewdir) < abs(tol))
     err = model.errors(rparams, data)[idx]

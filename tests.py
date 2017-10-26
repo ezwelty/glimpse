@@ -269,7 +269,7 @@ def test_ransac_camera_viewdir(tol=0.001):
     # Optimize viewdir with ransac.ransac
     data = np.column_stack((B, img.cam.invproject(A)))
     model = ransac.Camera(cam=image.Camera(vector=img.cam.vector), directions=True, params={'viewdir': True})
-    rparams, idx = ransac.ransac(data, model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
+    rparams, idx = ransac.ransac(data, model, sample_size=300, max_error=10, min_inliers=200, iterations=1e4)
     assert np.all((rparams - cam.viewdir) < abs(tol))
     err = model.errors(rparams, data)[idx]
     rmse = (np.sum(err ** 2) / len(err)) ** 0.5

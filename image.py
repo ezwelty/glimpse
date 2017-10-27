@@ -6,6 +6,8 @@ import numpy as np
 import exifread
 import scipy.misc
 import scipy.interpolate
+import shutil
+import os.path
 
 class Camera(object):
     """
@@ -601,6 +603,21 @@ class Image(object):
             # Switch from (x, y) to (y, x) for scipy.misc.imresize()
             I = scipy.misc.imresize(I, size=np.flipud(self.cam.imgsz).astype(int))
         return I
+    
+    def write(self, path=None, I=None):
+        # TODO: Insert EXIF into new file
+        if path is None:
+            # Use original path
+            path = self.path
+        elif os.path.isdir(path):
+            # Use original basename
+            path = os.path.join(path, os.path.basename(self.path))
+        if I is not None:
+            # Write new file
+            scipy.misc.imsave(name=path, arr=I)
+        elif path is not self.path:
+           # Copy original file
+            shutil.copyfile(self.path, path)
     
     def project(self, cam, method="linear"):
         """

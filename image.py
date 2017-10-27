@@ -655,7 +655,7 @@ class Image(object):
         # Sample source image at target grid
         for i in range(pI.shape[2]):
             f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
-            pI[:, :, i] = f(pvu).reshape(I.shape[0:2])
+            pI[:, :, i] = f(pvu).reshape(pI.shape[0:2])
         return pI
 
 # ---- Static methods (public) ----

@@ -120,7 +120,8 @@ class Camera:
         self.tol = tol
         self.options = options
     def predict(self, params, data):
-        cam = self.cam._update_vector(self.mask, params, copy=True)
+        cam = self.cam.copy()
+        cam._update_vector(self.mask, params)
         return cam.project(data[:, 2:5], directions=self.directions)
     def residuals(self, params, data):
         prediction = self.predict(params, data)

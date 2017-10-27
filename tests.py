@@ -5,12 +5,9 @@ import scipy.misc
 import image
 import dem as DEM
 import ransac
-import matplotlib.pyplot as plt
 import cv2
 
 # ---- Camera ----
-
-reload(image)
 
 def test_camera_init_with_fmm(fmm=[10, 10], sensorsz=[30, 20]):
     cam = image.Camera(fmm=fmm, sensorsz=sensorsz)
@@ -20,15 +17,15 @@ def test_camera_resize(imgsz=[100, 100]):
     cam = image.Camera(imgsz=imgsz)
     cam.resize(0.5)
     assert np.array_equiv(cam.imgsz * 2, imgsz)
-    cam = cam.resize(2)
+    cam.resize(2)
     assert np.array_equiv(cam.imgsz, imgsz)
 
-def test_camera_idealize(k=1, c=1, p=1):
-    cam = image.Camera(k=k, c=c, p=p)
+def test_camera_idealize(c=1, k=1, p=1):
+    cam = image.Camera(c=c, k=k, p=p)
     cam.idealize()
-    assert cam.k[0] == 0
-    cam = image.Camera(k=k, c=c, p=p).idealize()
-    assert cam.k[0] == 0
+    assert (cam.c == 0).all()
+    assert (cam.k == 0).all()
+    assert (cam.p == 0).all()
 
 def test_camera_reprojection_ideal(tol=1e-13):
     cam = image.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30])
@@ -46,8 +43,6 @@ def test_camera_reprojection_distorted(tol=0.2):
 
 # ---- Exif ----
 
-reload(image)
-
 def test_exif_test_image():
     path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
@@ -60,7 +55,7 @@ def test_exif_test_image():
     assert exif.aperture == 8
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
 
-def text_exif_subecond():
+def test_exif_subsecond():
     path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
@@ -68,8 +63,6 @@ def text_exif_subecond():
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36)
 
 # ---- Image ----
-
-reload(image)
 
 def test_image_init():
     path = "tests/AK10b_20141013_020336.JPG"
@@ -100,8 +93,6 @@ def test_image_read():
     assert all(I.shape[0:2][::-1] == img.cam.imgsz)
 
 # ---- DEM ----
-
-reload(DEM)
 
 def test_dem_defaults():
     Z = np.zeros([3, 3])    
@@ -145,7 +136,7 @@ def test_dem_xy():
     assert np.array_equiv(dem.x, x)
     assert np.array_equiv(dem.y, y)
 
-def test_dem_sample(tol = 1e-13):
+def test_dem_sample(tol=1e-13):
     Z = np.reshape(range(0, 16, 1), [4, 4])
     dem = DEM.DEM(Z, [-0.5, 3.5], [-0.5, 3.5])
     # Sample cells centers along diagonal
@@ -236,14 +227,6 @@ def test_ransac_polynomial():
     inliers = [0, 1, 2, 3, 6]
     rparams, idx = ransac.ransac(data, model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
     assert np.isin(idx, inliers).all()
-    # # Plot
-    # plt.figure()
-    # plt.scatter(data[:, 0], data[:, 1], c='grey')
-    # params = model.fit(data)
-    # plt.plot(data[:, 0], model.predict(params, data), c='grey')
-    # rparams, idx = ransac.ransac(data, model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
-    # plt.scatter(data[idx, 0], data[idx, 1], c='red')
-    # plt.plot(data[:, 0], model.predict(rparams, data), c='red')
 
 # ---- RANSAC (camera models) ----
 
@@ -274,16 +257,11 @@ def test_ransac_camera_viewdir(tol=0.001):
     err = model.errors(rparams, data)[idx]
     rmse = (np.sum(err ** 2) / len(err)) ** 0.5
     assert rmse < 0.5
-    # # Plot
-    # plt.figure(figsize=(12,8))
-    # plt.imshow(Ia)
-    # plt.imshow(Ib, alpha=0.5)
-    # plt.quiver(A[:, 0], A[:, 1], B[:, 0] - A[:, 0], B[:, 1] - A[:, 1], color = 'green', scale=1, scale_units='xy', angles='xy')
-    # plt.quiver(A[idx, 0], A[idx, 1], B[idx, 0] - A[idx, 0], B[idx, 1] - A[idx, 1], color = 'red', scale=1, scale_units='xy', angles='xy')
 
 def test_camera_optimize_viewdir(tol=0.001):
     # Optimize viewdir with Camera.optimize
     uv = B
     dxyz = img.cam.invproject(A)
-    ransac_cam = img.cam.optimize(uv, dxyz, directions=True, params={'viewdir': True}, use_ransac=True, iterations=1e3)
+    ransac_cam = img.cam.copy()
+    ransac_cam.optimize(uv, dxyz, directions=True, params={'viewdir': True}, use_ransac=True, iterations=1e3)
     assert np.all((ransac_cam.viewdir - cam.viewdir) < abs(tol))

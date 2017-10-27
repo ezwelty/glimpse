@@ -657,7 +657,6 @@ def get_sensor_size(make, model):
     Return:
         list: Camera sensor width and height in mm
     """
-    make_model = make.strip() + " " + model.strip()
     sensor_sizes = { # mm
         'NIKON CORPORATION NIKON D2X': [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
         'NIKON CORPORATION NIKON D200': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
@@ -666,10 +665,14 @@ def get_sensor_size(make, model):
         'Canon Canon EOS 20D': [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
         'Canon Canon EOS 40D': [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
     }
+    if make and model:
+        make_model = make.strip() + " " + model.strip()
+    else:
+        make_model = ""
     if sensor_sizes.has_key(make_model):
         return sensor_sizes[make_model]
     else:
-        raise KeyError("No sensor size found for " + make_model)
+        raise KeyError("No sensor size found for: " + make_model)
 
 def fmm_to_fpx(fmm, sensorsz, imgsz):
     """

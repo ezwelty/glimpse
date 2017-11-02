@@ -22,6 +22,7 @@ class Camera(object):
         sensorsz (array_like): Sensor size in millimters [nx, ny]
     
     Attributes:
+        vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
         xyz (array): Position in world coordinates [x, y, z]
         viewdir (array): View direction in degrees [yaw, pitch, roll]
 
@@ -34,7 +35,8 @@ class Camera(object):
         c (array): Principal point offset from center in pixels [dx, dy]
         k (array): Radial distortion coefficients [k1, ..., k6]
         p (array): Tangential distortion coefficients [p1, p2]
-        vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
+        R (array): Rotation matrix equivalent of `viewdir`.
+            Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
     """
     
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
@@ -113,7 +115,7 @@ class Camera(object):
         self.vector[18:20] = _format_list(value, length=2, default=0)
     
     @property
-    def _R(self):
+    def R(self):
         if self.viewdir is not None:
             # Initial rotations of camera reference frame
             # (camera +z pointing up, with +x east and +y north)
@@ -251,7 +253,7 @@ class Camera(object):
             dxyz = xyz
         else:
             dxyz = xyz - self.xyz
-        z = np.dot(dxyz, self._R.T)[:, 2]
+        z = np.dot(dxyz, self.R.T)[:, 2]
         return z > 0
     
     def _inframe(self, uv):
@@ -365,7 +367,7 @@ class Camera(object):
         else:
             # Convert coordinates to ray directions
             dxyz = xyz - self.xyz
-        xyz_c = np.dot(dxyz, self._R.T)
+        xyz_c = np.dot(dxyz, self.R.T)
         # Normalize by perspective division
         xy = xyz_c[:, 0:2] / xyz_c[:, 2][:, None]
         # Set points behind camera to NaN
@@ -382,7 +384,7 @@ class Camera(object):
         """
         ones = np.ones((xy.shape[0], 1))
         xy_z = np.c_[xy, ones]
-        dxyz = np.dot(xy_z, self._R)
+        dxyz = np.dot(xy_z, self.R)
         return dxyz
     
     def _camera2image(self, xy):

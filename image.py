@@ -263,24 +263,6 @@ class Camera(object):
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
     
-    def _projerror_points(self, uv, xyz, directions=False, normalize=False):
-        """
-        Calculate pixel reprojection errors for points.
-        
-        Points `uv` and `xyz` are matched by row index.
-        
-        Arguments:
-            uv (array): Image coordinates (Nx2)
-            xyz: (array): World coordinates (Nx3) or camera coordinates (Nx2)
-            directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
-            normalize (bool): Whether to return pixels (False) or normalize by mean focal length (True)
-        """
-        puv = self.project(xyz, directions=directions)
-        duv = puv - uv
-        if normalize:
-            duv /= self.f.mean()
-        return duv
-    
     def _radial_distortion(self, r2):
         """
         Compute the radial distortion multipler `dr`.

@@ -115,13 +115,13 @@ class Camera:
         if directions and 'xyz' in params:
             raise ValueError("'xyz' cannot be in `params` when `directions` is True")
         self.cam = cam
-        self.mask = cam._vector_mask(params)
+        self.mask = vector_mask(params)
         self.directions = directions
         self.tol = tol
         self.options = options
     def predict(self, params, data):
         cam = self.cam.copy()
-        cam._update_vector(self.mask, params)
+        cam.vector[self.mask] = params
         return cam.project(data[:, 2:5], directions=self.directions)
     def residuals(self, params, data):
         prediction = self.predict(params, data)
@@ -137,3 +137,17 @@ class Camera:
         else:
             print result['message']
             return None
+
+def vector_mask(params={}):
+    names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+    indices = [0, 3, 6, 8, 10, 12, 18, 20]
+    selected = np.zeros(20, dtype = bool)
+    for name, value in params.items():
+        if (value or value == 0) and name in names:
+            start = names.index(name)
+            if value is True:
+                selected[indices[start]:indices[start + 1]] = True
+            else:
+                value = np.array(value)
+                selected[indices[start] + value] = True
+    return selected

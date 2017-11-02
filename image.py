@@ -348,7 +348,7 @@ class Camera(object):
                 if self.k[0] < 0:
                     # For negative k1
                     th = np.arccos(R / np.sqrt(Q**3))
-                    r = -2 * np.sqrt(Q) * np.cos((th - 2 * pi) / 3)
+                    r = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
                 else:
                     # For positive k1
                     A = (np.sqrt(R**2 - Q**3) - R)**(1 / 3)

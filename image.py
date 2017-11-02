@@ -1,4 +1,3 @@
-import operator
 import warnings
 import ransac
 from datetime import datetime
@@ -12,7 +11,7 @@ import os.path
 class Camera(object):
     """
     A `Camera` converts between 3D world coordinates and 2D image coordinates.
-
+    
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
     All attributes are coerced to numpy arrays during initialization or when individually set.
     The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if these are both provided.
@@ -29,7 +28,7 @@ class Camera(object):
             - yaw: clockwise rotation about z-axis (0 = look north)
             - pitch: rotation from horizon (+ look up, - look down)
             - roll: rotation about optical axis (+ down right, - down left, from behind)
-
+        
         imgsz (array): Image size in pixels [nx, ny]
         f (array): Focal length in pixels [fx, fy]
         c (array): Principal point offset from center in pixels [dx, dy]
@@ -37,11 +36,12 @@ class Camera(object):
         p (array): Tangential distortion coefficients [p1, p2]
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
     """
-
+    
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
         fmm=None, sensorsz=None, vector=None):
+        self.vector = np.full(20, np.nan, dtype=float)
         if vector is not None:
-            self.vector = vector
+            self.vector = np.asarray(vector, dtype=float)[0:20]
         else:
             self.xyz = xyz
             self.viewdir = viewdir
@@ -53,46 +53,64 @@ class Camera(object):
             self.c = c
             self.k = k
             self.p = p
-
-    # ---- Properties (independent) ----
-
-    xyz = property(operator.attrgetter('_xyz'))
-    viewdir = property(operator.attrgetter('_viewdir'))
-    imgsz = property(operator.attrgetter('_imgsz'))
-    f = property(operator.attrgetter('_f'))
-    c = property(operator.attrgetter('_c'))
-    k = property(operator.attrgetter('_k'))
-    p = property(operator.attrgetter('_p'))
-
-    @xyz.setter
-    def xyz(self, value):
-        self._xyz = _format_list(value, length=3, default=0)
-
-    @viewdir.setter
-    def viewdir(self, value):
-        self._viewdir = _format_list(value, length=3, default=0)
-
-    @imgsz.setter
-    def imgsz(self, value):
-        self._imgsz = _format_list(value, length=2)
-
-    @f.setter
-    def f(self, value):
-        self._f = _format_list(value, length=2)
-
-    @c.setter
-    def c(self, value):
-        self._c = _format_list(value, length=2, default=0)
-
-    @k.setter
-    def k(self, value):
-        self._k = _format_list(value, length=6, default=0)
-
-    @p.setter
-    def p(self, value):
-        self._p = _format_list(value, length=2, default=0)
     
     # ---- Properties (dependent) ----
+    
+    @property
+    def xyz(self):
+        return self.vector[0:3]
+    
+    @xyz.setter
+    def xyz(self, value):
+        self.vector[0:3] = _format_list(value, length=3, default=0)
+    
+    @property
+    def viewdir(self):
+        return self.vector[3:6]
+    
+    @viewdir.setter
+    def viewdir(self, value):
+        self.vector[3:6] = _format_list(value, length=3, default=0)
+    
+    @property
+    def imgsz(self):
+        return self.vector[6:8]
+    
+    @imgsz.setter
+    def imgsz(self, value):
+        self.vector[6:8] = _format_list(value, length=2)
+    
+    @property
+    def f(self):
+        return self.vector[8:10]
+    
+    @f.setter
+    def f(self, value):
+        self.vector[8:10] = _format_list(value, length=2)
+    
+    @property
+    def c(self):
+        return self.vector[10:12]
+    
+    @c.setter
+    def c(self, value):
+        self.vector[10:12] = _format_list(value, length=2, default=0)
+    
+    @property
+    def k(self):
+        return self.vector[12:18]
+    
+    @k.setter
+    def k(self, value):
+        self.vector[12:18] = _format_list(value, length=6, default=0)
+    
+    @property
+    def p(self):
+        return self.vector[18:20]
+    
+    @p.setter
+    def p(self, value):
+        self.vector[18:20] = _format_list(value, length=2, default=0)
     
     @property
     def _R(self):
@@ -120,24 +138,9 @@ class Camera(object):
             ])
         else:
             return None
-
-    @property
-    def vector(self):
-        return np.concatenate((self.xyz, self.viewdir, self.imgsz, self.f, self.c, self.k, self.p))
-    
-    @vector.setter
-    def vector(self, value):
-        temp = np.array(value[0:20], dtype=float)
-        self._xyz = temp[0:3]
-        self._viewdir = temp[3:6]
-        self._imgsz = temp[6:8]
-        self._f = temp[8:10]
-        self._c = temp[10:12]
-        self._k = temp[12:18]
-        self._p = temp[18:20]
     
     # ---- Methods (public) ----
-
+    
     def copy(self):
         return Camera(vector=self.vector)
     
@@ -150,7 +153,7 @@ class Camera(object):
         self.k = np.zeros(6, dtype=float)
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
-
+    
     def resize(self, scale):
         """
         Resize a camera by a scale factor.
@@ -218,14 +221,14 @@ class Camera(object):
             xy = xyz
         uv = self._camera2image(xy)
         return uv
-
+    
     def invproject(self, uv):
         """
         Project image coordinates to world ray directions.
         
         Arguments:
             uv (array): Image coordinates (Nx2)
-            
+        
         Returns:
             array: World ray directions relative to camera position (Nx3)
         """
@@ -249,7 +252,7 @@ class Camera(object):
             dxyz = xyz - self.xyz
         z = np.dot(dxyz, self._R.T)[:, 2]
         return z > 0
-
+    
     def _inframe(self, uv):
         """
         Test whether image coordinates are in or on the image frame.
@@ -258,7 +261,7 @@ class Camera(object):
             uv (array) Image coordinates (Nx2)
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
-
+    
     def _projerror_points(self, uv, xyz, directions=False, normalize=False):
         """
         Calculate pixel reprojection errors for points.
@@ -276,54 +279,7 @@ class Camera(object):
         if normalize:
             duv /= self.f.mean()
         return duv
-
-    def _vector_mask(self, params={}):
-        names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
-        indices = [0, 3, 6, 8, 10, 12, 18, 20]
-        selected = np.zeros(20, dtype = bool)
-        for name, value in params.items():
-            if (value or value == 0) and name in names:
-                start = names.index(name)
-                if value is True:
-                    selected[indices[start]:indices[start + 1]] = True
-                else:
-                    value = np.array(value)
-                    selected[indices[start] + value] = True
-        return selected
     
-    def _update_vector(self, mask, values):
-        vector = self.vector
-        vector[mask] = values
-        self.vector = vector
-    
-    # def _clip_line_inview(self, xyz):
-    #     # in = cam.inview(xyz);
-    #     # lines = splitmat(xyz, in);
-    
-    # def _projerror_lines(self, luv, lxyz, directions=False, normalize=False):
-    #     """
-    #     Calculate pixel reprojection errors for lines.
-    #     Lines are matched by proximity.
-    #     luv: (list:array:float) List of image coordinates [Nx2, ...]
-    #     lxyz: (list:array:float) List of world coordinates [Nx3, ...] or camera coordinates [Nx2, ...]
-    #     directions: (bool) Whether absolute coordinates (False) or ray directions (True)
-    #     normalize: (bool) Whether to return pixels (False) or normalize by mean focal length (True)
-    #     """
-    #     # lxyz:
-    #     # Extract line segments within camera view
-    #     # Project to camera
-    #     # Resample? by length * max(self.f)
-    #     # Project to image
-    #     # Convert to points
-    #     # Decimate?
-    #     # Extract line segments within image frame
-
-    #     # lxyz vs. luv
-    #     # Euclidean distance matrix
-    #     # Return nearest distance for each point
-    #     # -or-
-    #     # Try again: Nearest distance to line?
-
     def _radial_distortion(self, r2):
         """
         Compute the radial distortion multipler `dr`.
@@ -338,7 +294,7 @@ class Camera(object):
         if any(self.k[3:6]):
             dr /= 1 + self.k[3] * r2 + self.k[4] * r2**2 + self.k[5] * r2**3
         return dr[:, None] # column
-
+    
     def _tangential_distortion(self, xy, r2):
         """
         Compute tangential distortion additive `[dtx, dty]`.
@@ -353,7 +309,7 @@ class Camera(object):
         dtx = 2 * xty * self.p[0] + self.p[1] * (r2 + 2 * xy[:, 0]**2)
         dty = self.p[0] * (r2 + 2 * xy[:, 1]**2) + 2 * xty * self.p[1]
         return np.column_stack((dtx, dty))
-
+    
     def _distort(self, xy):
         """
         Apply distortion to camera coordinates.
@@ -369,7 +325,7 @@ class Camera(object):
         if any(self.p):
             xy += self._tangential_distortion(xy, r2)
         return xy
-
+    
     def _undistort(self, xy):
         """
         Remove distortion from camera coordinates.
@@ -412,7 +368,7 @@ class Camera(object):
                     if any(self.k):
                         xy /= self._radial_distortion(r2)
         return xy
-
+    
     def _world2camera(self, xyz, directions=False):
         """
         Project world coordinates to camera coordinates.
@@ -433,7 +389,7 @@ class Camera(object):
         behind = xyz_c[:, 2] <= 0
         xy[behind, :] = np.nan
         return xy
-
+    
     def _camera2world(self, xy):
         """
         Project camera coordinates to world ray directions.
@@ -445,7 +401,7 @@ class Camera(object):
         xy_z = np.c_[xy, ones]
         dxyz = np.dot(xy_z, self._R)
         return dxyz
-
+    
     def _camera2image(self, xy):
         """
         Project camera to image coordinates.
@@ -456,7 +412,7 @@ class Camera(object):
         xy = self._distort(xy)
         uv = xy * self.f + (self.imgsz / 2 + self.c)
         return uv
-
+    
     def _image2camera(self, uv):
         """
         Project image to camera coordinates.

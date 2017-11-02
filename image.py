@@ -195,13 +195,14 @@ class Camera(object):
             ...: RANSAC options (see ransac.ransac)
         """
         data = np.column_stack((uv, xyz)).astype(float)
+        mask = ransac.vector_mask(params)
         model = ransac.Camera(cam=Camera(vector=self.vector), params=params, directions=directions, tol=tol, options=options)
         if use_ransac:
             params, idx = ransac.ransac(data, model,
                 max_error=max_error, sample_size=sample_size, min_inliers=min_inliers, iterations=iterations)
         else:
             params = model.fit(data)
-        model.cam._update_vector(model.mask, params)
+        model.cam.vector[mask] = params
         self.vector = model.cam.vector
     
     def project(self, xyz, directions=False):

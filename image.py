@@ -171,42 +171,6 @@ class Camera(object):
         self.f *= scale
         self.c *= scale
     
-    def optimize(self, uv, xyz, params={'viewdir': True}, directions=False, tol=None, options=None,
-        use_ransac=False, max_error=2, sample_size=8, min_inliers=10, iterations=500):
-        """
-        Calibrate a camera from paired image-world coordinates.
-        
-        Points `uv` and `xyz` are matched by row index.
-        The Levenberg-Marquardt algorithm is used to find the camera parameters that minimize the distance between
-        `uv` and the projection of `xyz` into the camera.
-        
-        Arguments:
-            uv (array): Image coordinates (Nx2)
-            xyz (array): World coordinates (Nx3)
-            params (dict): Parameters to optimize. For example:
-                
-                - {'viewdir': True} : All `viewdir` elements
-                - {'viewdir': 0} : First `viewdir` element
-                - {'viewdir': [0, 1]} : First and second `viewdir` elements
-            
-            directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True).
-                If True, 'xyz' cannot be in `params`.
-            tol (float): Tolerance for termination (see scipy.optimize.root)
-            options (dict): Solver options (see scipy.optimize.root)
-            use_ransac (bool): Whether to filter inputs with Random Sample Consensus (RANSAC)
-            ...: RANSAC options (see ransac.ransac)
-        """
-        data = np.column_stack((uv, xyz)).astype(float)
-        mask = ransac.vector_mask(params)
-        model = ransac.Camera(cam=Camera(vector=self.vector), params=params, directions=directions, tol=tol, options=options)
-        if use_ransac:
-            params, idx = ransac.ransac(data, model,
-                max_error=max_error, sample_size=sample_size, min_inliers=min_inliers, iterations=iterations)
-        else:
-            params = model.fit(data)
-        model.cam.vector[mask] = params
-        self.vector = model.cam.vector
-    
     def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.

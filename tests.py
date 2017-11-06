@@ -2,10 +2,10 @@ import datetime
 import pytest
 import numpy as np
 import scipy.misc
-import image
-import dem as DEM
-import ransac
 import cv2
+import image
+import optimize
+import dem as DEM
 
 # ---- Camera ----
 
@@ -212,10 +212,9 @@ def test_dem_resize():
     assert np.array_equal(rdem.d, dem.d / 2)
     assert np.array_equal(rdem.xlim, dem.xlim)
 
-# ---- RANSAC (test models) ----
+# ---- RANSAC (Polynomial) ----
 
 def test_ransac_polynomial():
-    model = ransac.Polynomial(1)
     data = np.array([
         [0, 0],
         [1.1, 1.0],
@@ -224,19 +223,21 @@ def test_ransac_polynomial():
         [3.0, 0.1],
         [0.1, 3.0],
         [4.1, 4.0]])
+    model = optimize.Polynomial(data, deg=1)
     inliers = [0, 1, 2, 3, 6]
-    rparams, idx = ransac.ransac(data, model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
-    assert np.isin(idx, inliers).all()
+    rvalues, rindex = optimize.ransac(model, sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
+    assert np.isin(rindex, inliers).all()
 
-# ---- RANSAC (camera models) ----
+# ---- RANSAC (Cameras) ----
 
 # Rotate camera
-img = image.Image("tests/AK10b_20141013_020336.JPG")
-cam = img.cam.copy()
-cam.viewdir = [2, 2, 2]
+imgA = image.Image("tests/AK10b_20141013_020336.JPG")
+camB = imgA.cam.copy()
+viewdir = [2, 2, 2]
+camB.viewdir = viewdir
 # Project image
-Ia = img.read()
-Ib = img.project(cam)
+Ia = imgA.read()
+Ib = imgA.project(camB)
 # Match features
 sift = cv2.SIFT()
 Ka, Da = sift.detectAndCompute(Ia, None)
@@ -244,24 +245,15 @@ Kb, Db = sift.detectAndCompute(Ib, None)
 index_params = dict(algorithm = 0, trees = 5)
 search_params = dict(checks = 50)
 flann = cv2.FlannBasedMatcher(index_params, search_params)
-matches = flann.knnMatch(Da, Db, k=2)
-A = np.array([Ka[m.queryIdx].pt for m,n in matches])
-B = np.array([Kb[m.trainIdx].pt for m,n in matches])
+M = flann.knnMatch(Da, Db, k=2)
+A = np.array([Ka[m.queryIdx].pt for m,n in M])
+B = np.array([Kb[m.trainIdx].pt for m,n in M])
 
 def test_ransac_camera_viewdir(tol=0.001):
-    # Optimize viewdir with ransac.ransac
-    data = np.column_stack((B, img.cam.invproject(A)))
-    model = ransac.Camera(cam=img.cam.copy(), directions=True, params={'viewdir': True})
-    rparams, idx = ransac.ransac(data, model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
-    assert np.all((rparams - cam.viewdir) < abs(tol))
-    err = model.errors(rparams, data)[idx]
-    rmse = (np.sum(err ** 2) / len(err)) ** 0.5
+    matches = optimize.Matches(cams=[imgA.cam, camB], uvs=[A, B])
+    model = optimize.Cameras(cams=[camB], controls=[matches], cam_params={'viewdir': True})
+    rvalues, rindex = optimize.ransac(model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
+    assert np.all((rvalues - viewdir) < abs(tol))
+    errors = model.errors(rvalues, index=rindex)
+    rmse = (np.sum(errors ** 2) / len(errors)) ** 0.5
     assert rmse < 0.5
-
-def test_camera_optimize_viewdir(tol=0.001):
-    # Optimize viewdir with Camera.optimize
-    uv = B
-    dxyz = img.cam.invproject(A)
-    ransac_cam = img.cam.copy()
-    ransac_cam.optimize(uv, dxyz, directions=True, params={'viewdir': True}, use_ransac=True, iterations=1e3)
-    assert np.all((ransac_cam.viewdir - cam.viewdir) < abs(tol))

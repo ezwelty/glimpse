@@ -1,5 +1,4 @@
 import warnings
-import ransac
 from datetime import datetime
 import numpy as np
 import exifread

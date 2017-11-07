@@ -6,6 +6,7 @@ import PIL.Image
 import scipy.interpolate
 import shutil
 import os.path
+import json
 
 class Camera(object):
     """
@@ -19,6 +20,8 @@ class Camera(object):
     Arguments:
         fmm (array_like): Focal length in millimeters [fx, fy]
         sensorsz (array_like): Sensor size in millimters [nx, ny]
+        path (str): Path to JSON camera file (see `Camera.write()`).
+            Takes precedence if not `None` (default).
     
     Attributes:
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
@@ -39,9 +42,16 @@ class Camera(object):
     """
     
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
-        fmm=None, sensorsz=None, vector=None):
+        fmm=None, sensorsz=None, vector=None, path=None):
         self.vector = np.full(20, np.nan, dtype=float)
-        if vector is not None:
+        if path is not None:
+            with open(path, "r") as fp:
+                args = json.load(fp)
+            for key in args.keys():
+                # Replace None with np.nan
+                value = [np.nan if item is None else item for item in args[key]]
+                setattr(self, key, value)
+        elif vector is not None:
             self.vector = np.asarray(vector, dtype=float)[0:20]
         else:
             self.xyz = xyz

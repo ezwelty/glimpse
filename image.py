@@ -143,6 +143,9 @@ class Camera(object):
     # ---- Methods (public) ----
     
     def copy(self):
+        """
+        Return a copy.
+        """
         return Camera(vector=self.vector)
     
     def idealize(self):
@@ -377,7 +380,8 @@ class Exif(object):
     `Exif` is a container and parser for image file metadata.
 
     Arguments:
-        path (str): Path to image file
+        path (str): Path to image file.
+            If `None` (default), an empty Exif object is returned.
         thumbnail (bool): Whether to retain the image thumbnail
     
     Attributes:
@@ -392,20 +396,16 @@ class Exif(object):
         model (str): Camera model
     """
     
-    def __init__(self, path, thumbnail=False):
-        self.tags = piexif.load(path, key_is_name=False)
-        if not thumbnail:
-            self.tags.pop('thumbnail', None)
-            self.tags.pop('1st', None)
-    
-    @property
-    def size(self):
-        width = self.get_tag('PixelXDimension')
-        height = self.get_tag('PixelYDimension')
-        if width and height:
-            return np.array([width, height], dtype=float)
+    def __init__(self, path=None, thumbnail=False):
+        if path:
+            self.tags = piexif.load(path, key_is_name=False)
+            if not thumbnail:
+                self.tags.pop('thumbnail', None)
+                self.tags.pop('1st', None)
+            self.size = np.array(PIL.Image.open(path).size, dtype=float)
         else:
-            return None
+            self.tags = {}
+            self.size = None
     
     @property
     def datetime(self):
@@ -463,7 +463,7 @@ class Exif(object):
     
     def set_tag(self, tag, value, group='Exif'):
         """
-        Set the value of a tag.
+        Set the value of a tag, adding it if missing.
         
         Arguments:
             tag (str): Tag name
@@ -473,6 +473,8 @@ class Exif(object):
         code = getattr(getattr(piexif, group + 'IFD'), tag)
         if group is 'Image':
             group = '0th'
+        if not self.tags.has_key(group):
+            self.tags[group] = {}
         self.tags[group][code] = value
     
     def dump(self):
@@ -480,6 +482,15 @@ class Exif(object):
         Return exif as bytes.
         """
         return piexif.dump(self.tags)
+    
+    def copy(self):
+        """
+        Return a copy.
+        """
+        exif = Exif()
+        exif.tags = self.tags
+        exif.size = self.size
+        return exif
 
 class Image(object):
     """
@@ -533,21 +544,41 @@ class Image(object):
             im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
         return np.array(im)
     
-    def write(self, path=None, I=None):
-        # TODO: Insert EXIF into new file
-        if path is None:
-            # Use original path
-            path = self.path
-        elif os.path.isdir(path):
+    def write(self, path, I=None, **params):
+        """
+        Write image data to file.
+        
+        Arguments:
+            path (str): File or directory path to write to.
+                If the latter, the original basename is used.
+                If the extension is unchanged and `I=None`, the original file is copied.
+            I (array): Image data.
+                If `None` (default), the original image data is read.
+            **params: Additional arguments passed to `PIL.Image.save()`.
+                See http://pillow.readthedocs.io/en/3.1.x/reference/Image.html#PIL.Image.Image.save
+        """
+        if os.path.isdir(path):
             # Use original basename
             path = os.path.join(path, os.path.basename(self.path))
-        if I is not None:
-            # Write new file
-            im = PIL.Image.fromarray(I)
-            im.save(path)
-        elif path is not self.path:
-           # Copy original file
+        old_ext = os.path.splitext(self.path)[1].lower()
+        ext = os.path.splitext(path)[1].lower()
+        if ext is old_ext and I is None:
+            # Copy original file
             shutil.copyfile(self.path, path)
+        else:
+            if I is None:
+                im = PIL.Image.open(self.path)
+            else:
+                im = PIL.Image.fromarray(I)
+            # For JPEG file extensions, see https://stackoverflow.com/a/23424597/8161503
+            if ext in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
+                exif = self.exif.copy()
+                exif.set_tag('PixelXDimension', im.size[0])
+                exif.set_tag('PixelYDimension', im.size[1])
+                im.save(path, exif=exif.dump(), **params)
+            else:
+                warnings.warn("Writing EXIF to non-JPEG file is not supported.")
+                im.save(path, **params)
     
     def project(self, cam, method="linear"):
         """

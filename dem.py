@@ -356,7 +356,7 @@ class DEM(object):
         """
         if obj is None:
             obj = [0, self.n[0]]
-        if type(obj) is not np.ndarray:
+        if not isinstance(obj, np.ndarray):
             obj = np.asarray(obj, float)
         is_X = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
         if is_X:
@@ -385,7 +385,7 @@ class DEM(object):
         """
         if obj is None:
             obj = [self.n[1], 0]
-        if type(obj) is not np.ndarray:
+        if not isinstance(obj, np.ndarray):
             obj = np.asarray(obj, float)
         is_Y = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
         if is_Y:

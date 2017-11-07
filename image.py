@@ -378,9 +378,10 @@ class Exif(object):
 
     Arguments:
         path (str): Path to image file
+        thumbnail (bool): Whether to retain the image thumbnail
     
     Attributes:
-        tags (dict): Image file metadata, as returned by exifread.process_file()
+        tags (dict): Image file metadata, as returned by piexif.load()
         size (array): Image size in pixels [nx, ny]
         datetime (datetime): Capture date and time
         fmm (float): Focal length in millimeters
@@ -391,13 +392,16 @@ class Exif(object):
         model (str): Camera model
     """
     
-    def __init__(self, path):
-        self.tags = piexif.load(path, key_is_name=True)
+    def __init__(self, path, thumbnail=False):
+        self.tags = piexif.load(path, key_is_name=False)
+        if not thumbnail:
+            self.tags.pop('thumbnail', None)
+            self.tags.pop('1st', None)
     
     @property
     def size(self):
-        width = self.parse_tag('PixelXDimension')
-        height = self.parse_tag('PixelYDimension')
+        width = self.get_tag('PixelXDimension')
+        height = self.get_tag('PixelYDimension')
         if width and height:
             return np.array([width, height], dtype=float)
         else:
@@ -405,8 +409,8 @@ class Exif(object):
     
     @property
     def datetime(self):
-        datetime_str = self.parse_tag('DateTimeOriginal')
-        subsec_str = self.parse_tag('SubSecTimeOriginal')
+        datetime_str = self.get_tag('DateTimeOriginal')
+        subsec_str = self.get_tag('SubSecTimeOriginal')
         if datetime_str and not subsec_str:
             return datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
         elif datetime_str and subsec_str:
@@ -416,39 +420,66 @@ class Exif(object):
     
     @property
     def shutter(self):
-        dividend, divisor = self.parse_tag('ExposureTime')
+        dividend, divisor = self.get_tag('ExposureTime')
         return float(dividend) / divisor
     
     @property
     def aperture(self):
-        dividend, divisor = self.parse_tag('FNumber')
+        dividend, divisor = self.get_tag('FNumber')
         return float(dividend) / divisor
     
     @property
     def iso(self):
-        return float(self.parse_tag('ISOSpeedRatings'))
+        return float(self.get_tag('ISOSpeedRatings'))
     
     @property
     def fmm(self):
-        dividend, divisor = self.parse_tag('FocalLength')
+        dividend, divisor = self.get_tag('FocalLength')
         return float(dividend) / divisor
     
     @property
     def make(self):
-        return self.parse_tag('Make', group='0th')
+        return self.get_tag('Make', group='Image')
     
     @property
     def model(self):
-        return self.parse_tag('Model', group='0th')
+        return self.get_tag('Model', group='Image')
     
-    def parse_tag(self, key, group='Exif'):
+    def get_tag(self, tag, group='Exif'):
         """
-        Parse an exif tag and return its value (or None if missing).
+        Return the value of a tag (or None if missing).
+        
+        Arguments:
+            tag (str): Tag name
+            group (str): Group name ('Exif', 'Image', or 'GPS')
         """
-        if not self.tags[group].has_key(key):
+        code = getattr(getattr(piexif, group + 'IFD'), tag)
+        if group is 'Image':
+            group = '0th'
+        if not self.tags.has_key(group) or not self.tags[group].has_key(code):
             return None
         else:
-            return self.tags[group][key]
+            return self.tags[group][code]
+    
+    def set_tag(self, tag, value, group='Exif'):
+        """
+        Set the value of a tag.
+        
+        Arguments:
+            tag (str): Tag name
+            value (object): Tag value
+            group (str): Group name ('Exif', 'Image', or 'GPS')
+        """
+        code = getattr(getattr(piexif, group + 'IFD'), tag)
+        if group is 'Image':
+            group = '0th'
+        self.tags[group][code] = value
+    
+    def dump(self):
+        """
+        Return exif as bytes.
+        """
+        return piexif.dump(self.tags)
 
 class Image(object):
     """

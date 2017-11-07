@@ -148,6 +148,24 @@ class Camera(object):
         """
         return Camera(vector=self.vector)
     
+    def write(self, path=None):
+        """
+        Write or return Camera as JSON.
+        
+        Arguments:
+            path (str): Path of file to write to.
+                if `None` (default), a JSON-formatted string is returned.
+        """
+        keys = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+        key_strings = ['    "' + key + '": ' + str(list(getattr(self, key))).replace("nan", "null") for key in keys]
+        json_string = "{\n" + ",\n".join(key_strings) + "\n}"
+        if path:
+            with open(path, "w") as fp:
+                fp.write(json_string)
+            return None
+        else:
+            return json_string
+    
     def idealize(self):
         """
         Set distortion to zero.

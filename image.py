@@ -1,7 +1,7 @@
 import warnings
 from datetime import datetime
 import numpy as np
-import exifread
+import piexif
 import scipy.misc
 import scipy.interpolate
 import shutil
@@ -378,7 +378,6 @@ class Exif(object):
 
     Arguments:
         path (str): Path to image file
-        details (bool): Whether to process makernote tags and extract the thumbnail image
     
     Attributes:
         tags (dict): Image file metadata, as returned by exifread.process_file()
@@ -392,23 +391,22 @@ class Exif(object):
         model (str): Camera model
     """
     
-    def __init__(self, path, details=False):
-        f = open(path, 'rb')
-        self.tags = exifread.process_file(f, details=details)
+    def __init__(self, path):
+        self.tags = piexif.load(path, key_is_name=True)
     
     @property
     def size(self):
-        width = self.parse_tag('EXIF ExifImageWidth')
-        height = self.parse_tag('EXIF ExifImageLength')
+        width = self.parse_tag('PixelXDimension')
+        height = self.parse_tag('PixelYDimension')
         if width and height:
-            return np.array([width, height])
+            return np.array([width, height], dtype=float)
         else:
             return None
     
     @property
     def datetime(self):
-        datetime_str = self.parse_tag('EXIF DateTimeOriginal')
-        subsec_str = self.parse_tag('EXIF SubSecTimeOriginal')
+        datetime_str = self.parse_tag('DateTimeOriginal')
+        subsec_str = self.parse_tag('SubSecTimeOriginal')
         if datetime_str and not subsec_str:
             return datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
         elif datetime_str and subsec_str:
@@ -418,42 +416,39 @@ class Exif(object):
     
     @property
     def shutter(self):
-        return self.parse_tag('EXIF ExposureTime')
-        
+        dividend, divisor = self.parse_tag('ExposureTime')
+        return float(dividend) / divisor
+    
     @property
     def aperture(self):
-        return self.parse_tag('EXIF FNumber')
-        
+        dividend, divisor = self.parse_tag('FNumber')
+        return float(dividend) / divisor
+    
     @property
     def iso(self):
-        return self.parse_tag('EXIF ISOSpeedRatings')
+        return float(self.parse_tag('ISOSpeedRatings'))
     
     @property
     def fmm(self):
-        return self.parse_tag('EXIF FocalLength')
+        dividend, divisor = self.parse_tag('FocalLength')
+        return float(dividend) / divisor
     
     @property
     def make(self):
-        return self.parse_tag('Image Make')
-        
+        return self.parse_tag('Make', group='0th')
+    
     @property
     def model(self):
-        return self.parse_tag('Image Model')
-
-    def parse_tag(self, key):
-        """Parse an exif tag and return its value (or None if missing)."""
-        if not self.tags.has_key(key):
+        return self.parse_tag('Model', group='0th')
+    
+    def parse_tag(self, key, group='Exif'):
+        """
+        Parse an exif tag and return its value (or None if missing).
+        """
+        if not self.tags[group].has_key(key):
             return None
-        if self.tags[key]: 
-            value = self.tags[key].values
         else:
-            return None
-        if type(value) is list:
-            value = value[0]
-        if isinstance(value, exifread.Ratio):
-            return float(value.num) / value.den
-        else:
-            return value
+            return self.tags[group][key]
 
 class Image(object):
     """

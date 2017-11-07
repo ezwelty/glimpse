@@ -2,7 +2,7 @@ import warnings
 from datetime import datetime
 import numpy as np
 import piexif
-import scipy.misc
+import PIL.Image
 import scipy.interpolate
 import shutil
 import os.path
@@ -527,12 +527,11 @@ class Image(object):
         If the camera image size (self.cam.imgsz) differs from the original image size (self.exif.size),
         the image is resized to fit the camera image size.
         """
-        I = scipy.misc.imread(self.path)
+        im = PIL.Image.open(self.path)
         if self.cam.imgsz is not None and not np.array_equal(self.cam.imgsz, self.exif.size):
             # Resize to match camera model
-            # Switch from (x, y) to (y, x) for scipy.misc.imresize()
-            I = scipy.misc.imresize(I, size=np.flipud(self.cam.imgsz).astype(int))
-        return I
+            im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
+        return np.array(im)
     
     def write(self, path=None, I=None):
         # TODO: Insert EXIF into new file
@@ -544,7 +543,8 @@ class Image(object):
             path = os.path.join(path, os.path.basename(self.path))
         if I is not None:
             # Write new file
-            scipy.misc.imsave(name=path, arr=I)
+            im = PIL.Image.fromarray(I)
+            im.save(path)
         elif path is not self.path:
            # Copy original file
             shutil.copyfile(self.path, path)

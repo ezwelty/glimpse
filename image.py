@@ -448,22 +448,35 @@ class Exif(object):
     
     @property
     def shutter(self):
-        dividend, divisor = self.get_tag('ExposureTime')
-        return float(dividend) / divisor
+        tag = self.get_tag('ExposureTime')
+        if tag:
+            return float(tag[0]) / tag[1]
+        else:
+            return None
     
     @property
     def aperture(self):
-        dividend, divisor = self.get_tag('FNumber')
-        return float(dividend) / divisor
+        tag = self.get_tag('FNumber')
+        if tag:
+            return float(tag[0]) / tag[1]
+        else:
+            return None
     
     @property
     def iso(self):
-        return float(self.get_tag('ISOSpeedRatings'))
+        tag = self.get_tag('ISOSpeedRatings')
+        if tag:
+            return float(tag)
+        else:
+            return None
     
     @property
     def fmm(self):
-        dividend, divisor = self.get_tag('FocalLength')
-        return float(dividend) / divisor
+        tag = self.get_tag('FocalLength')
+        if tag:
+            return float(tag[0]) / tag[1]
+        else:
+            return None
     
     @property
     def make(self):

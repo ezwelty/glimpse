@@ -59,7 +59,7 @@ def test_exif_subsecond():
     path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
-    exif.tags['EXIF SubSecTimeOriginal'] = None
+    exif.tags['Exif']['SubSecTimeOriginal'] = None
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36)
 
 # ---- Image ----

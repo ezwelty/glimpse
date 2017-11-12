@@ -4,6 +4,7 @@ import numpy as np
 import piexif
 import PIL.Image
 import scipy.interpolate
+import matplotlib.pyplot
 import shutil
 import os.path
 import json
@@ -620,6 +621,24 @@ class Image(object):
             else:
                 warnings.warn("Writing EXIF to non-JPEG file is not supported.")
                 im.save(path, **params)
+    
+    def plot(self, origin='upper', extent=None, **params):
+        """
+        Plot image data.
+        
+        By default, the image is plotted with the upper-left corner of the upper-left pixel at (0,0).
+        
+        Arguments:
+            origin (str): Place the [0, 0] index of the array in either the 'upper' left (default)
+                or 'lower' left corner of the axes.
+            extent (scalars): Location of the lower-left and upper-right corners (left, right, bottom, top).
+                If `None` (default), the corners are positioned at (0, nx, ny, 0).
+            **params: Additional arguments passed to `matplotlib.pyplot.imshow`.
+        """
+        I = self.read()
+        if extent is None:
+            extent=(0, I.shape[1], I.shape[0], 0)
+        matplotlib.pyplot.imshow(I, origin=origin, extent=extent, **params)
     
     def project(self, cam, method="linear"):
         """

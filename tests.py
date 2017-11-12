@@ -6,6 +6,7 @@ import cv2
 import image
 import optimize
 import dem as DEM
+import svg
 
 # ---- Camera ----
 
@@ -257,3 +258,31 @@ def test_ransac_camera_viewdir(tol=0.001):
     errors = model.errors(rvalues, index=rindex)
     rmse = (np.sum(errors ** 2) / len(errors)) ** 0.5
     assert rmse < 0.5
+
+# ---- SVG ----
+
+def test_svg_parse_polyline():
+    points = "20,100 40,60 70,80"
+    expected = np.array([[20, 100], [40, 60], [70, 80]])
+    assert np.array_equal(expected, svg.parse_polyline(points))
+
+def test_svg_parse_polygon():
+    points = "20,100 40,60 70,80"
+    expected = np.array([[20, 100], [40, 60], [70, 80], [20, 100]])
+    assert np.array_equal(expected, svg.parse_polygon(points, closed=True))
+
+def test_svg_parse_line():
+    args = {'x1': 20, 'y1': 100, 'x2': 40, 'y2': 60}
+    expected = np.array([[20, 100], [40, 60]])
+    assert np.array_equal(expected, svg.parse_line(**args))
+
+def test_svg_parse_path():
+    d = "M 100 100 L 300 100 L 200 300 z"
+    expected = np.array([[100, 100], [300, 100], [200, 300], [100, 100]])
+    assert np.array_equal(expected, svg.parse_path(d))
+    d = "M100,200 C100,100 250,100 250,200 S400,300 400,200"
+    expected = np.array([[100, 200], [250, 200], [400, 200]])
+    assert np.array_equal(expected, svg.parse_path(d))
+    d = "M600,350 l 50,-25 a25,25 -30 0,1 50,-25"
+    expected = np.array([[600, 350], [600 + 50, 350 - 25], [600 + 50 + 50, 350 - 25 - 25]])
+    assert np.array_equal(expected, svg.parse_path(d))

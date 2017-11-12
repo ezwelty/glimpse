@@ -572,6 +572,7 @@ class Image(object):
             if not camera_args.has_key('sensorsz'):
                 camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
         self.cam = Camera(**camera_args)
+        self.I = None
     
     def read(self):
         """
@@ -579,12 +580,23 @@ class Image(object):
         
         If the camera image size (self.cam.imgsz) differs from the original image size (self.exif.size),
         the image is resized to fit the camera image size.
+        The result is cached (`self.I`) and reused only if it matches the camera image size, or,
+        if not set, the original image size.
+        To clear the cache, set `self.I` to `None`.
         """
-        im = PIL.Image.open(self.path)
-        if self.cam.imgsz is not None and not np.array_equal(self.cam.imgsz, self.exif.size):
-            # Resize to match camera model
-            im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
-        return np.array(im)
+        if self.I is not None:
+            size = np.flipud(self.I.shape[0:2])
+        has_cam_size = all(~np.isnan(self.cam.imgsz))
+        if ((self.I is None) or
+            (not has_cam_size and not np.array_equal(size, self.exif.size)) or
+            (has_cam_size and not np.array_equal(size, self.cam.imgsz))):
+            # Read file
+            im = PIL.Image.open(self.path)
+            if has_cam_size and not np.array_equal(self.cam.imgsz, self.exif.size):
+                # Resize to match camera model
+                im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
+            self.I = np.array(im)
+        return self.I
     
     def write(self, path, I=None, **params):
         """
@@ -609,7 +621,7 @@ class Image(object):
             shutil.copyfile(self.path, path)
         else:
             if I is None:
-                im = PIL.Image.open(self.path)
+                im = PIL.Image.fromarray(self.read())
             else:
                 im = PIL.Image.fromarray(I)
             # For JPEG file extensions, see https://stackoverflow.com/a/23424597/8161503

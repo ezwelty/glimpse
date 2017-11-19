@@ -320,31 +320,33 @@ class Camera(object):
         """
         # X = (X' - dt) / dr
         if any(self.k) or any(self.p):
-            if self.k[0] < -0.5:
-                # May fail for large negative k1.
-                warnings.warn('Large negative k1 (' + str(round(self.k[0], 3)) + '). Undistort may fail.')
             if self.k[0] and all(self.k[1:] == 0) and all(self.p == 0):
                 # If only k1 is nonzero, use closed form solution.
                 # Cubic roots solution from Numerical Recipes in C 2nd Edition:
                 # http://apps.nrbook.com/c/index.html (pages 183-185)
+                # Solve for undistorted radius in polar coordinates
+                # r^3 + r / k1 - r'/k1 = 0
                 phi = np.arctan2(xy[:, 1], xy[:, 0])
-                Q = -1 / (3 * self.k[0])
-                R = -xy[:, 1] / (2 * self.k[0] * np.cos(phi))
-                if self.k[0] < 0:
-                    # For negative k1
-                    th = np.arccos(R / np.sqrt(Q**3))
-                    r = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
-                else:
-                    # For positive k1
-                    A = (np.sqrt(R**2 - Q**3) - R)**(1 / 3)
-                    B = Q * (1 / A)
-                    r = A + B
+                Q = - 1 / (3 * self.k[0])
+                R = - xy[:, 0] / (2 * self.k[0] * np.cos(phi)) # r' = y / cos(phi)
+                has_three_roots = R**2 < Q**3
+                r = np.full(len(xy), np.nan)
+                if np.any(has_three_roots):
+                  th = np.arccos(R[has_three_roots] / Q**1.5)
+                  r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
+                has_one_root = ~has_three_roots
+                if np.any(has_one_root):
+                  A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
+                  B = np.where(A == 0, 0, Q / A)
+                  r[has_one_root] = A + B
                 xy = np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
-                xy = np.real(xy)
             else:
                 # Use iterative solution.
+                if self.k[0] < -0.5:
+                    # May fail for large negative k1.
+                    print "Large negative k1 (" + str(round(self.k[0], 3)) + "). Undistort may fail."
                 xyi = xy # initial quess
-                for n in range(1, 20):
+                for n in range(20):
                     r2 = np.sum(xy**2, axis=1)
                     if any(self.p):
                         xy = xyi - self._tangential_distortion(xy, r2)

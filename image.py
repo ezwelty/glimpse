@@ -162,7 +162,7 @@ class Camera(object):
         """
         Return a copy.
         """
-        return Camera(vector=self.vector)
+        return Camera(vector=self.vector.copy())
     
     def write(self, path=None):
         """

@@ -303,13 +303,16 @@ class Camera(object):
             xy (array): Camera coordinates (Nx2)
         """
         # X' = dr * X + dt
-        if any(self.k) or any(self.p):
+        if not any(self.k) and not any(self.p):
+            return xy
+        else:
+            dxy = xy.copy()
             r2 = np.sum(xy**2, axis=1)
-        if any(self.k):
-            xy *= self._radial_distortion(r2)
-        if any(self.p):
-            xy += self._tangential_distortion(xy, r2)
-        return xy
+            if any(self.k):
+                dxy *= self._radial_distortion(r2)
+            if any(self.p):
+                dxy += self._tangential_distortion(xy, r2)
+            return dxy
     
     def _undistort(self, xy):
         """
@@ -319,8 +322,10 @@ class Camera(object):
             xy (array): Camera coordinates (Nx2)
         """
         # X = (X' - dt) / dr
-        if any(self.k) or any(self.p):
-            if self.k[0] and all(self.k[1:] == 0) and all(self.p == 0):
+        if not any(self.k) and not any(self.p):
+            return xy
+        else:
+            if self.k[0] and not any(self.k[1:]) and not any(self.p):
                 # If only k1 is nonzero, use closed form solution.
                 # Cubic roots solution from Numerical Recipes in C 2nd Edition:
                 # http://apps.nrbook.com/c/index.html (pages 183-185)
@@ -339,22 +344,22 @@ class Camera(object):
                   A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
                   B = np.where(A == 0, 0, Q / A)
                   r[has_one_root] = A + B
-                xy = np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
+                uxy = np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
             else:
                 # Use iterative solution.
                 if self.k[0] < -0.5:
                     # May fail for large negative k1.
                     print "Large negative k1 (" + str(round(self.k[0], 3)) + "). Undistort may fail."
-                xyi = xy # initial quess
+                uxy = xy # initial guess
                 for n in range(20):
-                    r2 = np.sum(xy**2, axis=1)
-                    if any(self.p):
-                        xy = xyi - self._tangential_distortion(xy, r2)
+                    r2 = np.sum(uxy**2, axis=1)
+                    if any(self.p) and not any(self.k):
+                        uxy = xy - self._tangential_distortion(uxy, r2)
+                    elif any(self.k) and not any(self.k):
+                        uxy = xy / self._radial_distortion(r2)
                     else:
-                        xy = xyi
-                    if any(self.k):
-                        xy /= self._radial_distortion(r2)
-        return xy
+                        uxy = (xy - self._tangential_distortion(uxy, r2)) / self._radial_distortion(r2)
+            return uxy
     
     def _world2camera(self, xyz, directions=False):
         """

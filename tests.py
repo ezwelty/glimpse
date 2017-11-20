@@ -28,19 +28,56 @@ def test_camera_idealize(c=1, k=1, p=1):
     assert (cam.k == 0).all()
     assert (cam.p == 0).all()
 
-def test_camera_reprojection_ideal(tol=1e-13):
-    cam = image.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30])
-    uv = np.random.rand(1000, 2) * cam.imgsz
+def pixel_centers(cam):
+    """Return image coordinates of all pixel centers (Nx2)."""
+    u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
+    v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))
+    U, V = np.meshgrid(u, v)
+    return np.column_stack((U.flatten(), V.flatten()))
+
+def reprojection_errors(cam):
+    """Compute reprojection errors at all pixel centers."""
+    uv = pixel_centers(cam)
     dxyz = cam.invproject(uv)
-    uv2 = cam.project(dxyz, directions=True)
-    assert np.abs(uv - uv2).max() < tol
-    
-def test_camera_reprojection_distorted(tol=0.2):
-    cam = image.Camera(xyz=[1, 2, -3], viewdir=[10, 20, -30], k = [0.1, -0.1] * 3, p = [0.01, -0.01])
-    uv = np.random.rand(1000, 2) * cam.imgsz
-    dxyz = cam.invproject(uv)
-    uv2 = cam.project(dxyz, directions=True)
-    assert np.abs(uv - uv2).max() < tol
+    puv = cam.project(dxyz, directions=True)
+    return np.sqrt(np.sum((puv - uv)**2, axis=1))
+
+def test_camera_reprojection_ideal(tol=1e-14):
+    cam = image.Camera()
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+
+def test_camera_reprojection_distorted(tol=1e-12):
+    # Positive k1
+    cam = image.Camera(k=0.1)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+    # Negative k1
+    cam = image.Camera(k=-0.1)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+    # Radial distortion only
+    cam = image.Camera(k=[0.1] * 6)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+    # Tangential distortion only
+    cam = image.Camera(p=[0.01] * 2)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+    # All distortion
+    cam = image.Camera(k=[0.1] * 6, p=[0.01] * 2)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+
+def test_camera_reprojection_extreme(tol=1e-12):
+    # Positive k1
+    cam = image.Camera(k = 2)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
+    # Negative k1
+    cam = image.Camera(k = -2)
+    err = reprojection_errors(cam)
+    assert err.max() < tol
 
 # ---- Exif ----
 
@@ -286,3 +323,4 @@ def test_svg_parse_path():
     d = "M600,350 l 50,-25 a25,25 -30 0,1 50,-25"
     expected = np.array([[600, 350], [600 + 50, 350 - 25], [600 + 50 + 50, 350 - 25 - 25]])
     assert np.array_equal(expected, svg.parse_path(d))
+

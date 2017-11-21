@@ -7,6 +7,8 @@ import image
 import optimize
 import dem as DEM
 import svg
+# HACK: Needed for pytest from command line (?)
+reload(svg)
 
 # ---- Camera ----
 
@@ -270,31 +272,19 @@ def test_ransac_polynomial():
 
 # Rotate camera
 imgA = image.Image("tests/AK10b_20141013_020336.JPG")
-camB = imgA.cam.copy()
+imgA.cam.resize(0.5)
+imgB = imgA.copy()
 viewdir = [2, 2, 2]
-camB.viewdir = viewdir
-# Project image
-Ia = imgA.read()
-Ib = imgA.project(camB)
+imgB.cam.viewdir = viewdir
+imgB.I = imgA.project(imgB.cam)
 # Match features
-sift = cv2.SIFT()
-Ka, Da = sift.detectAndCompute(Ia, None)
-Kb, Db = sift.detectAndCompute(Ib, None)
-index_params = dict(algorithm = 0, trees = 5)
-search_params = dict(checks = 50)
-flann = cv2.FlannBasedMatcher(index_params, search_params)
-M = flann.knnMatch(Da, Db, k=2)
-A = np.array([Ka[m.queryIdx].pt for m,n in M])
-B = np.array([Kb[m.trainIdx].pt for m,n in M])
+matches = optimize.sift_matches([imgA, imgB], ratio=0.8)
 
-def test_ransac_camera_viewdir(tol=0.001):
-    matches = optimize.Matches(cams=[imgA.cam, camB], uvs=[A, B])
-    model = optimize.Cameras(cams=[camB], controls=[matches], cam_params={'viewdir': True})
-    rvalues, rindex = optimize.ransac(model, sample_size=8, max_error=2, min_inliers=10, iterations=1e3)
-    assert np.all((rvalues - viewdir) < abs(tol))
-    errors = model.errors(rvalues, index=rindex)
-    rmse = (np.sum(errors ** 2) / len(errors)) ** 0.5
-    assert rmse < 0.5
+def test_ransac_camera_viewdir(tol=0.1):
+    model = optimize.Cameras(cams=imgB.cam, controls=matches, cam_params={'viewdir': True})
+    assert np.all(np.abs(model.fit() - viewdir) > tol)
+    rvalues, rindex = optimize.ransac(model, sample_size=12, max_error=5, min_inliers=10, iterations=10)
+    assert np.all(np.abs(rvalues - viewdir) < tol)
 
 # ---- SVG ----
 
@@ -323,4 +313,3 @@ def test_svg_parse_path():
     d = "M600,350 l 50,-25 a25,25 -30 0,1 50,-25"
     expected = np.array([[600, 350], [600 + 50, 350 - 25], [600 + 50 + 50, 350 - 25 - 25]])
     assert np.array_equal(expected, svg.parse_path(d))
-

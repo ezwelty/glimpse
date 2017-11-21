@@ -773,10 +773,9 @@ def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
         ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
             calculated as the ratio between the distance of the nearest and second nearest match.
             See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
-        nfeatures (int): The number of best features (ranked by local contrast) to retain
-            from each image for matching
-        **params: Additional arguments passed to `cv2.SIFT()`.
-            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
+        hessianThreshold (float): Threshold for the hessian keypoint detector used in SURF
+        **params: Additional arguments passed to `cv2.SURF()`.
+            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#surf-surf
     
     Returns:
         list: Matches objects
@@ -893,7 +892,7 @@ def sample_cameras(cams, cam_masks, group_mask=camera_mask()):
     """
     Get camera parameters for multiple cameras.
     
-    Group parameters (`group_mask`) are returned as the mean of all cameras.
+    Group parameters (`group_mask`) are returned from the first camera.
     
     Arguments:
         cams (list): Camera objects
@@ -903,8 +902,7 @@ def sample_cameras(cams, cam_masks, group_mask=camera_mask()):
     Returns:
         array: Parameter values [group | cam0 | cam1 | ... ]
     """
-    # Assign group values to mean of starting camera values
-    group_values = np.vstack((cam.vector[group_mask] for cam in cams)).mean(axis=0)
+    group_values = cams[0].vector[group_mask]
     cam_values = np.hstack((cam.vector[mask] for cam, mask in zip(cams, cam_masks)))
     return np.hstack((group_values, cam_values))
 

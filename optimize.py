@@ -7,6 +7,7 @@ if sys.platform == "darwin":
     import matplotlib
     matplotlib.use('TkAgg')
 import matplotlib.pyplot
+import cv2
 
 # ---- Controls ----
 
@@ -718,7 +719,87 @@ def ransac_sample(sample_size, data_size):
     indices = np.arange(data_size)
     np.random.shuffle(indices)
     return indices[:sample_size], indices[sample_size:]
+
+# ---- Build matches ----
+
+def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
+    """
+    Return `Matches` constructed from SIFT matches between sequential images.
     
+    Arguments:
+        images (list): Image objects.
+            Matches are computed between each sequential pair.
+        masks (list or array): Regions in which to detect features (uint8) -
+            either in all images (if array) or in each image (if list)
+        ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
+            calculated as the ratio between the distance of the nearest and second nearest match.
+            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
+        nfeatures (int): The number of best features (ranked by local contrast) to retain
+            from each image for matching, or `0` for all
+        **params: Additional arguments passed to `cv2.SIFT()`.
+            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
+    
+    Returns:
+        list: Matches objects
+    """
+    if masks is None or isinstance(masks, np.ndarray):
+        masks = (masks, ) * len(images)
+    sift = cv2.SIFT(nfeatures=nfeatures, **params)
+    # Extract keypoints (keypoints, descriptors)
+    keypoints = [(sift.detectAndCompute(img.read(), mask=mask)) for img, mask in zip(images, masks)]
+    # Match keypoints
+    # TODO: Find algorithm definitions for FlannBasedMatcher index parameters
+    index_params = dict(algorithm=1, trees=5)
+    search_params = dict(checks=50)
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    controls = list()
+    for i in range(len(images) - 1):
+        M = flann.knnMatch(keypoints[i][1], keypoints[i + 1][1], k=2)
+        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
+        A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
+        B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
+        controls.append(Matches((images[i].cam, images[i + 1].cam), (A, B)))
+    return controls    
+
+def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
+    """
+    Return `Matches` constructed from SURF matches between sequential images.
+    
+    Arguments:
+        images (list): Image objects.
+            Matches are computed between each sequential pair.
+        masks (list or array): Regions in which to detect features (uint8) -
+            either in all images (if array) or in each image (if list)
+        ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
+            calculated as the ratio between the distance of the nearest and second nearest match.
+            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
+        nfeatures (int): The number of best features (ranked by local contrast) to retain
+            from each image for matching
+        **params: Additional arguments passed to `cv2.SIFT()`.
+            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
+    
+    Returns:
+        list: Matches objects
+    """
+    if masks is None or isinstance(masks, np.ndarray):
+        masks = (masks, ) * len(images)
+    surf = cv2.SURF(hessianThreshold=hessianThreshold, **params)
+    # Extract keypoints (keypoints, descriptors)
+    keypoints = [(surf.detectAndCompute(img.read(), mask=mask)) for img, mask in zip(images, masks)]
+    # Match keypoints
+    # TODO: Find algorithm definitions for FlannBasedMatcher index parameters
+    index_params = dict(algorithm=1, trees=5)
+    search_params = dict(checks=50)
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    controls = list()
+    for i in range(len(images) - 1):
+        M = flann.knnMatch(keypoints[i][1], keypoints[i + 1][1], k=2)
+        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
+        A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
+        B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
+        controls.append(Matches((images[i].cam, images[i + 1].cam), (A, B)))
+    return controls
+
 # ---- Helpers ----
 
 def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):

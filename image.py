@@ -13,6 +13,7 @@ if sys.platform == "darwin":
     import matplotlib
     matplotlib.use('TkAgg')
 import matplotlib.pyplot
+import cv2
 
 class Camera(object):
     """
@@ -131,30 +132,44 @@ class Camera(object):
     
     @property
     def R(self):
-        if self.viewdir is not None:
-            # Initial rotations of camera reference frame
-            # (camera +z pointing up, with +x east and +y north)
-            # Point camera north: -90 deg counterclockwise rotation about x-axis
-            #   ri = [1 0 0; 0 cosd(-90) sind(-90); 0 -sind(-90) cosd(-90)];
-            # (camera +z now pointing north, with +x east and +y down)
-            # yaw: counterclockwise rotation about y-axis (relative to north, from above: +cw, - ccw)
-            #   ry = [C1 0 -S1; 0 1 0; S1 0 C1];
-            # pitch: counterclockwise rotation about x-axis (relative to horizon: + up, - down)
-            #   rp = [1 0 0; 0 C2 S2; 0 -S2 C2];
-            # roll: counterclockwise rotation about z-axis (from behind camera: + ccw, - cw)
-            #   rr = [C3 S3 0; -S3 C3 0; 0 0 1];
-            # Apply all rotations in order
-            #   R = rr * rp * ry * ri;
-            radians = np.deg2rad(self.viewdir)
-            C = np.cos(radians)
-            S = np.sin(radians)
-            return np.array([
-                [C[0] * C[2] + S[0] * S[1] * S[2],  C[0] * S[1] * S[2] - C[2] * S[0], -C[1] * S[2]],
-                [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
-                [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
-            ])
-        else:
-            return None
+        # Initial rotations of camera reference frame
+        # (camera +z pointing up, with +x east and +y north)
+        # Point camera north: -90 deg counterclockwise rotation about x-axis
+        #   ri = [1 0 0; 0 cosd(-90) sind(-90); 0 -sind(-90) cosd(-90)];
+        # (camera +z now pointing north, with +x east and +y down)
+        # yaw: counterclockwise rotation about y-axis (relative to north, from above: +cw, - ccw)
+        #   ry = [C1 0 -S1; 0 1 0; S1 0 C1];
+        # pitch: counterclockwise rotation about x-axis (relative to horizon: + up, - down)
+        #   rp = [1 0 0; 0 C2 S2; 0 -S2 C2];
+        # roll: counterclockwise rotation about z-axis (from behind camera: + ccw, - cw)
+        #   rr = [C3 S3 0; -S3 C3 0; 0 0 1];
+        # Apply all rotations in order
+        #   R = rr * rp * ry * ri;
+        radians = np.deg2rad(self.viewdir)
+        C = np.cos(radians)
+        S = np.sin(radians)
+        return np.array([
+            [C[0] * C[2] + S[0] * S[1] * S[2],  C[0] * S[1] * S[2] - C[2] * S[0], -C[1] * S[2]],
+            [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
+            [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
+        ])
+    
+    @property
+    def cameraMatrix(self):
+        """
+        OpenCV camera matrix.
+        """
+        return np.array([
+            [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
+            [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
+            [0, 0, 1]])
+    
+    @property
+    def distCoeffs(self):
+        """
+        OpenCV distortion coefficients.
+        """
+        return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
     
     # ---- Methods (public) ----
     
@@ -314,9 +329,12 @@ class Camera(object):
                 dxy += self._tangential_distortion(xy, r2)
             return dxy
     
-    def _undistort(self, xy):
+    def _undistort(self, xy, method="oulu", **params):
         """
         Remove distortion from camera coordinates.
+        
+        TODO: Quadtree 2-D bisection
+        https://stackoverflow.com/questions/3513660/multivariate-bisection-method
         
         Arguments:
             xy (array): Camera coordinates (Nx2)
@@ -324,42 +342,181 @@ class Camera(object):
         # X = (X' - dt) / dr
         if not any(self.k) and not any(self.p):
             return xy
-        else:
-            if self.k[0] and not any(self.k[1:]) and not any(self.p):
-                # If only k1 is nonzero, use closed form solution.
-                # Cubic roots solution from Numerical Recipes in C 2nd Edition:
-                # http://apps.nrbook.com/c/index.html (pages 183-185)
-                # Solve for undistorted radius in polar coordinates
-                # r^3 + r / k1 - r'/k1 = 0
-                phi = np.arctan2(xy[:, 1], xy[:, 0])
-                Q = - 1 / (3 * self.k[0])
-                R = - xy[:, 0] / (2 * self.k[0] * np.cos(phi)) # r' = y / cos(phi)
-                has_three_roots = R**2 < Q**3
-                r = np.full(len(xy), np.nan)
-                if np.any(has_three_roots):
-                  th = np.arccos(R[has_three_roots] / Q**1.5)
-                  r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
-                has_one_root = ~has_three_roots
-                if np.any(has_one_root):
-                  A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
-                  B = np.where(A == 0, 0, Q / A)
-                  r[has_one_root] = A + B
-                uxy = np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
+        elif self.k[0] and not any(self.k[1:]) and not any(self.p):
+            return self._undistort_k1(xy)
+        elif method == "lookup":
+            return self._undistort_lookup(xy, **params)
+        elif method == "oulu":
+            return self._undistort_oulu(xy, **params)
+        elif method == "regulafalsi":
+            return self._undistort_regulafalsi(xy, **params)
+        elif method == "opencv":
+            return self._undistort_opencv(xy, **params)
+    
+    def _undistort_k1(self, xy):
+        """
+        Remove 1st order radial distortion.
+        
+        Uses the closed-form solution to the cubic equation when
+        the only non-zero distortion coefficient is k1 (self.k[0]).
+        
+        Arguments:
+            xy (array): Camera coordinates (Nx2)
+        """
+        # If only k1 is nonzero, use closed form solution.
+        # Cubic roots solution from Numerical Recipes in C 2nd Edition:
+        # http://apps.nrbook.com/c/index.html (pages 183-185)
+        # Solve for undistorted radius in polar coordinates
+        # r^3 + r / k1 - r'/k1 = 0
+        phi = np.arctan2(xy[:, 1], xy[:, 0])
+        Q = - 1 / (3 * self.k[0])
+        R = - xy[:, 0] / (2 * self.k[0] * np.cos(phi)) # r' = y / cos(phi)
+        has_three_roots = R**2 < Q**3
+        r = np.full(len(xy), np.nan)
+        if np.any(has_three_roots):
+          th = np.arccos(R[has_three_roots] / Q**1.5)
+          r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
+        has_one_root = ~has_three_roots
+        if np.any(has_one_root):
+          A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
+          B = np.where(A == 0, 0, Q / A)
+          r[has_one_root] = A + B
+        return np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
+    
+    def _undistort_lookup(self, xy, density=1):
+        """
+        Remove distortion by table lookup.
+        
+        Creates a grid of test coordinates and applies distortion,
+        then interpolates undistorted coordinates from the result
+        with scipy.interpolate.LinearNDInterpolator().
+        
+        NOTE: Remains stable in extreme distortion, but slow
+        for large lookup tables.
+        
+        Arguments:
+            xy (array): Camera coordinates (Nx2)
+            density (float): Grid points per pixel (approximate)
+        """
+        # Estimate undistorted camera coordinate bounds
+        uv_edges = self.imgsz * np.array([
+            [0, 0], [0.5, 0], [1, 0], [1, 0.5],
+            [1, 1], [0.5, 1], [0, 1], [0, 0.5]
+        ])
+        xyu_edges = (uv_edges - (self.imgsz / 2 + self.c)) / self.f
+        xyd_edges = self._distort(xyu_edges)
+        # Build undistorted camera coordinates on regular grid
+        ux = np.linspace(
+            min(xyu_edges[:, 0].min(), xyd_edges[:, 0].min()),
+            max(xyu_edges[:, 0].max(), xyd_edges[:, 0].max()),
+            int(density * self.imgsz[0]))
+        uy = np.linspace(
+            min(xyu_edges[:, 1].min(), xyd_edges[:, 1].min()),
+            max(xyu_edges[:, 1].max(), xyd_edges[:, 1].max()),
+            int(density * self.imgsz[1]))
+        UX, UY = np.meshgrid(ux, uy)
+        uxy = np.column_stack((UX.flatten(), UY.flatten()))
+        # Distort grid
+        dxy = self._distort(uxy)
+        # Interpolate distortion removal from gridded results
+        # NOTE: Cannot use faster grid interpolation because dxy is not regular
+        return scipy.interpolate.griddata(dxy, uxy, xy, method="linear")
+    
+    def _undistort_oulu(self, xy, iterations=20, tolerance=0):
+        """
+        Remove distortion by the iterative Oulu University method.
+        
+        See http://www.vision.caltech.edu/bouguetj/calib_doc/ (comp_distortion_oulu.m)
+        
+        NOTE: Converges very quickly in normal cases, but fails for extreme distortion.
+        
+        Arguments:
+            xy (array): Camera coordinates (Nx2)
+            iterations (int): Maximum number of iterations
+            tolerance (float): Approximate pixel displacement in x and y below which
+                to exit early, or `0` to disable early exit
+        """
+        uxy = xy # initial guess
+        for n in range(iterations):
+            r2 = np.sum(uxy**2, axis=1)
+            if any(self.p) and not any(self.k):
+                uxy = xy - self._tangential_distortion(uxy, r2)
+            elif any(self.k) and not any(self.k):
+                uxy = xy / self._radial_distortion(r2)
             else:
-                # Use iterative solution.
-                if self.k[0] < -0.5:
-                    # May fail for large negative k1.
-                    print "Large negative k1 (" + str(round(self.k[0], 3)) + "). Undistort may fail."
-                uxy = xy # initial guess
-                for n in range(20):
-                    r2 = np.sum(uxy**2, axis=1)
-                    if any(self.p) and not any(self.k):
-                        uxy = xy - self._tangential_distortion(uxy, r2)
-                    elif any(self.k) and not any(self.k):
-                        uxy = xy / self._radial_distortion(r2)
-                    else:
-                        uxy = (xy - self._tangential_distortion(uxy, r2)) / self._radial_distortion(r2)
-            return uxy
+                uxy = (xy - self._tangential_distortion(uxy, r2)) / self._radial_distortion(r2)
+            if tolerance > 0 and np.all((np.abs(self._distort(uxy) - xy)) < tolerance / self.f.mean()):
+                break
+        return uxy
+    
+    def _undistort_regulafalsi(self, xy, iterations=100, tolerance=0):
+        """
+        Remove distortion by iterative regula falsi (false position) method.
+        
+        See https://en.wikipedia.org/wiki/False_position_method
+        
+        NOTE: Almost always converges, but may require many iterations for extreme distortion.
+        
+        Arguments:
+            xy (array): Camera coordinates (Nx2)
+            iterations (int): Maximum number of iterations
+            tolerance (float): Approximate pixel displacement in x and y (for all points)
+                below which to exit early, or `0` to disable early exit (default)
+        """
+        # Start at center of image (distortion free)
+        x1 = np.zeros(xy.shape, dtype=float)
+        y1 = -xy
+        # Then try halfway towards distorted coordinate
+        # (more stable to approach solution from image center)
+        x2 = xy / 2
+        y2 = self._distort(x2) - xy
+        uxy = np.full(xy.shape, np.nan)
+        for n in range(iterations):
+            dy = y2 - y1
+            not_converged = np.all(dy != 0, axis=1)
+            if tolerance > 0:
+                not_converged &= np.any(np.abs(y2) > tolerance / self.f.mean())
+            if n == 0:
+                mask = np.ones(len(xy), dtype=bool)
+            converged = np.zeros(mask.shape, dtype=bool)
+            converged[mask] = ~not_converged
+            uxy[converged] = x2[~not_converged]
+            mask[mask] = not_converged
+            x1 = x1[not_converged]
+            y1 = y1[not_converged]
+            x2 = x2[not_converged]
+            y2 = y2[not_converged]
+            if not np.any(not_converged):
+                break
+            x3 = (x1 * y2 - x2 * y1) / dy[not_converged]
+            y3 = self._distort(x3) - xy[mask]
+            x1 = x2
+            y1 = y2
+            x2 = x3
+            y2 = y3
+        uxy[mask] = x2
+        return uxy
+    
+    def _reversible(self):
+        """
+        Test whether the camera model is reversible.
+        
+        Checks whether distortion produces a monotonically increasing result.
+        If not, distorted coordinates are non-unique and cannot be reversed.
+        
+        TODO: Derive this explicitly from the distortion parameters.
+        """
+        xy_row = np.column_stack((
+            np.linspace(-self.imgsz[0] / (2 * self.f[0]), self.imgsz[0] / (2 * self.f[0]), int(self.imgsz[0])),
+            np.zeros(int(self.imgsz[0]))))
+        dxy = self._distort(xy_row)
+        continuous_row = np.all(dxy[1:, 0] >= dxy[:-1, 0])
+        xy_col = np.column_stack((
+            np.zeros(int(self.imgsz[1])),
+            np.linspace(-self.imgsz[1] / (2 * self.f[1]), self.imgsz[1] / (2 * self.f[1]), int(self.imgsz[1]))))
+        dxy = self._distort(xy_col)
+        continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
+        return continuous_row and continuous_col
     
     def _world2camera(self, xyz, directions=False):
         """
@@ -576,15 +733,24 @@ class Image(object):
         if not camera_args:
             camera_args = {}
         # TODO: Throw warning if `imgsz` has different aspect ratio than file size.
-        if not camera_args.has_key('imgsz'):
-            camera_args['imgsz'] = self.exif.size
-        if not camera_args.has_key('f'):
-            if not camera_args.has_key('fmm'):
-                camera_args['fmm'] = self.exif.fmm
-            if not camera_args.has_key('sensorsz'):
-                camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
+        if not camera_args.has_key('vector'):
+            if not camera_args.has_key('imgsz'):
+                camera_args['imgsz'] = self.exif.size
+            if not camera_args.has_key('f'):
+                if not camera_args.has_key('fmm'):
+                    camera_args['fmm'] = self.exif.fmm
+                if not camera_args.has_key('sensorsz'):
+                    camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
         self.cam = Camera(**camera_args)
         self.I = None
+    
+    def copy(self):
+        """
+        Return a copy.
+        
+        Copies camera, rereads exif from file, and does not copy cached image data (self.I).
+        """
+        return Image(path=self.path, camera_args=dict(vector=self.cam.vector.copy()))
     
     def read(self):
         """

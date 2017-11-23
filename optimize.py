@@ -608,7 +608,7 @@ class Cameras(object):
             array: Parameter values [group | cam0 | cam1 | ...]
         """
         initial_params = sample_cameras(self.cams, self.cam_masks, self.group_mask)
-        return scipy.optimize.root(self.residuals, initial_params, args=(index),
+        result = scipy.optimize.root(self.residuals, initial_params, args=(index),
             method='lm', tol=self.tol, options=self.options)
         if result['success']:
             return result['x']

@@ -46,6 +46,9 @@ class Camera(object):
         p (array): Tangential distortion coefficients [p1, p2]
         R (array): Rotation matrix equivalent of `viewdir`.
             Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
+        cameraMatrix (array): Camera matrix in OpenCV format
+        distCoeffs (array): Distortion coefficients (k, p) in OpenCV format
+        original_vector (array): Original value of `vector`
     """
     
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
@@ -71,6 +74,7 @@ class Camera(object):
             self.c = c
             self.k = k
             self.p = p
+        self.original_vector = self.vector
     
     # ---- Properties (dependent) ----
     
@@ -176,8 +180,17 @@ class Camera(object):
     def copy(self):
         """
         Return a copy.
+        
+        The original state of the new object (`original_vector`)
+        is set to the current state of the old object.
         """
         return Camera(vector=self.vector.copy())
+    
+    def reset(self):
+        """
+        Reset to original state.
+        """
+        self.vector = self.original_vector.copy()
     
     def write(self, path=None):
         """

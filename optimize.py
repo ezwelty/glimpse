@@ -466,6 +466,15 @@ class Cameras(object):
         self.group_mask = camera_mask(group_params)
         # Optimization settings
         self.tol = tol
+        if options is None:
+            options = dict()
+        if not options.has_key('diag'):
+            # Compute optimal variable scale factors
+            scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
+            # TODO: Weigh each camera by number of control points
+            group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
+            cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
+            options['diag'] = np.hstack((group_scale, cam_scales))
         self.options = options
     
     def soft_update_cameras(self, params):

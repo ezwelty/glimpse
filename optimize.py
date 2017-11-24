@@ -46,16 +46,16 @@ class Points(object):
     
     def size(self):
         """
-        Count the number of point pairs.
+        Return the total number of point pairs.
         """
         return len(self.uv)
     
     def observed(self, index=slice(None)):
         """
-        Retrieve the observed image coordinates.
+        Return observed image coordinates.
         
         Arguments:
-            index (array_like): Integer indices of points to return
+            index (array_like or slice): Indices of points to return, or all if `None`
         """
         return self.uv[index]
     
@@ -67,7 +67,7 @@ class Points(object):
         the point correspondences are invalid and an error is raised.
         
         Arguments:
-            index (array_like): Integer indices of world points to project
+            index (array_like or slice): Indices of world points to project, or all if `None`
         """
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
@@ -81,9 +81,9 @@ class Points(object):
     
     def plot(self, index=None, scale=1, selected="red", unselected=None, **quiver_args):
         """
-        Plot the reprojection errors as quivers.
+        Plot reprojection errors as quivers.
         
-        Arrows point from the observed to the predicted coordinates.
+        Arrows point from observed to predicted coordinates.
         
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
@@ -142,18 +142,20 @@ class Lines(object):
     
     def size(self):
         """
-        Count the number of image points.
+        Return the number of image points.
         """
         return len(self.uvi)
     
-    def observed(self):
+    def observed(self, index=None):
         """
-        Retrieve the observed image coordinates.
+        Return observed image coordinates.
         
-        Returns:
-            array: Image coordinates (Nx2)
+        Arguments:
+            index (array_like or slice): Indices of points to return, or all if `None`
         """
-        return self.uvi
+        if index is None:
+            index = slice(None)
+        return self.uvi[index]
     
     def project(self):
         """
@@ -172,18 +174,22 @@ class Lines(object):
         xys = [self.cam._world2camera(xyz, directions=self.directions) for xyz in self.xyzs]
         # Interpolate so that projected vertices are ~1 pixel apart
         xyis = [interpolate_line(xy, step=1/self.cam.f.mean(), normalized=False) for xy in xys]
-        # Project camera line onto image
+        # Project camera lines onto image
         return [self.cam._camera2image(xyi) for xyi in xyis]
     
-    def predicted(self):
+    def predicted(self, index=None):
         """
-        Retrieve the projected world coordinates nearest to the image coordinates.
+        Return the points on the projected world lines nearest the image coordinates.
+        
+        Arguments:
+            index (array_like or slice): Indices of image points to include in nearest-neighbor search,
+                or all if `None`
         
         Returns:
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        min_index = find_nearest_neighbors(self.observed(), puv)
+        min_index = find_nearest_neighbors(self.observed(index=index), puv)
         return puv[min_index, :]
     
     def is_static(self):
@@ -192,39 +198,52 @@ class Lines(object):
         """
         return (self.cam.xyz == self.original_cam_xyz).all()
     
-    def plot(self, scale=1, errors="red", observed="green", predicted="yellow", **quiver_args):
+    def plot(self, index=None, scale=1, selected="red", unselected=None,
+        observed="green", predicted="yellow", **quiver_args):
         """
         Plot the reprojection errors as quivers.
         
-        Arrows point from the observed to the predicted image coordinates.
+        Arrows point from observed to predicted image coordinates.
         
         Arguments:
+            index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
-            errors (color): Matplotlib color for quivers, or `None` to hide
+            selected (color): Matplotlib color for selected points, or `None` to hide
+            unselected (color): Matplotlib color for unselected points, or `None` to hide
             observed (color): Matplotlib color for image lines, or `None` to hide
             predicted (color): Matplotlib color for world lines, or `None` to hide
             **quiver_args: Further arguments to matplotlib.pyplot.quiver
         """
-        # Plot image line
+        # Plot image lines
         if observed:
             for uv in self.uvs:
                 matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], color=observed)
-        # Plot world line
+        # Plot world lines
         if predicted:
             puvs = self.project()
             for puv in puvs:
                 matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], color=predicted)
         # Plot errors
-        if errors:
-            uvi = self.observed()
+        if selected or unselected:
+            if index is None:
+                index = slice(None)
+                other_index = slice(0)
+            else:
+                other_index = np.delete(np.arange(self.size()), index)
+            uv = self.observed()
             if not predicted:
                 puvs = self.project()
             puv = np.row_stack(puvs)
-            min_index = find_nearest_neighbors(uvi, puv)
-            duv = scale * (puv[min_index, :] - uvi)
-            matplotlib.pyplot.quiver(
-                uvi[:, 0], uvi[:, 1], duv[:, 0], duv[:, 1],
-                color=errors, scale=1, scale_units='xy', angles='xy', **quiver_args)
+            min_index = find_nearest_neighbors(uv, puv)
+            duv = scale * (puv[min_index, :] - uv)
+            if selected is not None:
+                matplotlib.pyplot.quiver(
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
+                    color=selected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+            if unselected is not None:
+                matplotlib.pyplot.quiver(
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
+                    color=unselected, scale=1, scale_units='xy', angles='xy', **quiver_args)
 
 class Matches(object):
     """
@@ -250,22 +269,24 @@ class Matches(object):
     
     def size(self):
         """
-        Count the number of point pairs.
+        Return the number of point pairs.
         """
         return len(self.uvs[0])
     
-    def observed(self, index=slice(None), cam=0):
+    def observed(self, index=None, cam=0):
         """
-        Retrieve the observed image coordinates for a camera.
+        Return observed image coordinates.
         
         Arguments:
-            index (array_like): Integer indices of points to return
-            cam (Camera or int): Camera object
+            index (array_like or slice): Indices of points to return, or all if `None`
+            cam (Camera or int): Camera of points to return
         """
+        if index is None:
+            index = slice(None)
         cam_idx = self.cam_index(cam)
         return self.uvs[cam_idx][index]
     
-    def predicted(self, index=slice(None), cam=0):
+    def predicted(self, index=None, cam=0):
         """
         Predict image coordinates for a camera from the coordinates of the other camera.
         
@@ -273,11 +294,13 @@ class Matches(object):
         projected explicitly and an error is raised.
         
         Arguments:
-            index (array_like): Integer indices of points to project from other camera
-            cam (Camera or int): Camera object to project points into
+            index (array_like or slice): Indices of points to project from other camera
+            cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
             raise ValueError("Cameras have different positions ('xyz')")
+        if index is None:
+            index = slice(None)
         cam_in = self.cam_index(cam)
         cam_out = 0 if cam_in else 1
         dxyz = self.cams[cam_out].invproject(self.uvs[cam_out][index])
@@ -431,7 +454,9 @@ class Cameras(object):
         - image-world line coordinates (Lines)
         - image-image point coordinates (Matches)
     
-    Can only be used with RANSAC algorithm (see optimize.ransac) with 1-2 cameras and 1 Points or Matches control.
+    If used with RANSAC (see `optimize.ransac`) with multiple control objects,
+    results may be unstable since samples are drawn randomly from all observations,
+    and computation will be slow since errors are calculated for all points then subset.
     
     Arguments:
         cam_params (dict or list): Parameters to optimize seperately for each camera. For example:
@@ -514,79 +539,69 @@ class Cameras(object):
         for cam, vector in zip(self.cams, vectors):
             cam.vector = vector.copy()
     
-    def test_ransac(self):
-        """
-        Test whether RANSAC is supported.
-        
-        `Cameras` only supports RANSAC (`ransac()`) if:
-        
-            - `self.cams` is length 1 or 2,
-            - `self.controls` is length 1, and
-            - `self.controls[0]` is Points or Matches
-        """
-        if len(self.cams) > 2 or len(self.controls) > 1 or isinstance(self.controls[0], Lines):
-            raise ValueError("Only supported for 1-2 Camera and 1 Points or Matches control")
-    
     def data_size(self):
         """
-        Return the number of data points.
-        
-        Requires `self.test_ransac()` to be True.
+        Return the total number of data points.
         """
-        self.test_ransac()
-        return self.controls[0].size()
+        return np.array([control.size() for control in self.controls]).sum()
     
     def observed(self, index=None):
         """
         Return the observed image coordinates for all camera control.
         
-        Matches return the image coordinates for the first camera (see `Matches.observed()`).
+        See control `observed()` method for more details.
         
         Arguments:
-            index (array or slice): Indices of points to return. If `None` (default), all points are returned.
-                Other values require `self.test_ransac()` to be True.
+            index (array or slice): Indices of points to return, or all if `None`
         """
-        if index is None:
-            return np.vstack((control.observed() for control in self.controls))
+        if len(self.controls) == 1:
+            return self.controls[0].observed(index=index)
         else:
-            self.test_ransac()
-            return self.controls[0].observed(index)
+            # TODO: Map index to subindices for each control
+            if index is None:
+                index = slice(None)
+            return np.vstack((control.observed() for control in self.controls))[index]
     
     def predicted(self, params=None, index=None):
         """
         Return the predicted image coordinates for all camera control.
         
-        Matches return the image coordinates for the first camera (see `Matches.observed()`).
+        See control `predicted()` method for more details.
         
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
-            index (array or slice): Indices of points to return. If `None` (default), all points are returned.
-                Other values require `self.test_ransac()` to be True.
+            index (array or slice): Indices of points to return, or all if `None` (default)
         """
         if params is not None:
             vectors = [cam.vector.copy() for cam in self.cams]
             self.soft_update_cameras(params)
-        if index is None:
-            result = np.vstack((control.predicted() for control in self.controls))
+        if len(self.controls) == 1:
+            result = self.controls[0].predicted(index=index)
         else:
-            result = self.controls[0].predicted(index)
+            # TODO: Map index to subindices for each control
+            if index is None:
+                index = slice(None)
+            result = np.vstack((control.predicted() for control in self.controls))[index]
         if params is not None:
             self.reset_cameras(vectors)
         return result
     
-    def residuals(self, params=None, index=None):
+    def residuals(self, params=None, index=None, flatten=False):
         """
         Return the reprojection residuals for all camera control.
         
-        Residuals are computed as `self.predicted()` - `self.observed()`
-        and flattened to a 1-dimensional array.
+        Residuals are computed as `self.predicted()` - `self.observed()`.
         
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
-            index (array or slice): Indices of points to return. If `None` (default), all points are returned.
-                Other values require `self.test_ransac()` to be True.
+            index (array_like or slice): Indices of points to include, or all if `None`
+            flatten (bool): Whether to flatten residuals to 1-D array
         """
-        return (self.predicted(params, index) - self.observed(index)).flatten()
+        result = self.predicted(params=params, index=index) - self.observed(index=index)
+        if flatten:
+            return result.flatten()
+        else:
+            return result
     
     def errors(self, params=None, index=None):
         """
@@ -596,11 +611,10 @@ class Cameras(object):
         
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
-            index (array or slice): Indices of points to return. If `None` (default), all points are returned.
-                Other values require `self.test_ransac()` to be True.
+            index (array or slice): Indices of points to include, or all if `None`
         """
-        # TODO: Skip square root for speed
-        return np.sqrt(np.sum((self.predicted(params, index) - self.observed(index)) ** 2, axis=1))
+        # TODO: Skip square root for speed?
+        return np.linalg.norm(self.predicted(params=params, index=index) - self.observed(index=index), axis=1)
     
     def fit(self, index=None):
         """
@@ -610,14 +624,13 @@ class Cameras(object):
         that minimize the reprojection residuals (`self.residuals()`) across all control.
         
         Arguments:
-            index (array or slice): Indices of points to return. If `None` (default), all points are returned.
-                Other values require `self.test_ransac()` to be True.
-                
+            index (array or slice): Indices of points to include, or all if `None`
+        
         Returns:
             array: Parameter values [group | cam0 | cam1 | ...]
         """
         initial_params = sample_cameras(self.cams, self.cam_masks, self.group_mask)
-        result = scipy.optimize.root(self.residuals, initial_params, args=(index),
+        result = scipy.optimize.root(self.residuals, initial_params, args=(index, True),
             method='lm', tol=self.tol, options=self.options)
         if result['success']:
             return result['x']
@@ -626,7 +639,7 @@ class Cameras(object):
             return None
     
     def plot(self, params=None, cam=0, index=None, scale=1, selected="red", unselected=None,
-        lines_errors=None, lines_observed="green", lines_predicted="yellow", **quiver_args):
+        lines_observed="green", lines_predicted="yellow", **quiver_args):
         """
         Plot reprojection errors.
         
@@ -641,7 +654,6 @@ class Cameras(object):
             scale (float): Scale of quivers
             selected (color): Matplotlib color for selected points, or `None` to hide
             unselected (color): Matplotlib color for unselected points, or `None` to hide
-            lines_errors (color): Matplotlib color for Lines error quivers, or `None` to hide
             lines_observed (color): Matplotlib color for image lines, or `None` to hide
             lines_predicted (color): Matplotlib color for world lines, or `None` to hide
             **quiver_args: Further arguments to matplotlib.pyplot.quiver
@@ -649,13 +661,15 @@ class Cameras(object):
         if params is not None:
             vectors = [camera.vector.copy() for camera in self.cams]
             self.soft_update_cameras(params)
-        if index is not None:
-            self.test_ransac()
         cam = self.cams[cam] if isinstance(cam, int) else cam
         cam_controls = prune_controls([cam], self.controls)
+        if index is not None and len(self.control) > 1:
+            # TODO: Map index to subindices for each control
+            raise ValueError("Plotting with `index` not yet supported with multiple controls")
         for control in cam_controls:
             if isinstance(control, Lines):
-                control.plot(scale=scale, errors=lines_errors, observed=lines_observed, predicted=lines_predicted, **quiver_args)
+                control.plot(index=index, scale=scale, selected=selected, unselected=unselected,
+                    observed=lines_observed, predicted=lines_predicted, **quiver_args)
             elif isinstance(control, Points):
                 control.plot(index=index, scale=scale, selected=selected, unselected=unselected, **quiver_args)
             elif isinstance(control, Matches):

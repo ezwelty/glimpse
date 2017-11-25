@@ -7,17 +7,17 @@ import numpy as np
 def parse_svg(path, imgsz=None):
     """
     Return vertices of elements in SVG file.
-    
+
     All path, line, polyline, and polygon elements are returned as Nx2 arrays of vertices.
     All <g> XML elements with 'id' attributes and their descendants (if these include any of the above)
     are retained to form the structure of the result.
     Dictionary keys are either the element 'id' or tag with an optional numeric counter (e.g., 'line-1').
-    
+
     Arguments:
         path (str): Path to SVG file
         imgsz (array_like): Image width and height [nx, ny] to which to scale SVG coordinates.
             If `None` (default), image size is determined from <image> 'width' and 'height' attributes.
-    
+
     Returns:
         dict: Element vertices (Nx2 arrays)
     """
@@ -78,14 +78,14 @@ def parse_svg(path, imgsz=None):
 def parse_svg_nodes(nodes, scale=None):
     """
     Return vertices of SVG elements in ElementTree nodes.
-    
+
     All path, line, polyline, and polygon elements are returned as Nx2 arrays of vertices.
     Dictionary keys are either the element 'id' or tag with an optional numeric counter (e.g., 'line-1').
-    
+
     Arguments:
         nodes (list): ElementTree elements
         scale (array_like): Coordinate scale factor [x, y]
-    
+
     Returns:
         dict: SVG element vertices (Nx2 arrays)
     """
@@ -120,12 +120,12 @@ def parse_svg_nodes(nodes, scale=None):
 def parse_polyline(points):
     """
     Return polyline vertices.
-    
+
     See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/polyline
-    
+
     Arguments:
         points (str): Polyline 'points' attribute
-        
+
     Returns:
         array: Coordinates x,y (Nx2)
     """
@@ -135,14 +135,14 @@ def parse_polyline(points):
 def parse_polygon(points, closed=True):
     """
     Return polygon vertices.
-    
+
     See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/polygon
-    
+
     Arguments:
         points (str): Polygon 'points' attribute
         closed (bool): Whether to return a closed polygon.
             If `True` (default), the first vertices is also appended as last.
-        
+
     Returns:
         array: Coordinates x,y (Nx2)
     """
@@ -154,15 +154,15 @@ def parse_polygon(points, closed=True):
 def parse_line(x1, y1, x2, y2):
     """
     Return line vertices.
-    
+
     See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line
-    
+
     Arguments:
         x1 (str): Line 'x1' attribute
         y1 (str): Line 'y1' attribute
         x2 (str): Line 'x2' attribute
         y2 (str): Line 'y2' attribute
-    
+
     Returns:
         array: Coordinates x,y (2x2)
     """
@@ -171,12 +171,12 @@ def parse_line(x1, y1, x2, y2):
 def parse_path(d):
     """
     Return path vertices.
-    
+
     See https://www.w3.org/TR/SVG/paths.html#DAttribute
-    
+
     Arguments:
         d (str): Path 'd' attribute
-    
+
     Returns:
         array: Coordinates x,y (Nx2)
     """

@@ -7,7 +7,7 @@ import scipy.misc
 class DEM(object):
     """
     A `DEM` describes elevations on a regular 2-dimensional grid.
-    
+
     Attributes:
         Z (array): Grid of values on a regular xy grid
         zlim (array): Limits of `Z` [min, max]
@@ -20,11 +20,11 @@ class DEM(object):
         d (array): Grid cell size [dx, dy]
         datetime (datetime): Capture date and time
     """
-    
+
     def __init__(self, Z, x=None, y=None, datetime=None):
         """
         Create a `DEM`.
-        
+
         Arguments:
             Z (array): Grid of values on a regular xy grid
             x (object): Either `xlim`, `x`, or `X`
@@ -35,9 +35,9 @@ class DEM(object):
         self.xlim, self._x, self._X = self._parse_x(x)
         self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
-    
+
     Z = property(operator.attrgetter('_Z'))
-    
+
     @Z.setter
     def Z(self, value):
         if hasattr(self, '_Z'):
@@ -48,35 +48,35 @@ class DEM(object):
                 self._clear_cache(['x', 'X', 'y', 'Y'])
         else:
             self._Z = np.asarray(value, float)
-    
+
     # ---- Properties (dependent) ----
-    
+
     @property
     def zlim(self):
         value = [self.Z.min(), self.Z.max()]
         return np.array(value)
-    
+
     @property
     def min(self):
         value = [min(self.xlim), min(self.ylim), min(self.zlim)]
         return np.array(value)
-    
+
     @property
     def max(self):
         value = [max(self.xlim), max(self.ylim), max(self.zlim)]
         return np.array(value)
-    
+
     @property
     def n(self):
         value = [self.Z.shape[1], self.Z.shape[0]]
         return np.asarray(value, int)
-    
+
     @property
     def d(self):
         return np.append(np.diff(self.xlim), np.diff(self.ylim)) / self.n
-    
+
     # ---- Properties (cached) ----
-    
+
     @property
     def x(self):
         if self._x is None:
@@ -86,13 +86,13 @@ class DEM(object):
             else:
                 self._x = value
         return self._x
-    
+
     @property
     def X(self):
         if self._X is None:
             self._X = np.tile(self.x, [self.n[1], 1])
         return self._X
-    
+
     @property
     def y(self):
         if self._y is None:
@@ -102,13 +102,13 @@ class DEM(object):
             else:
                 self._y = value
         return self._y
-    
-    @property 
+
+    @property
     def Y(self):
         if self._Y is None:
             self._Y = np.tile(self.y, [self.n[0], 1]).transpose()
         return self._Y
-    
+
     @property
     def Zf(self):
         if self._Zf is None:
@@ -117,61 +117,61 @@ class DEM(object):
                 self.x[::sign[0]], self.y[::sign[1]], np.nan_to_num(self.Z[::sign[1], ::sign[0]]).T, kx=3, ky=3, s=0
                 )
         return self._Zf
-              
+
     # ---- Methods (public) ----
-    
+
     def inbounds(self, xy):
         """
         Test whether points are within (or on) the xy bounds of the `DEM`.
-        
+
         Arguments:
             xy (array): Point coordinates (Nx2)
-        
+
         Returns:
             array: Whether each point is inbounds (Nx1)
         """
         return np.logical_and(xy >= self.min[0:2], xy <= self.max[0:2]).all(axis = 1)
-    
+
     def sample(self, xy):
         """
         Sample `Z` at points.
-        
+
         Interpolation is performed using a 3rd order spline.
         Missing values are currently replaced with zeros.
-        
+
         Arguments:
             xy (array): Point coordinates (Nx2)
-        
+
         Returns:
             array: Value of `Z` interpolated at each point (Nx1).
         """
         return self.Zf(xy[:, 0], xy[:, 1], grid=False)
-    
+
     def sample_grid(self, x, y):
         """
         Sample `Z` at points.
-        
+
         Interpolation is performed using a 3rd order spline.
         Missing values are currently replaced with zeros.
-        
+
         Arguments:
             x, y (array_like): Coordinates specifying points on a grid.
                 Arrays must be sorted in increasing order.
-        
+
         Returns:
             array: Value of `Z` interpolated at each point, with x as columns and y as rows.
         """
         return self.Zf(x, y, grid=True).transpose()
-    
+
     def crop(self, xlim=None, ylim=None, copy=True):
         """
         Crop a `DEM`.
-        
+
         Arguments:
-            xlim (array_like): Cropping bounds in x 
+            xlim (array_like): Cropping bounds in x
             ylim (array_like): Cropping bounds in y
             copy (bool): Whether to return result as new `DEM`
-        
+
         Returns:
             DEM: New object (if `copy=True`)
         """
@@ -223,15 +223,15 @@ class DEM(object):
             self.Z = Z
             self.xlim = new_xlim
             self.ylim = new_ylim
-    
+
     def resize(self, scale, copy=True):
         """
         Resize a `DEM`.
-        
+
         Arguments:
             scale (float): Fraction of current size
             copy (bool): Whether to return result as new `DEM`
-        
+
         Returns:
             DEM: New object (if `copy=True`)
         """
@@ -240,16 +240,16 @@ class DEM(object):
             return DEM(Z, self.xlim, self.ylim)
         else:
             self.Z = Z
-    
+
     def fill_crevasses_simple(self, maximum_filter_size=5, gaussian_filter_sigma=5, copy=True):
         """
         Apply a maximum filter to `Z`, then perform Gaussian smoothing (fast).
-        
+
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
             copy (bool): Whether to return result as new `DEM`
-        
+
         Returns:
             DEM: New object (if `copy=True`)
         """
@@ -265,16 +265,16 @@ class DEM(object):
             return DEM(Z, x, y)
         else:
             self.Z = Z
-        
+
     def fill_crevasses_complex(self, maximum_filter_size=5, gaussian_filter_sigma=5, copy=True):
         """
         Find the local maxima of `Z`, fit a surface through them, then perform Gaussian smoothing (slow).
-        
+
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
             copy (bool): Whether to return result as new `DEM`
-            
+
         Returns:
             DEM: New object (if `copy=True`)
         """
@@ -294,7 +294,7 @@ class DEM(object):
             return DEM(Z, x, y)
         else:
             self.Z = Z
-    
+
     def visible(self, xyz):
         X = self.X.flatten() - xyz[0]
         Y = self.Y.flatten() - xyz[1]
@@ -329,28 +329,28 @@ class DEM(object):
                 vis[lp[1:end]] = np.interp(xx[1:end], voxx, voxy) < yy[1:end]
             voxy = np.maximum(voxy, np.interp(voxx, xx, yy))
         return vis.reshape(self.Z.shape)
-    
+
     # ---- Methods (private) ----
-    
+
     def _clear_cache(self, attributes=['x', 'X', 'y', 'Y', 'Zf']):
         for attr in attributes:
             setattr(self, '_' + attr, None)
-    
+
     def _xy_to_rowcol(self, xy):
         origin = np.append(self.xlim[0], self.ylim[0])
         colrow = np.floor((xy - origin) / self.d).astype(int)
         return colrow[:, ::-1]
-    
+
     def _rowcol_to_xy(self, rowcol):
         colrow = rowcol[:, ::-1]
         origin = np.append(self.xlim[0], self.ylim[0])
         xy = colrow * self.d + origin
         return xy
-    
+
     def _parse_x(self, obj):
         """
         Parse object into xlim, x, and X attributes.
-        
+
         Arguments:
             obj (object): Either xlim, x, or X
         """
@@ -375,11 +375,11 @@ class DEM(object):
             x = None
             xlim = obj
         return [xlim, x, X]
-    
+
     def _parse_y(self, obj):
         """
         Parse object into ylim, y, and Y attributes.
-        
+
         Arguments:
             obj (object): Either ylim, y, or Y
         """

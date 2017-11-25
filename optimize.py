@@ -23,10 +23,10 @@ import cv2
 class Points(object):
     """
     `Points` store image-world point correspondences.
-    
+
     World coordinates (`xyz`) are projected into the camera,
     then compared to the corresponding image coordinates (`uv`).
-    
+
     Attributes:
         cam (Camera): Camera object
         uv (array): Image coordinates (Nx2)
@@ -34,7 +34,7 @@ class Points(object):
         directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
         original_cam_xyz (array): Original camera position (`cam.xyz`)
     """
-    
+
     def __init__(self, cam, uv, xyz, directions=False):
         if len(uv) != len(xyz):
             raise ValueError("`uv` and `xyz` have different number of rows")
@@ -43,48 +43,48 @@ class Points(object):
         self.xyz = xyz
         self.directions = directions
         self.original_cam_xyz = cam.xyz.copy()
-    
+
     def size(self):
         """
         Return the total number of point pairs.
         """
         return len(self.uv)
-    
+
     def observed(self, index=slice(None)):
         """
         Return observed image coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to return, or all if `None`
         """
         return self.uv[index]
-    
+
     def predicted(self, index=slice(None)):
         """
         Predict image coordinates from world coordinates.
-        
+
         If the camera position (`cam.xyz`) has changed and `xyz` are ray directions (`directions=True`),
         the point correspondences are invalid and an error is raised.
-        
+
         Arguments:
             index (array_like or slice): Indices of world points to project, or all if `None`
         """
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
         return self.cam.project(self.xyz[index], directions=self.directions)
-        
+
     def is_static(self):
         """
         Test whether the camera is at its original position.
         """
         return (self.cam.xyz == self.original_cam_xyz).all()
-    
+
     def plot(self, index=None, scale=1, selected="red", unselected=None, **quiver_args):
         """
         Plot reprojection errors as quivers.
-        
+
         Arrows point from observed to predicted coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
@@ -112,11 +112,11 @@ class Points(object):
 class Lines(object):
     """
     `Lines` store image and world lines believed to overlap.
-    
+
     Image lines (`uvs`) are interpolated to a single array of image points (`uvi`).
     World lines (`xyzs`) are projected into the camera and the nearest point along
     any such lines is matched to each image point.
-    
+
     Attributes:
         cam (Camera): Camera object
         uvs (array or list): Arrays of image line vertices (Nx2)
@@ -126,7 +126,7 @@ class Lines(object):
         step (float): Along-line distance between image points interpolated from lines `uvs`
         original_cam_xyz (array): Original camera position (`cam.xyz`)
     """
-    
+
     def __init__(self, cam, uvs, xyzs, directions=False, step=None):
         self.cam = cam
         # Retain image lines for plotting
@@ -139,31 +139,31 @@ class Lines(object):
         self.xyzs = xyzs if isinstance(xyzs, list) else [xyzs]
         self.directions = directions
         self.original_cam_xyz = cam.xyz.copy()
-    
+
     def size(self):
         """
         Return the number of image points.
         """
         return len(self.uvi)
-    
+
     def observed(self, index=None):
         """
         Return observed image coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to return, or all if `None`
         """
         if index is None:
             index = slice(None)
         return self.uvi[index]
-    
+
     def project(self):
         """
         Project world lines onto the image.
-        
+
         If the camera position (`cam.xyz`) has changed and `xyz` are ray directions (`directions=True`),
         the point correspondences are invalid and an error is raised.
-        
+
         Returns:
             list: Arrays of image coordinates (Nx2)
         """
@@ -176,35 +176,35 @@ class Lines(object):
         xyis = [interpolate_line(xy, step=1/self.cam.f.mean(), normalized=False) for xy in xys]
         # Project camera lines onto image
         return [self.cam._camera2image(xyi) for xyi in xyis]
-    
+
     def predicted(self, index=None):
         """
         Return the points on the projected world lines nearest the image coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of image points to include in nearest-neighbor search,
                 or all if `None`
-        
+
         Returns:
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
         min_index = find_nearest_neighbors(self.observed(index=index), puv)
         return puv[min_index, :]
-    
+
     def is_static(self):
         """
         Test whether the camera is at its original position.
         """
         return (self.cam.xyz == self.original_cam_xyz).all()
-    
+
     def plot(self, index=None, scale=1, selected="red", unselected=None,
         observed="green", predicted="yellow", **quiver_args):
         """
         Plot the reprojection errors as quivers.
-        
+
         Arrows point from observed to predicted image coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
@@ -248,15 +248,15 @@ class Lines(object):
 class Matches(object):
     """
     `Matches` store image-image point correspondences.
-    
+
     The image coordinates (`uvs[i]`) of one camera (`cams[i]`) are projected into the other camera (`cams[j]`),
     then compared to the expected image coordinates for that camera (`uvs[j]`).
-    
+
     Attributes:
         cams (list): Pair of Camera objects
         uvs (list): Pair of image coordinate arrays (Nx2)
     """
-    
+
     def __init__(self, cams, uvs):
         if len(cams) != 2 or len(uvs) != 2:
             raise ValueError("`cams` and `uvs` must each have two elements")
@@ -266,17 +266,17 @@ class Matches(object):
             raise ValueError("Image coordinate arrays have different shapes")
         self.cams = cams
         self.uvs = uvs
-    
+
     def size(self):
         """
         Return the number of point pairs.
         """
         return len(self.uvs[0])
-    
+
     def observed(self, index=None, cam=0):
         """
         Return observed image coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to return, or all if `None`
             cam (Camera or int): Camera of points to return
@@ -285,14 +285,14 @@ class Matches(object):
             index = slice(None)
         cam_idx = self.cam_index(cam)
         return self.uvs[cam_idx][index]
-    
+
     def predicted(self, index=None, cam=0):
         """
         Predict image coordinates for a camera from the coordinates of the other camera.
-        
+
         If the cameras are not at the same position, the point correspondences cannot be
         projected explicitly and an error is raised.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to project from other camera
             cam (Camera or int): Camera to project points into
@@ -305,17 +305,17 @@ class Matches(object):
         cam_out = 0 if cam_in else 1
         dxyz = self.cams[cam_out].invproject(self.uvs[cam_out][index])
         return self.cams[cam_in].project(dxyz, directions=True)
-    
+
     def is_static(self):
         """
         Test whether the cameras are at the same position.
         """
         return (self.cams[0].xyz == self.cams[1].xyz).all()
-    
+
     def cam_index(self, cam):
         """
         Retrieve the index of a camera.
-        
+
         Arguments:
             cam (Camera): Camera object
         """
@@ -325,13 +325,13 @@ class Matches(object):
             return cam
         else:
             return self.cams.index(cam)
-    
+
     def plot(self, index=None, cam=0, scale=1, selected="red", unselected=None, **quiver_args):
         """
         Plot the reprojection errors as quivers.
-        
+
         Arrows point from the observed to the predicted coordinates.
-        
+
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
             cam (Camera or int): Camera to plot
@@ -373,59 +373,59 @@ class Polynomial(object):
     Fits a polynomial of degree `deg` to 2-dimensional points (rows of `data`) and
     returns the coefficients that minimize the squared error (`params`).
     Can be used with RANSAC algorithm (see optimize.ransac).
-    
+
     Attributes:
         data (array): Point coordinates (x,y) (Nx2)
         deg (int): Degree of the polynomial
     """
-    
+
     def __init__(self, data, deg=1):
         self.deg = deg
         self.data = data
-    
+
     def data_size(self):
         """
         Count the number of points.
         """
         return len(self.data)
-    
+
     def predict(self, params, index=slice(None)):
         """
         Predict the values of a polynomial.
-        
+
         Arguments:
             params (array): Values of the polynomial, from highest to lowest degree component
             index (array_like or slice): Indices of points for which to predict y from x
         """
         return np.polyval(params, self.data[index, 0])
-    
+
     def errors(self, params, index=slice(None)):
         """
         Compute the errors of a polynomial prediction.
-        
+
         Arguments:
             params (array): Values of the polynomial, from highest to lowest degree component
             index (array_like or slice): Indices of points for which to predict y from x
         """
         prediction = self.predict(params, index)
         return np.abs(prediction - self.data[index, 1])
-    
+
     def fit(self, index=slice(None)):
         """
         Fit a polynomial to the points (using numpy.polyfit).
-        
+
         Arguments:
             index (array_like or slice): Indices of points to use for fitting
-            
+
         Returns:
             array: Values of the polynomial, from highest to lowest degree component
         """
         return np.polyfit(self.data[index, 0], self.data[index, 1], deg=self.deg)
-    
+
     def plot(self, params=None, index=slice(None), selected="red", unselected="grey", polynomial="red"):
         """
         Plot the points and the polynomial fit.
-        
+
         Arguments:
             params (array): Values of the polynomial, from highest to lowest degree component,
                 or computed if `None`
@@ -447,26 +447,26 @@ class Polynomial(object):
 class Cameras(object):
     """
     Multi-camera optimization.
-    
+
     Finds the camera parameter values that minimize the reprojection errors of camera control:
-    
+
         - image-world point coordinates (Points)
         - image-world line coordinates (Lines)
         - image-image point coordinates (Matches)
-    
+
     If used with RANSAC (see `optimize.ransac`) with multiple control objects,
     results may be unstable since samples are drawn randomly from all observations,
     and computation will be slow since errors are calculated for all points then subset.
-    
+
     Arguments:
         cam_params (dict or list): Parameters to optimize seperately for each camera. For example:
-                
+
                 - {'viewdir': True} : All `viewdir` elements
                 - {'viewdir': 0} : First `viewdir` element
                 - {'viewdir': [0, 1]} : First and second `viewdir` elements
-        
+
         group_params (dict): Parameters to optimize for all cameras (see `cam_params`)
-    
+
     Attributes:
         cams (list): Camera objects
         controls (list): Camera control (Points, Lines, and Matches objects)
@@ -476,7 +476,7 @@ class Cameras(object):
         tol (float): Tolerance for termination (see scipy.optimize.root)
         options (dict): Solver options (see scipy.optimize.root)
     """
-    
+
     def __init__(self, cams, controls, cam_params={'viewdir': True}, group_params={}, tol=None, options=None):
         self.cams = cams if isinstance(cams, list) else [cams]
         self.vectors = [cam.vector.copy() for cam in self.cams]
@@ -501,36 +501,36 @@ class Cameras(object):
             cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
             options['diag'] = np.hstack((group_scale, cam_scales))
         self.options = options
-    
+
     def soft_update_cameras(self, params):
         """
         Set camera parameters without updating baseline values.
-        
+
         Original camera vectors (`self.vectors`) are unchanged so the operation can be reversed
         with `self.reset_cameras()`.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
         """
         update_cameras(self.cams, values=params, cam_masks=self.cam_masks, group_mask=self.group_mask)
-        
+
     def update_cameras(self, params):
         """
         Set camera parameters and update baseline values.
-        
+
         Original camera vectors (`self.vectors`) are updated so that `self.reset_cameras()` resets
         the cameras to these new values.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
         """
         self.soft_update_cameras(params)
         self.vectors = [cam.vector.copy() for cam in self.cams]
-    
+
     def reset_cameras(self, vectors=None):
         """
         Set camera parameters to their baseline values.
-        
+
         Arguments:
             vectors (list): Camera vectors. If `None` (default), `self.vectors` is used.
         """
@@ -538,19 +538,19 @@ class Cameras(object):
             vectors = self.vectors
         for cam, vector in zip(self.cams, vectors):
             cam.vector = vector.copy()
-    
+
     def data_size(self):
         """
         Return the total number of data points.
         """
         return np.array([control.size() for control in self.controls]).sum()
-    
+
     def observed(self, index=None):
         """
         Return the observed image coordinates for all camera control.
-        
+
         See control `observed()` method for more details.
-        
+
         Arguments:
             index (array or slice): Indices of points to return, or all if `None`
         """
@@ -561,13 +561,13 @@ class Cameras(object):
             if index is None:
                 index = slice(None)
             return np.vstack((control.observed() for control in self.controls))[index]
-    
+
     def predicted(self, params=None, index=None):
         """
         Return the predicted image coordinates for all camera control.
-        
+
         See control `predicted()` method for more details.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
             index (array or slice): Indices of points to return, or all if `None` (default)
@@ -585,13 +585,13 @@ class Cameras(object):
         if params is not None:
             self.reset_cameras(vectors)
         return result
-    
+
     def residuals(self, params=None, index=None, flatten=False):
         """
         Return the reprojection residuals for all camera control.
-        
+
         Residuals are computed as `self.predicted()` - `self.observed()`.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
             index (array_like or slice): Indices of points to include, or all if `None`
@@ -606,16 +606,16 @@ class Cameras(object):
     def errors(self, params=None, index=None):
         """
         Return the reprojection errors for all camera control.
-        
+
         Errors are computed as the distance between `self.predicted()` and `self.observed()`.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...]
             index (array or slice): Indices of points to include, or all if `None`
         """
         # TODO: Skip square root for speed?
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
-    
+
     def criterions(self, params=None, index=None):
         """
         Return values of common model selection criterions.
@@ -634,21 +634,21 @@ class Cameras(object):
         result['bic'] = base + 2 * k * np.log(n)
         result['mdl'] = base + 1 / (2 * k * np.log(n))
         return result
-    
+
     def fit(self, index=None, cam_params=None, group_params=None):
         """
         Return optimal camera parameter values.
-        
+
         The Levenberg-Marquardt algorithm is used to find the camera parameter values
         that minimize the reprojection residuals (`self.residuals()`) across all control.
-        
+
         Arguments:
             index (array or slice): Indices of points to include, or all if `None`
             cam_params (list): Sequence of independent camera properties to fit (see `Cameras`)
                 iteratively before final run. Must be `None` or same length as `group_params`.
             group_params (list): Sequence of group camera properties to fit (see `Cameras`)
                 iteratively before final run. Must be `None` or same length as `cam_params`.
-        
+
         Returns:
             array: Parameter values [group | cam0 | cam1 | ...]
         """
@@ -677,14 +677,14 @@ class Cameras(object):
         else:
             print result['message']
             return None
-    
+
     def plot(self, params=None, cam=0, index=None, scale=1, selected="red", unselected=None,
         lines_observed="green", lines_predicted="yellow", **quiver_args):
         """
         Plot reprojection errors.
-        
+
         See control object `plot()` methods for details.
-        
+
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...].
                 If `None` (default), cameras are used unchanged.
@@ -722,21 +722,21 @@ class Cameras(object):
 def ransac(model, sample_size, max_error, min_inliers, iterations=100):
     """
     Fit model parameters to data using the Random Sample Consensus (RANSAC) algorithm.
-    
+
     Inspired by the pseudocode at https://en.wikipedia.org/wiki/Random_sample_consensus
-    
+
     Arguments:
         model (object): Model and data object with the following methods:
-        
+
             - `data_size()`: Returns maximum sample size
             - `fit(index)`: Accepts sample indices and returns model parameters
             - `errors(params, index)`: Accepts sample indices and model parameters and returns an error for each sample
-        
+
         sample_size (int): Size of sample used to fit the model in each iteration
         max_error (float): Error below which a sample element is considered a model inlier
         min_inliers (int): Number of inliers (in addition to `sample_size`) for a model to be considered valid
         iterations (int): Number of iterations
-    
+
     Returns:
         array (int): Values of model parameters
         array (int): Indices of model inliers
@@ -774,11 +774,11 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100):
 def ransac_sample(sample_size, data_size):
     """
     Generate index arrays for a random sample and its outliers.
-    
+
     Arguments:
         sample_size (int): Size of sample
         data_size (int): Size of data
-    
+
     Returns:
         array (int): Sample indices
         array (int): Outlier indices
@@ -794,7 +794,7 @@ def ransac_sample(sample_size, data_size):
 def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
     """
     Return `Matches` constructed from SIFT matches between sequential images.
-    
+
     Arguments:
         images (list): Image objects.
             Matches are computed between each sequential pair.
@@ -807,7 +807,7 @@ def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
             from each image for matching, or `0` for all
         **params: Additional arguments passed to `cv2.SIFT()`.
             See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
-    
+
     Returns:
         list: Matches objects
     """
@@ -833,7 +833,7 @@ def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
 def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
     """
     Return `Matches` constructed from SURF matches between sequential images.
-    
+
     Arguments:
         images (list): Image objects.
             Matches are computed between each sequential pair.
@@ -845,7 +845,7 @@ def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
         hessianThreshold (float): Threshold for the hessian keypoint detector used in SURF
         **params: Additional arguments passed to `cv2.SURF()`.
             See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#surf-surf
-    
+
     Returns:
         list: Matches objects
     """
@@ -873,7 +873,7 @@ def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
 def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):
     """
     Return points at the specified distances along an N-dimensional line.
-    
+
     Arguments:
         vertices (array): Coordinates of vertices (NxD)
         num (int): Number of evenly-spaced points to return
@@ -901,11 +901,11 @@ def interpolate_line(vertices, num=None, step=None, distances=None, normalized=F
 def find_nearest_neighbors(A, B):
     """
     Find the nearest neighbors between two sets of points.
-    
+
     Arguments:
         A (array): First set of points (NxD)
         B (array): Second set of points (MxD)
-    
+
     Returns:
         array: Indices of the nearest neighbors of `A` in `B`
     """
@@ -915,15 +915,15 @@ def find_nearest_neighbors(A, B):
 def camera_mask(params=None):
     """
     Return a boolean mask of the selected camera parameters.
-    
+
     The returned boolean array is intended to be used for setting or getting a subset of the
     image.Camera.vector, which is a flat vector of all Camera attributes [xyz, viewdir, imgsz, f, c, k, p].
-    
+
     See `camera_params` for the reverse operation.
-    
+
     Arguments:
         params (dict): Parameters to select by name and indices. For example:
-                
+
                 - {'viewdir': True} : All `viewdir` elements
                 - {'viewdir': 0} : First `viewdir` element
                 - {'viewdir': [0, 1]} : First and second `viewdir` elements
@@ -946,9 +946,9 @@ def camera_mask(params=None):
 def camera_params(mask=None):
     """
     Return a dictionary of selected camera parameters.
-    
+
     See `camera_mask` for the reverse operation (and more info).
-    
+
     Arguments:
         mask (array): Boolean array of selected camera parameters
     """
@@ -969,7 +969,7 @@ def camera_params(mask=None):
 def update_cameras(cams, values, cam_masks, group_mask=camera_mask()):
     """
     Set camera parameters for multiple cameras.
-    
+
     Arguments:
         cams (list): Camera objects
         values (array): Parameter values [group | cam0 | cam1 | ... ]
@@ -987,14 +987,14 @@ def update_cameras(cams, values, cam_masks, group_mask=camera_mask()):
 def sample_cameras(cams, cam_masks, group_mask=camera_mask()):
     """
     Get camera parameters for multiple cameras.
-    
+
     Group parameters (`group_mask`) are returned from the first camera.
-    
+
     Arguments:
         cams (list): Camera objects
         cam_masks (list): Masks of parameters to get for each camera
         group_mask (array): Mask of parameters to get for all cameras
-    
+
     Returns:
         array: Parameter values [group | cam0 | cam1 | ... ]
     """
@@ -1005,11 +1005,11 @@ def sample_cameras(cams, cam_masks, group_mask=camera_mask()):
 def prune_controls(cams, controls):
     """
     Return only controls which reference the specified cameras.
-    
+
     Arguments:
         cams (list): Camera objects
         controls (list): Camera control (Points, Lines, and Matches)
-    
+
     Returns:
         list: Camera control which reference the cameras in `cams`
     """
@@ -1019,13 +1019,13 @@ def prune_controls(cams, controls):
 def test_camera_options(cams, controls, cam_params, group_params):
     """
     Test Cameras model options for errors.
-    
+
     The following checks are performed:
-        
+
         - Error: Not all cameras appear in controls.
         - Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
         - Error: 'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera
-    
+
     Arguments:
         cams (list): Camera objects
         controls (list): Camera control (Points, Lines, and Matches objects)
@@ -1050,14 +1050,14 @@ def test_camera_options(cams, controls, cam_params, group_params):
     if any(is_xyz_directions_cam):
         raise ValueError("'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera")
     return None
-    
+
 def camera_scale_factors(cam, controls=None):
     """
     Return camera variable scale factors.
-    
+
     These represent the estimated change in each variable in a camera vector needed
     to displace the image coordinates of a feature by one pixel.
-    
+
     Arguments:
         cam (Camera): Camera object
         controls (list): Camera control (Points, Lines), used to estimate impact of

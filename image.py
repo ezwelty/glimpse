@@ -17,18 +17,18 @@ import matplotlib.pyplot
 class Camera(object):
     """
     A `Camera` converts between 3D world coordinates and 2D image coordinates.
-    
+
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
     All attributes are coerced to numpy arrays during initialization or when individually set.
     The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if these are both provided.
-    If `vector` is provided, all other arguments are ignored. 
-    
+    If `vector` is provided, all other arguments are ignored.
+
     Arguments:
         fmm (array_like): Focal length in millimeters [fx, fy]
         sensorsz (array_like): Sensor size in millimters [nx, ny]
         path (str): Path to JSON camera file (see `Camera.write()`).
             Takes precedence if not `None` (default).
-    
+
     Attributes:
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
         xyz (array): Position in world coordinates [x, y, z]
@@ -37,7 +37,7 @@ class Camera(object):
             - yaw: clockwise rotation about z-axis (0 = look north)
             - pitch: rotation from horizon (+ look up, - look down)
             - roll: rotation about optical axis (+ down right, - down left, from behind)
-        
+
         imgsz (array): Image size in pixels [nx, ny]
         f (array): Focal length in pixels [fx, fy]
         c (array): Principal point offset from center in pixels [dx, dy]
@@ -49,7 +49,7 @@ class Camera(object):
         distCoeffs (array): Distortion coefficients (k, p) in OpenCV format
         original_vector (array): Original value of `vector`
     """
-    
+
     def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
         fmm=None, sensorsz=None, vector=None, path=None):
         self.vector = np.full(20, np.nan, dtype=float)
@@ -74,65 +74,65 @@ class Camera(object):
             self.k = k
             self.p = p
         self.original_vector = self.vector
-    
+
     # ---- Properties (dependent) ----
-    
+
     @property
     def xyz(self):
         return self.vector[0:3]
-    
+
     @xyz.setter
     def xyz(self, value):
         self.vector[0:3] = _format_list(value, length=3, default=0)
-    
+
     @property
     def viewdir(self):
         return self.vector[3:6]
-    
+
     @viewdir.setter
     def viewdir(self, value):
         self.vector[3:6] = _format_list(value, length=3, default=0)
-    
+
     @property
     def imgsz(self):
         return self.vector[6:8]
-    
+
     @imgsz.setter
     def imgsz(self, value):
         self.vector[6:8] = _format_list(value, length=2)
-    
+
     @property
     def f(self):
         return self.vector[8:10]
-    
+
     @f.setter
     def f(self, value):
         self.vector[8:10] = _format_list(value, length=2)
-    
+
     @property
     def c(self):
         return self.vector[10:12]
-    
+
     @c.setter
     def c(self, value):
         self.vector[10:12] = _format_list(value, length=2, default=0)
-    
+
     @property
     def k(self):
         return self.vector[12:18]
-    
+
     @k.setter
     def k(self, value):
         self.vector[12:18] = _format_list(value, length=6, default=0)
-    
+
     @property
     def p(self):
         return self.vector[18:20]
-    
+
     @p.setter
     def p(self, value):
         self.vector[18:20] = _format_list(value, length=2, default=0)
-    
+
     @property
     def R(self):
         # Initial rotations of camera reference frame
@@ -156,7 +156,7 @@ class Camera(object):
             [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
             [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
         ])
-    
+
     @property
     def cameraMatrix(self):
         """
@@ -166,35 +166,35 @@ class Camera(object):
             [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
             [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
             [0, 0, 1]])
-    
+
     @property
     def distCoeffs(self):
         """
         OpenCV distortion coefficients.
         """
         return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
-    
+
     # ---- Methods (public) ----
-    
+
     def copy(self):
         """
         Return a copy.
-        
+
         The original state of the new object (`original_vector`)
         is set to the current state of the old object.
         """
         return Camera(vector=self.vector.copy())
-    
+
     def reset(self):
         """
         Reset to original state.
         """
         self.vector = self.original_vector.copy()
-    
+
     def write(self, path=None):
         """
         Write or return Camera as JSON.
-        
+
         Arguments:
             path (str): Path of file to write to.
                 if `None` (default), a JSON-formatted string is returned.
@@ -208,23 +208,23 @@ class Camera(object):
             return None
         else:
             return json_string
-    
+
     def idealize(self):
         """
         Set distortion to zero.
-        
+
         Radial distortion (`k`), tangential distortion (`p`), and principal point offset (`c`) are set to zero.
         """
         self.k = np.zeros(6, dtype=float)
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
-    
+
     def resize(self, scale):
         """
         Resize a camera by a scale factor.
-        
+
         Image size (`imgsz`), focal length (`f`), and principal point offset (`c`) are scaled accordingly.
-        
+
         Arguments:
             scale (scalar): Scale factor
         """
@@ -233,15 +233,15 @@ class Camera(object):
         self.imgsz *= scale
         self.f *= scale
         self.c *= scale
-    
+
     def project(self, xyz, directions=False):
         """
         Project world coordinates to image coordinates.
-        
+
         Arguments:
             xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
             directions (bool): Whether absolute coordinates (False) or ray directions (True)
-        
+
         Returns:
             array: Image coordinates (Nx2)
         """
@@ -251,27 +251,27 @@ class Camera(object):
             xy = xyz
         uv = self._camera2image(xy)
         return uv
-    
+
     def invproject(self, uv):
         """
         Project image coordinates to world ray directions.
-        
+
         Arguments:
             uv (array): Image coordinates (Nx2)
-        
+
         Returns:
             array: World ray directions relative to camera position (Nx3)
         """
         xy = self._image2camera(uv)
         xyz = self._camera2world(xy)
         return xyz
-    
+
     # ---- Methods (private) ----
-    
+
     def _infront(self, xyz, directions=False):
         """
         Test whether world coordinates are in front of the camera.
-        
+
         Arguments:
             xyz (array): World coordinates (Nx3)
             directions (bool): Whether `xyz` are absolute coordinates (`False`) or ray directions (`True`)
@@ -282,20 +282,20 @@ class Camera(object):
             dxyz = xyz - self.xyz
         z = np.dot(dxyz, self.R.T)[:, 2]
         return z > 0
-    
+
     def _inframe(self, uv):
         """
         Test whether image coordinates are in or on the image frame.
-        
+
         Arguments:
             uv (array) Image coordinates (Nx2)
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
-    
+
     def _radial_distortion(self, r2):
         """
         Compute the radial distortion multipler `dr`.
-        
+
         Arguments:
             r2 (array): Squared radius of camera coordinates (Nx1)
         """
@@ -306,11 +306,11 @@ class Camera(object):
         if any(self.k[3:6]):
             dr /= 1 + self.k[3] * r2 + self.k[4] * r2**2 + self.k[5] * r2**3
         return dr[:, None] # column
-    
+
     def _tangential_distortion(self, xy, r2):
         """
         Compute tangential distortion additive `[dtx, dty]`.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
             r2 (array): Squared radius of `xy` (Nx1)
@@ -321,11 +321,11 @@ class Camera(object):
         dtx = 2 * xty * self.p[0] + self.p[1] * (r2 + 2 * xy[:, 0]**2)
         dty = self.p[0] * (r2 + 2 * xy[:, 1]**2) + 2 * xty * self.p[1]
         return np.column_stack((dtx, dty))
-    
+
     def _distort(self, xy):
         """
         Apply distortion to camera coordinates.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
@@ -340,14 +340,14 @@ class Camera(object):
             if any(self.p):
                 dxy += self._tangential_distortion(xy, r2)
             return dxy
-    
+
     def _undistort(self, xy, method="oulu", **params):
         """
         Remove distortion from camera coordinates.
-        
+
         TODO: Quadtree 2-D bisection
         https://stackoverflow.com/questions/3513660/multivariate-bisection-method
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
@@ -362,14 +362,14 @@ class Camera(object):
             return self._undistort_oulu(xy, **params)
         elif method == "regulafalsi":
             return self._undistort_regulafalsi(xy, **params)
-    
+
     def _undistort_k1(self, xy):
         """
         Remove 1st order radial distortion.
-        
+
         Uses the closed-form solution to the cubic equation when
         the only non-zero distortion coefficient is k1 (self.k[0]).
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
@@ -392,18 +392,18 @@ class Camera(object):
           B = np.where(A == 0, 0, Q / A)
           r[has_one_root] = A + B
         return np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
-    
+
     def _undistort_lookup(self, xy, density=1):
         """
         Remove distortion by table lookup.
-        
+
         Creates a grid of test coordinates and applies distortion,
         then interpolates undistorted coordinates from the result
         with scipy.interpolate.LinearNDInterpolator().
-        
+
         NOTE: Remains stable in extreme distortion, but slow
         for large lookup tables.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
             density (float): Grid points per pixel (approximate)
@@ -431,15 +431,15 @@ class Camera(object):
         # Interpolate distortion removal from gridded results
         # NOTE: Cannot use faster grid interpolation because dxy is not regular
         return scipy.interpolate.griddata(dxy, uxy, xy, method="linear")
-    
+
     def _undistort_oulu(self, xy, iterations=20, tolerance=0):
         """
         Remove distortion by the iterative Oulu University method.
-        
+
         See http://www.vision.caltech.edu/bouguetj/calib_doc/ (comp_distortion_oulu.m)
-        
+
         NOTE: Converges very quickly in normal cases, but fails for extreme distortion.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
             iterations (int): Maximum number of iterations
@@ -458,15 +458,15 @@ class Camera(object):
             if tolerance > 0 and np.all((np.abs(self._distort(uxy) - xy)) < tolerance / self.f.mean()):
                 break
         return uxy
-    
+
     def _undistort_regulafalsi(self, xy, iterations=100, tolerance=0):
         """
         Remove distortion by iterative regula falsi (false position) method.
-        
+
         See https://en.wikipedia.org/wiki/False_position_method
-        
+
         NOTE: Almost always converges, but may require many iterations for extreme distortion.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
             iterations (int): Maximum number of iterations
@@ -506,14 +506,14 @@ class Camera(object):
             y2 = y3
         uxy[mask] = x2
         return uxy
-    
+
     def _reversible(self):
         """
         Test whether the camera model is reversible.
-        
+
         Checks whether distortion produces a monotonically increasing result.
         If not, distorted coordinates are non-unique and cannot be reversed.
-        
+
         TODO: Derive this explicitly from the distortion parameters.
         """
         xy_row = np.column_stack((
@@ -527,11 +527,11 @@ class Camera(object):
         dxy = self._distort(xy_col)
         continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
         return continuous_row and continuous_col
-    
+
     def _world2camera(self, xyz, directions=False):
         """
         Project world coordinates to camera coordinates.
-        
+
         Arguments:
             xyz (array): World coordinates (Nx3)
             directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
@@ -548,11 +548,11 @@ class Camera(object):
         behind = xyz_c[:, 2] <= 0
         xy[behind, :] = np.nan
         return xy
-    
+
     def _camera2world(self, xy):
         """
         Project camera coordinates to world ray directions.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
@@ -560,22 +560,22 @@ class Camera(object):
         xy_z = np.c_[xy, ones]
         dxyz = np.dot(xy_z, self.R)
         return dxyz
-    
+
     def _camera2image(self, xy):
         """
         Project camera to image coordinates.
-        
+
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
         xy = self._distort(xy)
         uv = xy * self.f + (self.imgsz / 2 + self.c)
         return uv
-    
+
     def _image2camera(self, uv):
         """
         Project image to camera coordinates.
-        
+
         Arguments:
             uv (array): Image coordinates (Nx2)
         """
@@ -591,7 +591,7 @@ class Exif(object):
         path (str): Path to image file.
             If `None` (default), an empty Exif object is returned.
         thumbnail (bool): Whether to retain the image thumbnail
-    
+
     Attributes:
         tags (dict): Image file metadata, as returned by piexif.load()
         size (array): Image size in pixels [nx, ny]
@@ -603,7 +603,7 @@ class Exif(object):
         make (str): Camera make
         model (str): Camera model
     """
-    
+
     def __init__(self, path=None, thumbnail=False):
         if path:
             self.tags = piexif.load(path, key_is_name=False)
@@ -614,7 +614,7 @@ class Exif(object):
         else:
             self.tags = {}
             self.size = None
-    
+
     @property
     def datetime(self):
         datetime_str = self.get_tag('DateTimeOriginal')
@@ -625,7 +625,7 @@ class Exif(object):
             return datetime.strptime(datetime_str + "." + subsec_str.zfill(6), "%Y:%m:%d %H:%M:%S.%f")
         else:
             return None
-    
+
     @property
     def shutter(self):
         tag = self.get_tag('ExposureTime')
@@ -633,7 +633,7 @@ class Exif(object):
             return float(tag[0]) / tag[1]
         else:
             return None
-    
+
     @property
     def aperture(self):
         tag = self.get_tag('FNumber')
@@ -641,7 +641,7 @@ class Exif(object):
             return float(tag[0]) / tag[1]
         else:
             return None
-    
+
     @property
     def iso(self):
         tag = self.get_tag('ISOSpeedRatings')
@@ -649,7 +649,7 @@ class Exif(object):
             return float(tag)
         else:
             return None
-    
+
     @property
     def fmm(self):
         tag = self.get_tag('FocalLength')
@@ -657,19 +657,19 @@ class Exif(object):
             return float(tag[0]) / tag[1]
         else:
             return None
-    
+
     @property
     def make(self):
         return self.get_tag('Make', group='Image')
-    
+
     @property
     def model(self):
         return self.get_tag('Model', group='Image')
-    
+
     def get_tag(self, tag, group='Exif'):
         """
         Return the value of a tag (or None if missing).
-        
+
         Arguments:
             tag (str): Tag name
             group (str): Group name ('Exif', 'Image', or 'GPS')
@@ -681,11 +681,11 @@ class Exif(object):
             return None
         else:
             return self.tags[group][code]
-    
+
     def set_tag(self, tag, value, group='Exif'):
         """
         Set the value of a tag, adding it if missing.
-        
+
         Arguments:
             tag (str): Tag name
             value (object): Tag value
@@ -697,13 +697,13 @@ class Exif(object):
         if not self.tags.has_key(group):
             self.tags[group] = {}
         self.tags[group][code] = value
-    
+
     def dump(self):
         """
         Return exif as bytes.
         """
         return piexif.dump(self.tags)
-    
+
     def copy(self):
         """
         Return a copy.
@@ -725,14 +725,14 @@ class Image(object):
             If `f` is missing, an attempt is made to specify both `fmm` and `sensorsz`.
             If `fmm` is missing, it is read from the metadata, and if `sensorsz` is missing,
             `get_sensor_size()` is called with `make` and `model` read from the metadata.
-    
+
     Attributes:
         path (str): Path to the image file
         exif (Exif): Image metadata object
         datetime (datetime): Capture date and time
         cam (Camera): Camera object
     """
-    
+
     def __init__(self, path, datetime=None, camera_args=None):
         self.path = path
         self.exif = Exif(path=path)
@@ -753,19 +753,19 @@ class Image(object):
                     camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
         self.cam = Camera(**camera_args)
         self.I = None
-    
+
     def copy(self):
         """
         Return a copy.
-        
+
         Copies camera, rereads exif from file, and does not copy cached image data (self.I).
         """
         return Image(path=self.path, camera_args=dict(vector=self.cam.vector.copy()))
-    
+
     def read(self):
         """
         Read image data from file.
-        
+
         If the camera image size (self.cam.imgsz) differs from the original image size (self.exif.size),
         the image is resized to fit the camera image size.
         The result is cached (`self.I`) and reused only if it matches the camera image size, or,
@@ -785,11 +785,11 @@ class Image(object):
                 im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
             self.I = np.array(im)
         return self.I
-    
+
     def write(self, path, I=None, **params):
         """
         Write image data to file.
-        
+
         Arguments:
             path (str): File or directory path to write to.
                 If the latter, the original basename is used.
@@ -821,13 +821,13 @@ class Image(object):
             else:
                 warnings.warn("Writing EXIF to non-JPEG file is not supported.")
                 im.save(path, **params)
-    
+
     def plot(self, origin='upper', extent=None, **params):
         """
         Plot image data.
-        
+
         By default, the image is plotted with the upper-left corner of the upper-left pixel at (0,0).
-        
+
         Arguments:
             origin (str): Place the [0, 0] index of the array in either the 'upper' left (default)
                 or 'lower' left corner of the axes.
@@ -839,11 +839,11 @@ class Image(object):
         if extent is None:
             extent=(0, I.shape[1], I.shape[0], 0)
         matplotlib.pyplot.imshow(I, origin=origin, extent=extent, **params)
-    
+
     def project(self, cam, method="linear"):
         """
         Project image into another `Camera`.
-        
+
         Arguments:
             cam (Camera): Target `Camera`
             method (str): Interpolation method, either "linear" or "nearest"
@@ -884,14 +884,14 @@ class Image(object):
 def get_sensor_size(make, model):
     """
     Get a camera model's CCD sensor width and height in mm.
-    
+
     Data is from Digital Photography Review (https://dpreview.com).
     See also https://www.dpreview.com/articles/8095816568/sensorsizes.
-    
+
     Arguments:
         make (str): Camera make (EXIF Make)
         model (str): Camera model (EXIF Model)
-        
+
     Return:
         list: Camera sensor width and height in mm
     """
@@ -915,7 +915,7 @@ def get_sensor_size(make, model):
 def fmm_to_fpx(fmm, sensorsz, imgsz):
     """
     Convert focal length in millimeters to pixels.
-    
+
     Arguments:
         fmm (array-like): Focal length in millimeters [fx, fy]
         sensorsz (array-like): Sensor size in millimeters [nx, ny]
@@ -925,11 +925,11 @@ def fmm_to_fpx(fmm, sensorsz, imgsz):
         _format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
         )
     return fmm * imgsz / sensorsz
-    
+
 def fpx_to_fmm(fpx, sensorsz, imgsz):
     """
     Convert focal length in pixels to millimeters.
-    
+
     Arguments:
         fpx (array-like): Focal length in pixels [fx, fy]
         sensorsz (array-like): Sensor size in millimeters [nx, ny]
@@ -945,7 +945,7 @@ def fpx_to_fmm(fpx, sensorsz, imgsz):
 def _format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
     """
     Format a list-like object.
-    
+
     Arguments:
         obj (object): Object
         length (int): Output object length

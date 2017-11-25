@@ -135,7 +135,7 @@ def test_image_read():
 # ---- DEM ----
 
 def test_dem_defaults():
-    Z = np.zeros([3, 3])    
+    Z = np.zeros([3, 3])
     dem = DEM.DEM(Z)
     assert np.array_equal(dem.xlim, np.array([0., 3.]))
     assert np.array_equal(dem.ylim, np.array([3., 0.]))
@@ -190,7 +190,7 @@ def test_dem_sample(tol=1e-13):
     x_transect = np.arange(0, 3.5, 0.5)
     dz_transect = dem.sample_grid(x_transect, 0).flatten() - x_transect
     assert np.all(dz_transect < tol)
-        
+
 def test_dem_crop_ascending():
     Z = np.arange(1, 10, 1).reshape([3, 3])
     dem = DEM.DEM(Z, [0, 3], [0, 3])
@@ -226,7 +226,7 @@ def test_dem_crop_ascending():
     assert np.array_equiv(cdem.xlim, [1, 2])
     assert np.array_equiv(cdem.ylim, [1, 2])
     assert np.array_equiv(cdem.Z, Z[1:2, 1:2])
-    
+
 def test_dem_crop_descending():
     Z = np.arange(1, 10, 1).reshape([3, 3])
     dem = DEM.DEM(Z, [3, 0], [3, 0])

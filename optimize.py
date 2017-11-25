@@ -614,9 +614,28 @@ class Cameras(object):
             index (array or slice): Indices of points to include, or all if `None`
         """
         # TODO: Skip square root for speed?
-        return np.linalg.norm(self.predicted(params=params, index=index) - self.observed(index=index), axis=1)
+        return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
     
-    def fit(self, index=None):
+    def criterions(self, params=None, index=None):
+        """
+        Return values of common model selection criterions.
+        """
+        n = float(len(self.observed(index=index)))
+        residuals = self.residuals(params=params, index=index)
+        rss = np.sum(np.sum(residuals**2, axis=1))
+        k = float(len(params))
+        # Camera model selection
+        # http://imaging.utk.edu/publications/papers/2007/ICIP07_vo.pdf
+        # https://en.wikipedia.org/wiki/Akaike_information_criterion
+        result = dict()
+        base = n * np.log(rss / n)
+        result['aic'] = base + 2 * k
+        result['caic'] = base + k * (np.log(n) + 1)
+        result['bic'] = base + 2 * k * np.log(n)
+        result['mdl'] = base + 1 / (2 * k * np.log(n))
+        return result
+    
+    def fit(self, index=None, cam_params=None, group_params=None):
         """
         Return optimal camera parameter values.
         
@@ -625,13 +644,34 @@ class Cameras(object):
         
         Arguments:
             index (array or slice): Indices of points to include, or all if `None`
+            cam_params (list): Sequence of independent camera properties to fit (see `Cameras`)
+                iteratively before final run. Must be `None` or same length as `group_params`.
+            group_params (list): Sequence of group camera properties to fit (see `Cameras`)
+                iteratively before final run. Must be `None` or same length as `cam_params`.
         
         Returns:
             array: Parameter values [group | cam0 | cam1 | ...]
         """
+        iterations = max(
+            len(cam_params) if cam_params else 0,
+            len(group_params) if group_params else 0)
+        if iterations:
+            original_cam_params = [camera_params(mask) for mask in self.cam_masks]
+            original_group_params =  camera_params(self.group_mask)
+            for n in range(iterations):
+                cam_param = cam_params[n] if cam_params else original_cam_params
+                group_param = group_params[n] if group_params else original_group_params
+                options = self.options.copy()
+                options.pop('diag', None)
+                model = Cameras(self.cams, self.controls, cam_param, group_param, tol=self.tol, options=options)
+                values = model.fit(index=index)
+                if values is not None:
+                    model.soft_update_cameras(params=values)
         initial_params = sample_cameras(self.cams, self.cam_masks, self.group_mask)
         result = scipy.optimize.root(self.residuals, initial_params, args=(index, True),
             method='lm', tol=self.tol, options=self.options)
+        if iterations:
+            self.reset_cameras()
         if result['success']:
             return result['x']
         else:
@@ -788,7 +828,7 @@ def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
         A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
         B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
         controls.append(Matches((images[i].cam, images[i + 1].cam), (A, B)))
-    return controls    
+    return controls
 
 def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
     """
@@ -872,12 +912,14 @@ def find_nearest_neighbors(A, B):
     D = scipy.spatial.distance.cdist(A, B, metric='sqeuclidean')
     return np.argmin(D, axis=1)
 
-def camera_mask(params={}):
+def camera_mask(params=None):
     """
     Return a boolean mask of the selected camera parameters.
     
     The returned boolean array is intended to be used for setting or getting a subset of the
     image.Camera.vector, which is a flat vector of all Camera attributes [xyz, viewdir, imgsz, f, c, k, p].
+    
+    See `camera_params` for the reverse operation.
     
     Arguments:
         params (dict): Parameters to select by name and indices. For example:
@@ -886,6 +928,8 @@ def camera_mask(params={}):
                 - {'viewdir': 0} : First `viewdir` element
                 - {'viewdir': [0, 1]} : First and second `viewdir` elements
     """
+    if params is None:
+        params = dict()
     names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
     indices = [0, 3, 6, 8, 10, 12, 18, 20]
     selected = np.zeros(20, dtype = bool)
@@ -898,6 +942,29 @@ def camera_mask(params={}):
                 value = np.array(value)
                 selected[indices[start] + value] = True
     return selected
+
+def camera_params(mask=None):
+    """
+    Return a dictionary of selected camera parameters.
+    
+    See `camera_mask` for the reverse operation (and more info).
+    
+    Arguments:
+        mask (array): Boolean array of selected camera parameters
+    """
+    names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+    indices = [0, 3, 6, 8, 10, 12, 18, 20]
+    params = dict()
+    for i_name in range(len(names)):
+        start = indices[i_name]
+        stop = indices[i_name + 1]
+        idx = np.where(mask[start:stop])[0].tolist()
+        if idx:
+            if len(idx) == stop - start:
+                params[names[i_name]] = True
+            else:
+                params[names[i_name]] = idx
+    return params
 
 def update_cameras(cams, values, cam_masks, group_mask=camera_mask()):
     """

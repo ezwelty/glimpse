@@ -13,7 +13,6 @@ if sys.platform == "darwin":
     import matplotlib
     matplotlib.use('TkAgg')
 import matplotlib.pyplot
-import cv2
 
 class Camera(object):
     """
@@ -363,8 +362,6 @@ class Camera(object):
             return self._undistort_oulu(xy, **params)
         elif method == "regulafalsi":
             return self._undistort_regulafalsi(xy, **params)
-        elif method == "opencv":
-            return self._undistort_opencv(xy, **params)
     
     def _undistort_k1(self, xy):
         """

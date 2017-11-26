@@ -96,7 +96,7 @@ class Camera(object):
 
     @xyz.setter
     def xyz(self, value):
-        self.vector[0:3] = _format_list(value, length=3, default=0)
+        self.vector[0:3] = helper.format_list(value, length=3, default=0)
 
     @property
     def viewdir(self):
@@ -104,7 +104,7 @@ class Camera(object):
 
     @viewdir.setter
     def viewdir(self, value):
-        self.vector[3:6] = _format_list(value, length=3, default=0)
+        self.vector[3:6] = helper.format_list(value, length=3, default=0)
 
     @property
     def imgsz(self):
@@ -112,7 +112,7 @@ class Camera(object):
 
     @imgsz.setter
     def imgsz(self, value):
-        self.vector[6:8] = _format_list(value, length=2)
+        self.vector[6:8] = helper.format_list(value, length=2)
 
     @property
     def f(self):
@@ -120,7 +120,7 @@ class Camera(object):
 
     @f.setter
     def f(self, value):
-        self.vector[8:10] = _format_list(value, length=2)
+        self.vector[8:10] = helper.format_list(value, length=2)
 
     @property
     def c(self):
@@ -128,7 +128,7 @@ class Camera(object):
 
     @c.setter
     def c(self, value):
-        self.vector[10:12] = _format_list(value, length=2, default=0)
+        self.vector[10:12] = helper.format_list(value, length=2, default=0)
 
     @property
     def k(self):
@@ -136,7 +136,7 @@ class Camera(object):
 
     @k.setter
     def k(self, value):
-        self.vector[12:18] = _format_list(value, length=6, default=0)
+        self.vector[12:18] = helper.format_list(value, length=6, default=0)
 
     @property
     def p(self):
@@ -144,7 +144,7 @@ class Camera(object):
 
     @p.setter
     def p(self, value):
-        self.vector[18:20] = _format_list(value, length=2, default=0)
+        self.vector[18:20] = helper.format_list(value, length=2, default=0)
 
     @property
     def sensorsz(self):
@@ -155,7 +155,7 @@ class Camera(object):
 
     @sensorsz.setter
     def sensorsz(self, value):
-        self._sensorsz = _format_list(value, length=2)
+        self._sensorsz = helper.format_list(value, length=2)
 
     @property
     def fmm(self):
@@ -247,7 +247,7 @@ class Camera(object):
             imgsz (array-like): Image size in pixels [nx, ny]
         """
         fmm, sensorsz, imgsz = (
-            _format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
+            helper.format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
             )
         return fmm * imgsz / sensorsz
 
@@ -262,7 +262,7 @@ class Camera(object):
             imgsz (array-like): Image size in pixels [nx, ny]
         """
         fpx, sensorsz, imgsz = (
-            _format_list(i, length=2) for i in (fpx, sensorsz, imgsz)
+            helper.format_list(i, length=2) for i in (fpx, sensorsz, imgsz)
             )
         return fpx * sensorsz / imgsz
 
@@ -970,39 +970,3 @@ class Image(object):
             f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
             pI[:, :, i] = f(pvu).reshape(pI.shape[0:2])
         return pI
-
-# ---- Static methods (private) ----
-
-def _format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
-    """
-    Format a list-like object.
-
-    Arguments:
-        obj (object): Object
-        length (int): Output object length
-        default (scalar): Default element value.
-            If `None`, `obj` is repeated to achieve length `length`.
-        dtype (type): Data type to coerce list elements to.
-            If `None`, data is left as-is.
-        ltype (type): List type to coerce object to.
-    """
-    if obj is None:
-        return obj
-    try:
-        obj = list(obj)
-    except TypeError:
-        obj = [obj]
-    if len(obj) < length:
-        if default is not None:
-            # Fill remaining slots with 0
-            obj.extend([default] * (length - len(obj)))
-        else:
-            # Repeat list
-            if len(obj) > 0:
-                assert length % len(obj) == 0
-                obj *= length / len(obj)
-    if dtype:
-        obj = [dtype(i) for i in obj[0:length]]
-    if ltype:
-        obj = ltype(obj)
-    return obj

@@ -1117,7 +1117,7 @@ def build_lmfit_params(cams, cam_params=None, group_params=None):
             cam.vector[group_mask] = group_values
     return params, apply_params
 
-def model_criteria(self, fit):
+def model_criteria(fit):
     """
     Return values of common model selection criteria.
 
@@ -1138,9 +1138,10 @@ def model_criteria(self, fit):
     n = fit.ndata
     k = fit.nvarys
     base = n * np.log(fit.chisqr / n)
-    result['aic'] = base + 2 * k
-    result['caic'] = base + k * (np.log(n) + 1)
-    result['bic'] = base + 2 * k * np.log(n)
-    result['ssd'] = base + k * np.log((n + 2) / 24) + np.log(k + 1)
-    result['mdl'] = base + 1 / (2 * k * np.log(n))
-    return result
+    return dict(
+        aic = base + 2 * k,
+        caic = base + k * (np.log(n) + 1),
+        bic = base + 2 * k * np.log(n),
+        ssd = base + k * np.log((n + 2) / 24) + np.log(k + 1),
+        mdl = base + 1 / (2 * k * np.log(n))
+    )

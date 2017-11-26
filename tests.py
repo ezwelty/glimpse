@@ -7,8 +7,6 @@ import image
 import optimize
 import dem as DEM
 import svg
-# HACK: Needed for pytest from command line (?)
-reload(svg)
 
 # ---- Camera ----
 

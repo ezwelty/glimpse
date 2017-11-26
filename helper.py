@@ -1,6 +1,5 @@
 import numpy as np
 import cPickle
-import json
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -67,3 +66,37 @@ def merge_dicts(*args):
     for d in args:
         merge.update(d)
     return merge
+
+def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
+    """
+    Format a list-like object.
+
+    Arguments:
+        obj (object): Object
+        length (int): Output object length
+        default (scalar): Default element value.
+            If `None`, `obj` is repeated to achieve length `length`.
+        dtype (type): Data type to coerce list elements to.
+            If `None`, data is left as-is.
+        ltype (type): List type to coerce object to.
+    """
+    if obj is None:
+        return obj
+    try:
+        obj = list(obj)
+    except TypeError:
+        obj = [obj]
+    if len(obj) < length:
+        if default is not None:
+            # Fill remaining slots with 0
+            obj.extend([default] * (length - len(obj)))
+        else:
+            # Repeat list
+            if len(obj) > 0:
+                assert length % len(obj) == 0
+                obj *= length / len(obj)
+    if dtype:
+        obj = [dtype(i) for i in obj[0:length]]
+    if ltype:
+        obj = ltype(obj)
+    return obj

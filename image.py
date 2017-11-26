@@ -21,8 +21,10 @@ class Camera(object):
 
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
     All attributes are coerced to numpy arrays during initialization or when individually set.
-    The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if these are both provided.
-    If `vector` is provided, all arguments are ignored, except `sensorsz` is saved for later retrieval of `fmm`.
+    The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if both are provided.
+    The principal point offset in pixels (`c`) is calculated from `cmm` and `sensorsz` if both are provided.
+    If `vector` is provided, all arguments are ignored except `sensorsz`,
+    which is saved for later calculation of `fmm` and `cmm`.
 
     Attributes:
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
@@ -40,6 +42,7 @@ class Camera(object):
         p (array): Tangential distortion coefficients [p1, p2]
         sensorsz (array_like): Sensor size in millimters [nx, ny]
         fmm (array_like): Focal length in millimeters [fx, fy]
+        cmm (array_like): Principal point offset from center in millimiters [dx, dy]
         R (array): Rotation matrix equivalent of `viewdir`.
             Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
         cameraMatrix (array): Camera matrix in OpenCV format
@@ -48,23 +51,26 @@ class Camera(object):
     """
 
     def __init__(self, vector=None, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
-        sensorsz=None, fmm=None):
+        sensorsz=None, fmm=None, cmm=None):
         self.vector = np.full(20, np.nan, dtype=float)
+        self.sensorsz = sensorsz
         if vector is not None:
             self.vector = np.asarray(vector, dtype=float)[0:20]
         else:
             self.xyz = xyz
             self.viewdir = viewdir
             self.imgsz = imgsz
-            if fmm and sensorsz:
-                self.f = Camera.fmm_to_fpx(fmm, sensorsz, imgsz)
+            if sensorsz is not None and fmm is not None:
+                self.f = helper.format_list(fmm, length=2) * self.imgsz / self.sensorsz
             else:
                 self.f = f
-            self.c = c
+            if sensorsz is not None and cmm is not None:
+                self.c = helper.format_list(cmm, length=2) * self.imgsz / self.sensorsz
+            else:
+                self.c = c
             self.k = k
             self.p = p
-        self.original_vector = self.vector
-        self.sensorsz = sensorsz
+        self.original_vector = self.vector.copy()
 
     @classmethod
     def read(cls, path, **kwargs):
@@ -159,7 +165,11 @@ class Camera(object):
 
     @property
     def fmm(self):
-        return Camera.fpx_to_fmm(self.f, self.sensorsz, self.imgsz)
+        return self.f * self.sensorsz / self.imgsz
+
+    @property
+    def cmm(self):
+        return self.c * self.sensorsz / self.imgsz
 
     @property
     def R(self):
@@ -236,36 +246,6 @@ class Camera(object):
         else:
             raise KeyError("No sensor size found for: " + make_model)
 
-    @staticmethod
-    def fmm_to_fpx(fmm, sensorsz, imgsz):
-        """
-        Convert focal length in millimeters to pixels.
-
-        Arguments:
-            fmm (array-like): Focal length in millimeters [fx, fy]
-            sensorsz (array-like): Sensor size in millimeters [nx, ny]
-            imgsz (array-like): Image size in pixels [nx, ny]
-        """
-        fmm, sensorsz, imgsz = (
-            helper.format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
-            )
-        return fmm * imgsz / sensorsz
-
-    @staticmethod
-    def fpx_to_fmm(fpx, sensorsz, imgsz):
-        """
-        Convert focal length in pixels to millimeters.
-
-        Arguments:
-            fpx (array-like): Focal length in pixels [fx, fy]
-            sensorsz (array-like): Sensor size in millimeters [nx, ny]
-            imgsz (array-like): Image size in pixels [nx, ny]
-        """
-        fpx, sensorsz, imgsz = (
-            helper.format_list(i, length=2) for i in (fpx, sensorsz, imgsz)
-            )
-        return fpx * sensorsz / imgsz
-
     # ---- Methods (public) ----
 
     def copy(self):
@@ -283,15 +263,19 @@ class Camera(object):
         """
         self.vector = self.original_vector.copy()
 
-    def write(self, path=None):
+    def write(self, path=None, attributes=None):
         """
         Write or return Camera as JSON.
 
         Arguments:
             path (str): Path of file to write to.
-                if `None` (default), a JSON-formatted string is returned.
+                If `None` (default), a JSON-formatted string is returned.
+            attributes (list): Camera attributes to include.
+                If `None` (default), all arguments to `Camera()` are included
+                other than `self` and `vector`.
         """
-        attributes=['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p', 'sensorsz']
+        if attributes is None:
+            attributes = Camera.__init__.__code__.co_varnames[2:]
         lines = ['    "' + name + '": ' + str(list(getattr(self, name))).replace("nan", "null") for name in attributes]
         json_string = "{\n" + ",\n".join(lines) + "\n}"
         if path:

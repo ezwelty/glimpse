@@ -74,6 +74,7 @@ class Camera(object):
             self.k = k
             self.p = p
         self.original_vector = self.vector
+        self.sensorsz = sensorsz
 
     # ---- Properties (dependent) ----
 
@@ -132,6 +133,18 @@ class Camera(object):
     @p.setter
     def p(self, value):
         self.vector[18:20] = _format_list(value, length=2, default=0)
+
+    @property
+    def sensorsz(self):
+        return self._sensorsz
+
+    @sensorsz.setter
+    def sensorsz(self, value):
+        self._sensorsz = _format_list(value, length=2)
+
+    @property
+    def fmm(self):
+        return fpx_to_fmm(self.f, self.sensorsz, self.imgsz)
 
     @property
     def R(self):

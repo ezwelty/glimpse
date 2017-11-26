@@ -22,11 +22,7 @@ class Camera(object):
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
     All attributes are coerced to numpy arrays during initialization or when individually set.
     The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if these are both provided.
-    If `vector` is provided, all other arguments are ignored.
-
-    Arguments:
-        fmm (array_like): Focal length in millimeters [fx, fy]
-        sensorsz (array_like): Sensor size in millimters [nx, ny]
+    If `vector` is provided, all arguments are ignored, except `sensorsz` is saved for later retrieval of `fmm`.
 
     Attributes:
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
@@ -42,6 +38,8 @@ class Camera(object):
         c (array): Principal point offset from center in pixels [dx, dy]
         k (array): Radial distortion coefficients [k1, ..., k6]
         p (array): Tangential distortion coefficients [p1, p2]
+        sensorsz (array_like): Sensor size in millimters [nx, ny]
+        fmm (array_like): Focal length in millimeters [fx, fy]
         R (array): Rotation matrix equivalent of `viewdir`.
             Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
         cameraMatrix (array): Camera matrix in OpenCV format

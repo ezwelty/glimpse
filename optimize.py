@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.optimize
 import scipy.spatial
 # HACK: See https://stackoverflow.com/questions/21784641/installation-issue-with-matplotlib-python#comment56913201_21789908
 import sys
@@ -8,17 +7,14 @@ if sys.platform == "darwin":
     matplotlib.use('TkAgg')
 import matplotlib.pyplot
 import cv2
+import lmfit
 
 # ---- Controls ----
 
-# Points and Matches support RANSAC with the following API:
+# Controls (within Cameras) support RANSAC with the following API:
 # .size()
 # .observed(index)
 # .predicted(index)
-
-# Lines do not support RANSAC, providing only:
-# .observed()
-# .predicted()
 
 class Points(object):
     """
@@ -359,12 +355,10 @@ class Matches(object):
 
 # ---- Models ----
 
-# Polynomial and Cameras support RANSAC with the following API:
+# Models support RANSAC with the following API:
 # .data_size()
 # .fit(index)
 # .errors(params, index)
-
-# However, Cameras only supports RANSAC if 1-2 cameras and 1 Points or Matches control.
 
 class Polynomial(object):
     """
@@ -459,85 +453,79 @@ class Cameras(object):
     and computation will be slow since errors are calculated for all points then subset.
 
     Arguments:
-        cam_params (dict or list): Parameters to optimize seperately for each camera. For example:
-
-                - {'viewdir': True} : All `viewdir` elements
-                - {'viewdir': 0} : First `viewdir` element
-                - {'viewdir': [0, 1]} : First and second `viewdir` elements
-
-        group_params (dict): Parameters to optimize for all cameras (see `cam_params`)
+        cam_params (list): Parameters to optimize for each camera seperately (see `parse_params()`)
+        group_params (dict): Parameters to optimize for all cameras (see `parse_params()`)
+        nan_policy (str): Action taken by `lmfit.Minimizer` for NaN values
+            (https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer)
 
     Attributes:
         cams (list): Camera objects
         controls (list): Camera control (Points, Lines, and Matches objects)
         vectors (list): Original camera vectors (for resetting camera parameters)
-        cam_masks (list): Boolean camera masks computed from `cam_params`
-        group_mask (array): Boolean camera mask computed from `group_params`
-        tol (float): Tolerance for termination (see scipy.optimize.root)
-        options (dict): Solver options (see scipy.optimize.root)
+        params (`lmfit.Parameters`): Parameter initial values and bounds
+        options (dict): Additional arguments passed to `lmfit.Minimizer`
     """
 
-    def __init__(self, cams, controls, cam_params={'viewdir': True}, group_params={}, tol=None, options=None):
+    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), nan_policy="omit", **options):
         self.cams = cams if isinstance(cams, list) else [cams]
         self.vectors = [cam.vector.copy() for cam in self.cams]
-        # Drop controls which don't include a listed camera
         controls = controls if isinstance(controls, list) else [controls]
         self.controls = prune_controls(self.cams, controls)
-        # Check inputs
-        cam_params = cam_params if isinstance(cam_params, list) else [cam_params]
-        test_camera_options(self.cams, self.controls, cam_params, group_params)
-        # Precompute vector masks
-        self.cam_masks = [camera_mask(params) for cam, params in zip(self.cams, cam_params)]
-        self.group_mask = camera_mask(group_params)
-        # Optimization settings
-        self.tol = tol
-        if options is None:
-            options = dict()
-        if not options.has_key('diag'):
+        self.cam_params = cam_params if isinstance(cam_params, list) else [cam_params]
+        self.group_params = group_params
+        test_cameras(self)
+        temp = [parse_params(params) for params in self.cam_params]
+        self.cam_masks = [x[0] for x in temp]
+        self.cam_bounds = [x[1] for x in temp]
+        self.group_mask, self.group_bounds = parse_params(self.group_params)
+        # TODO: Avoid computing masks and bounds twice
+        self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, group_params)
+        self.options = options
+        self.options['nan_policy'] = nan_policy
+        if not self.options.has_key('diag'):
             # Compute optimal variable scale factors
             scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
             # TODO: Weigh each camera by number of control points
             group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
             cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
-            options['diag'] = np.hstack((group_scale, cam_scales))
-        self.options = options
+            self.options['diag'] = np.hstack((group_scale, cam_scales))
 
-    def soft_update_cameras(self, params):
+    def set_cameras(self, params):
         """
-        Set camera parameters without updating baseline values.
+        Set camera parameter values.
 
-        Original camera vectors (`self.vectors`) are unchanged so the operation can be reversed
-        with `self.reset_cameras()`.
+        Saved camera vectors (`.vectors`) are unchanged.
+        The operation can be reversed with `.reset_cameras()`.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...]
+            params (array or `lmfit.Parameters`): Parameter values ordered first
+                by group or camera [group | cam0 | cam1 | ...],
+                then ordered by position in `Camera.vector`.
         """
-        update_cameras(self.cams, values=params, cam_masks=self.cam_masks, group_mask=self.group_mask)
+        self.apply_params(params)
 
-    def update_cameras(self, params):
+    def reset_cameras(self, vectors=None, save=False):
         """
-        Set camera parameters and update baseline values.
-
-        Original camera vectors (`self.vectors`) are updated so that `self.reset_cameras()` resets
-        the cameras to these new values.
+        Reset camera parameters to their saved values.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...]
-        """
-        self.soft_update_cameras(params)
-        self.vectors = [cam.vector.copy() for cam in self.cams]
-
-    def reset_cameras(self, vectors=None):
-        """
-        Set camera parameters to their baseline values.
-
-        Arguments:
-            vectors (list): Camera vectors. If `None` (default), `self.vectors` is used.
+            vectors (list): Camera vectors.
+                If `None` (default), the saved vectors are used (`.vectors`).
+            save (bool): Whether to save `vectors` as new defaults.
         """
         if vectors is None:
             vectors = self.vectors
+        else:
+            if save:
+                self.vectors = vectors
         for cam, vector in zip(self.cams, vectors):
             cam.vector = vector.copy()
+
+    def update_params(self):
+        """
+        Update parameter bounds and initial values from current state of cameras.
+        """
+        self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, self.group_params)
 
     def data_size(self):
         """
@@ -569,12 +557,12 @@ class Cameras(object):
         See control `predicted()` method for more details.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...]
+            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
             index (array or slice): Indices of points to return, or all if `None` (default)
         """
         if params is not None:
             vectors = [cam.vector.copy() for cam in self.cams]
-            self.soft_update_cameras(params)
+            self.set_cameras(params)
         if len(self.controls) == 1:
             result = self.controls[0].predicted(index=index)
         else:
@@ -586,97 +574,80 @@ class Cameras(object):
             self.reset_cameras(vectors)
         return result
 
-    def residuals(self, params=None, index=None, flatten=False):
+    def residuals(self, params=None, index=None):
         """
         Return the reprojection residuals for all camera control.
 
-        Residuals are computed as `self.predicted()` - `self.observed()`.
+        Residuals are the difference between `.predicted()` and `.observed()`.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...]
+            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
             index (array_like or slice): Indices of points to include, or all if `None`
-            flatten (bool): Whether to flatten residuals to 1-D array
         """
-        result = self.predicted(params=params, index=index) - self.observed(index=index)
-        if flatten:
-            return result.flatten()
-        else:
-            return result
-    
+        return self.predicted(params=params, index=index) - self.observed(index=index)
+
     def errors(self, params=None, index=None):
         """
         Return the reprojection errors for all camera control.
 
-        Errors are computed as the distance between `self.predicted()` and `self.observed()`.
+        Errors are the Euclidean distance between `.predicted()` and `.observed()`.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...]
+            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
             index (array or slice): Indices of points to include, or all if `None`
         """
-        # TODO: Skip square root for speed?
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
 
-    def criterions(self, params=None, index=None):
-        """
-        Return values of common model selection criterions.
-        """
-        n = float(len(self.observed(index=index)))
-        residuals = self.residuals(params=params, index=index)
-        rss = np.sum(np.sum(residuals**2, axis=1))
-        k = float(len(params))
-        # Camera model selection
-        # http://imaging.utk.edu/publications/papers/2007/ICIP07_vo.pdf
-        # https://en.wikipedia.org/wiki/Akaike_information_criterion
-        result = dict()
-        base = n * np.log(rss / n)
-        result['aic'] = base + 2 * k
-        result['caic'] = base + k * (np.log(n) + 1)
-        result['bic'] = base + 2 * k * np.log(n)
-        result['mdl'] = base + 1 / (2 * k * np.log(n))
-        return result
-
-    def fit(self, index=None, cam_params=None, group_params=None):
+    def fit(self, index=None, cam_params=None, group_params=None, full=False):
         """
         Return optimal camera parameter values.
 
         The Levenberg-Marquardt algorithm is used to find the camera parameter values
-        that minimize the reprojection residuals (`self.residuals()`) across all control.
+        that minimize the reprojection residuals (`.residuals()`) across all control.
+        See `lmfit.minimize()` (https://lmfit.github.io/lmfit-py/fitting.html).
+
+        Unless `.update_params()` is called first, `.fit()` will use the
+        parameter bounds and initial values computed initially.
 
         Arguments:
-            index (array or slice): Indices of points to include, or all if `None`
+            index (array or slice): Indices of residuals to include, or all if `None`
             cam_params (list): Sequence of independent camera properties to fit (see `Cameras`)
                 iteratively before final run. Must be `None` or same length as `group_params`.
             group_params (list): Sequence of group camera properties to fit (see `Cameras`)
                 iteratively before final run. Must be `None` or same length as `cam_params`.
+            full (bool): Whether to return the full result of `lmfit.Minimize()`
 
         Returns:
-            array: Parameter values [group | cam0 | cam1 | ...]
+            array or `lmfit.Parameters` (`full=True`): Parameter values ordered first
+                by group or camera (group, cam0, cam1, ...),
+                then ordered by position in `Camera.vector`.
         """
         iterations = max(
             len(cam_params) if cam_params else 0,
             len(group_params) if group_params else 0)
         if iterations:
-            original_cam_params = [camera_params(mask) for mask in self.cam_masks]
-            original_group_params =  camera_params(self.group_mask)
             for n in range(iterations):
-                cam_param = cam_params[n] if cam_params else original_cam_params
-                group_param = group_params[n] if group_params else original_group_params
+                iter_cam_params = cam_params[n] if cam_params else self.cam_params
+                iter_group_params = group_params[n] if group_params else self.group_params
                 options = self.options.copy()
                 options.pop('diag', None)
-                model = Cameras(self.cams, self.controls, cam_param, group_param, tol=self.tol, options=options)
+                model = Cameras(self.cams, self.controls, iter_cam_params, iter_group_params, **options)
                 values = model.fit(index=index)
                 if values is not None:
-                    model.soft_update_cameras(params=values)
-        initial_params = sample_cameras(self.cams, self.cam_masks, self.group_mask)
-        result = scipy.optimize.root(self.residuals, initial_params, args=(index, True),
-            method='lm', tol=self.tol, options=self.options)
+                    model.set_cameras(params=values)
+            self.update_params()
+        minimizer = lmfit.Minimizer(self.residuals, self.params, fcn_kws=dict(index=index), **self.options)
+        result = minimizer.leastsq()
+        values = np.array(result.params.valuesdict().values())
         if iterations:
             self.reset_cameras()
-        if result['success']:
-            return result['x']
-        else:
-            print result['message']
-            return None
+            self.update_params()
+        if not result.success:
+            print result.message
+        if full:
+            return result
+        elif result.success:
+            return np.array(result.params.valuesdict().values())
 
     def plot(self, params=None, cam=0, index=None, scale=1, selected="red", unselected=None,
         lines_observed="green", lines_predicted="yellow", **quiver_args):
@@ -700,7 +671,7 @@ class Cameras(object):
         """
         if params is not None:
             vectors = [camera.vector.copy() for camera in self.cams]
-            self.soft_update_cameras(params)
+            self.set_cameras(params)
         cam = self.cams[cam] if isinstance(cam, int) else cam
         cam_controls = prune_controls([cam], self.controls)
         if index is not None and len(self.control) > 1:
@@ -912,96 +883,6 @@ def find_nearest_neighbors(A, B):
     D = scipy.spatial.distance.cdist(A, B, metric='sqeuclidean')
     return np.argmin(D, axis=1)
 
-def camera_mask(params=None):
-    """
-    Return a boolean mask of the selected camera parameters.
-
-    The returned boolean array is intended to be used for setting or getting a subset of the
-    image.Camera.vector, which is a flat vector of all Camera attributes [xyz, viewdir, imgsz, f, c, k, p].
-
-    See `camera_params` for the reverse operation.
-
-    Arguments:
-        params (dict): Parameters to select by name and indices. For example:
-
-                - {'viewdir': True} : All `viewdir` elements
-                - {'viewdir': 0} : First `viewdir` element
-                - {'viewdir': [0, 1]} : First and second `viewdir` elements
-    """
-    if params is None:
-        params = dict()
-    names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
-    indices = [0, 3, 6, 8, 10, 12, 18, 20]
-    selected = np.zeros(20, dtype = bool)
-    for name, value in params.items():
-        if (value or value == 0) and name in names:
-            start = names.index(name)
-            if value is True:
-                selected[indices[start]:indices[start + 1]] = True
-            else:
-                value = np.array(value)
-                selected[indices[start] + value] = True
-    return selected
-
-def camera_params(mask=None):
-    """
-    Return a dictionary of selected camera parameters.
-
-    See `camera_mask` for the reverse operation (and more info).
-
-    Arguments:
-        mask (array): Boolean array of selected camera parameters
-    """
-    names = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
-    indices = [0, 3, 6, 8, 10, 12, 18, 20]
-    params = dict()
-    for i_name in range(len(names)):
-        start = indices[i_name]
-        stop = indices[i_name + 1]
-        idx = np.where(mask[start:stop])[0].tolist()
-        if idx:
-            if len(idx) == stop - start:
-                params[names[i_name]] = True
-            else:
-                params[names[i_name]] = idx
-    return params
-
-def update_cameras(cams, values, cam_masks, group_mask=camera_mask()):
-    """
-    Set camera parameters for multiple cameras.
-
-    Arguments:
-        cams (list): Camera objects
-        values (array): Parameter values [group | cam0 | cam1 | ... ]
-        cam_masks (list): Masks of parameters to set for each camera
-        group_mask (array): Mask of parameters to set for all cameras
-    """
-    n_group = group_mask.sum()
-    group_values = values[0:n_group]
-    n_cams = [mask.sum() for mask in cam_masks]
-    cam_breaks = np.cumsum([n_group] + n_cams)
-    for i in range(len(cams)):
-        cams[i].vector[cam_masks[i]] = values[cam_breaks[i]:cam_breaks[i + 1]]
-        cams[i].vector[group_mask] = group_values
-
-def sample_cameras(cams, cam_masks, group_mask=camera_mask()):
-    """
-    Get camera parameters for multiple cameras.
-
-    Group parameters (`group_mask`) are returned from the first camera.
-
-    Arguments:
-        cams (list): Camera objects
-        cam_masks (list): Masks of parameters to get for each camera
-        group_mask (array): Mask of parameters to get for all cameras
-
-    Returns:
-        array: Parameter values [group | cam0 | cam1 | ... ]
-    """
-    group_values = cams[0].vector[group_mask]
-    cam_values = np.hstack((cam.vector[mask] for cam, mask in zip(cams, cam_masks)))
-    return np.hstack((group_values, cam_values))
-
 def prune_controls(cams, controls):
     """
     Return only controls which reference the specified cameras.
@@ -1016,9 +897,9 @@ def prune_controls(cams, controls):
     return [control for control in controls
         if len(set(cams) & set((isinstance(control, Matches) and control.cams) or [control.cam])) > 0]
 
-def test_camera_options(cams, controls, cam_params, group_params):
+def test_cameras(model):
     """
-    Test Cameras model options for errors.
+    Test Cameras model for errors.
 
     The following checks are performed:
 
@@ -1027,29 +908,26 @@ def test_camera_options(cams, controls, cam_params, group_params):
         - Error: 'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera
 
     Arguments:
-        cams (list): Camera objects
-        controls (list): Camera control (Points, Lines, and Matches objects)
-        cam_params (list): Parameters to optimize seperately for each camera
-        group_params (dict): Parameters to optimize for all cameras
+        model (`Cameras`): Cameras object
     """
-    control_cams = [(isinstance(control, Matches) and control.cams) or [control.cam] for control in controls]
-    is_directions_control = [isinstance(control, (Points, Lines)) and control.directions for control in controls]
-    is_xyz_cam = ['xyz' in params for params in cam_params]
+    control_cams = [(isinstance(control, Matches) and control.cams) or [control.cam] for control in model.controls]
+    is_directions_control = [isinstance(control, (Points, Lines)) and control.directions for control in model.controls]
+    is_xyz_cam = ['xyz' in params for params in model.cam_params]
     is_directions_cam = [directions and cam in ctrl_cams
-        for cam in cams
+        for cam in model.cams
             for ctrl_cams, directions in zip(control_cams, is_directions_control)]
     # Error: Not all cameras appear in controls
     control_cams_flat = [cam for cams in control_cams for cam in cams]
-    if (set(cams) & set(control_cams_flat)) < len(cams):
+    if (set(model.cams) & set(control_cams_flat)) < len(model.cams):
         raise ValueErrors("Not all cameras appear in controls")
     # Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
-    if 'xyz' in group_params and any(is_directions_control):
+    if 'xyz' in model.group_params and any(is_directions_control):
         raise ValueError("'xyz' cannot be in `group_params` if any `control.directions` is True")
     # Error: 'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera
     is_xyz_directions_cam = [is_xyz and is_directions for is_xyz, is_directions in zip(is_xyz_cam, is_directions_cam)]
     if any(is_xyz_directions_cam):
         raise ValueError("'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera")
-    return None
+    return True
 
 def camera_scale_factors(cam, controls=None):
     """
@@ -1114,3 +992,155 @@ def camera_scale_factors(cam, controls=None):
     dpixels[18:20] = np.sqrt(5) * mean_r_xy**2 * cam.f.mean()
     # Convert pixels per change to change per pixel (the inverse)
     return 1 / dpixels
+
+def camera_bounds(cam):
+    # Distortion bounds based on tested limits of Camera.undistort_oulu()
+    k = cam.f.mean() / 4000
+    p = cam.f.mean() / 40000
+    return np.array([
+        # xyz
+        [-np.inf, np.inf], [-np.inf, np.inf], [-np.inf, np.inf],
+        # viewdir
+        [-np.inf, np.inf], [-np.inf, np.inf], [-np.inf, np.inf],
+        # imgsz
+        [0, np.inf], [0, np.inf],
+        # f
+        [0, np.inf], [0, np.inf],
+        # c
+        [-0.5, 0.5] * cam.imgsz, [-0.5, 0.5] * cam.imgsz,
+        # k
+        [-k, k], [-k / 2, k / 2], [-k / 2, k / 2], [-k, k], [-k, k], [-k, k],
+        # p
+        [-p, p], [-p, p]
+    ], dtype=float)
+
+def parse_params(params=None):
+    """
+    Return a mask of selected camera parameters and associated bounds.
+
+    Arguments:
+        params (dict): Parameters to select by name and indices. For example:
+
+            - {'viewdir': True} : All `viewdir` elements
+            - {'viewdir': 0} : First `viewdir` element
+            - {'viewdir': [0, 1]} : First and second `viewdir` elements
+
+            Bounds can be specified inside a tuple (indices, min, max).
+            Singletons are expanded as needed, and `None` can be used to
+            indicate no bound. The following are equivalent:
+
+            - {'viewdir': ([0, 1], None, 180)}
+            - {'viewdir': ([0, 1], None, [180, 180])}
+            - {'viewdir': ([0, 1], [None, None], [180, 180])}
+
+    Returns:
+        array: Parameter boolean mask (20,)
+        array: Parameter min and max bounds (20, 2)
+    """
+    if params is None:
+        params = dict()
+    attributes = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+    indices = [0, 3, 6, 8, 10, 12, 18, 20]
+    mask = np.full(20, False)
+    bounds = np.full((20, 2), np.nan)
+    for key, value in params.items():
+        if key in attributes:
+            if isinstance(value, tuple):
+                selection = value[0]
+            else:
+                selection = value
+            if selection or selection == 0:
+                i = attributes.index(key)
+                if selection is True:
+                    positions = range(indices[i], indices[i + 1])
+                else:
+                    positions = indices[i] + np.atleast_1d(selection)
+                mask[positions] = True
+            if isinstance(value, tuple):
+                min_bounds = np.atleast_1d(value[1])
+                if len(min_bounds) == 1:
+                    min_bounds = np.repeat(min_bounds, len(positions))
+                max_bounds = np.atleast_1d(value[2])
+                if len(max_bounds) == 1:
+                    max_bounds = np.repeat(max_bounds, len(positions))
+                bounds[positions] = np.column_stack((min_bounds, max_bounds))
+    return mask, bounds
+
+def build_lmfit_params(cams, cam_params=None, group_params=None):
+    """
+    Build lmfit.Parameters() object.
+
+    Arguments:
+        cams: Camera objects
+        cam_params: Camera parameter specifications
+        group_params: Group parameter specification
+    """
+    # Extract parameter masks and bounds
+    temp = [parse_params(params=params) for params in cam_params]
+    cam_masks = [x[0] for x in temp]
+    cam_bounds = [x[1] for x in temp]
+    group_mask, group_bounds = parse_params(params=group_params)
+    # Labels: (cam<camera_index>_)<attribute><position>
+    attributes = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+    lengths = [3, 3, 2, 2, 2, 6, 2]
+    base_labels = np.array([attribute + str(i) for attribute, length in zip(attributes, lengths) for i in range(length)])
+    group_labels = base_labels[group_mask]
+    cam_labels = np.hstack(("cam" + str(i) + "_" + label for i, mask in enumerate(cam_masks) for label in base_labels[mask]))
+    labels = np.hstack((group_labels, cam_labels))
+    # Values
+    # NOTE: Group values from first camera
+    # values = optimize.sample_cameras(cams, cam_masks, group_mask)
+    group_values = cams[0].vector[group_mask]
+    cam_values = np.hstack((cam.vector[mask] for cam, mask in zip(cams, cam_masks)))
+    values = np.hstack((group_values, cam_values))
+    # Bounds
+    # NOTE: Default group bounds from first camera
+    default_bounds = camera_bounds(cams[0])
+    bounds = np.vstack((
+        np.where(np.isnan(group_bounds), default_bounds, group_bounds)[group_mask],
+        np.vstack(np.where(np.isnan(bounds), default_bounds, bounds)[mask] for bounds, mask in zip(cam_bounds, cam_masks))
+    ))
+    # Build lmfit.Parameters()
+    params = lmfit.Parameters()
+    for i, label in enumerate(labels):
+        params.add(name=label, value=values[i], vary=True, min=bounds[i, 0], max=bounds[i, 1])
+    # Build apply function
+    def apply_params(values):
+        if isinstance(values, lmfit.parameter.Parameters):
+            values = np.array(values.valuesdict().values())
+        n_group = group_mask.sum()
+        group_values = values[0:n_group]
+        n_cams = [mask.sum() for mask in cam_masks]
+        cam_breaks = np.cumsum([n_group] + n_cams)
+        for i, cam in enumerate(cams):
+            cam.vector[cam_masks[i]] = values[cam_breaks[i]:cam_breaks[i + 1]]
+            cam.vector[group_mask] = group_values
+    return params, apply_params
+
+def model_criteria(self, fit):
+    """
+    Return values of common model selection criteria.
+
+    The following criteria are returned:
+
+        - 'aic': Akaike information criterion (https://en.wikipedia.org/wiki/Akaike_information_criterion)
+        - 'caic': Consistent Akaike information criterion
+        - 'bic': Bayesian information criterion (https://en.wikipedia.org/wiki/Bayesian_information_criterion)
+        - 'ssd': Shortest data description (http://www.sciencedirect.com/science/article/pii/0005109878900055)
+        - 'mdl': Minimum description length (https://en.wikipedia.org/wiki/Minimum_description_length)
+
+    Orekhov et al. 2007 (http://imaging.utk.edu/publications/papers/2007/ICIP07_vo.pdf)
+    compare these for camera model selection.
+
+    Arguments:
+        fit (`lmfit.MinimizerResult`): Model fit (e.g. `Cameras.fit()`)
+    """
+    n = fit.ndata
+    k = fit.nvarys
+    base = n * np.log(fit.chisqr / n)
+    result['aic'] = base + 2 * k
+    result['caic'] = base + k * (np.log(n) + 1)
+    result['bic'] = base + 2 * k * np.log(n)
+    result['ssd'] = base + k * np.log((n + 2) / 24) + np.log(k + 1)
+    result['mdl'] = base + 1 / (2 * k * np.log(n))
+    return result

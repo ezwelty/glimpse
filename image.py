@@ -57,7 +57,7 @@ class Camera(object):
             self.viewdir = viewdir
             self.imgsz = imgsz
             if fmm and sensorsz:
-                self.f = fmm_to_fpx(fmm, sensorsz, imgsz)
+                self.f = Camera.fmm_to_fpx(fmm, sensorsz, imgsz)
             else:
                 self.f = f
             self.c = c
@@ -159,7 +159,7 @@ class Camera(object):
 
     @property
     def fmm(self):
-        return fpx_to_fmm(self.f, self.sensorsz, self.imgsz)
+        return Camera.fpx_to_fmm(self.f, self.sensorsz, self.imgsz)
 
     @property
     def R(self):
@@ -201,6 +201,70 @@ class Camera(object):
         OpenCV distortion coefficients.
         """
         return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
+
+    # ---- Methods (static) ----
+
+    @staticmethod
+    def get_sensor_size(make, model):
+        """
+        Get a camera model's CCD sensor width and height in mm.
+
+        Data is from Digital Photography Review (https://dpreview.com).
+        See also https://www.dpreview.com/articles/8095816568/sensorsizes.
+
+        Arguments:
+            make (str): Camera make (EXIF Make)
+            model (str): Camera model (EXIF Model)
+
+        Return:
+            list: Camera sensor width and height in mm
+        """
+        sensor_sizes = { # mm
+            'NIKON CORPORATION NIKON D2X': [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
+            'NIKON CORPORATION NIKON D200': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
+            'NIKON CORPORATION NIKON D300S': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond300s/2
+            'NIKON E8700': [8.8, 6.6], # https://www.dpreview.com/reviews/nikoncp8700/2
+            'Canon Canon EOS 20D': [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
+            'Canon Canon EOS 40D': [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
+        }
+        if make and model:
+            make_model = make.strip() + " " + model.strip()
+        else:
+            make_model = ""
+        if sensor_sizes.has_key(make_model):
+            return sensor_sizes[make_model]
+        else:
+            raise KeyError("No sensor size found for: " + make_model)
+
+    @staticmethod
+    def fmm_to_fpx(fmm, sensorsz, imgsz):
+        """
+        Convert focal length in millimeters to pixels.
+
+        Arguments:
+            fmm (array-like): Focal length in millimeters [fx, fy]
+            sensorsz (array-like): Sensor size in millimeters [nx, ny]
+            imgsz (array-like): Image size in pixels [nx, ny]
+        """
+        fmm, sensorsz, imgsz = (
+            _format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
+            )
+        return fmm * imgsz / sensorsz
+
+    @staticmethod
+    def fpx_to_fmm(fpx, sensorsz, imgsz):
+        """
+        Convert focal length in pixels to millimeters.
+
+        Arguments:
+            fpx (array-like): Focal length in pixels [fx, fy]
+            sensorsz (array-like): Sensor size in millimeters [nx, ny]
+            imgsz (array-like): Image size in pixels [nx, ny]
+        """
+        fpx, sensorsz, imgsz = (
+            _format_list(i, length=2) for i in (fpx, sensorsz, imgsz)
+            )
+        return fpx * sensorsz / imgsz
 
     # ---- Methods (public) ----
 
@@ -752,7 +816,7 @@ class Image(object):
             If `imgsz` is missing, the actual size of the image is used.
             If `f` is missing, an attempt is made to specify both `fmm` and `sensorsz`.
             If `fmm` is missing, it is read from the metadata, and if `sensorsz` is missing,
-            `get_sensor_size()` is called with `make` and `model` read from the metadata.
+            `Camera.get_sensor_size()` is called with `make` and `model` read from the metadata.
 
     Attributes:
         path (str): Path to the image file
@@ -778,7 +842,7 @@ class Image(object):
                 if not camera_args.has_key('fmm'):
                     camera_args['fmm'] = self.exif.fmm
                 if not camera_args.has_key('sensorsz'):
-                    camera_args['sensorsz'] = get_sensor_size(self.exif.make, self.exif.model)
+                    camera_args['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
         self.cam = Camera(**camera_args)
         self.I = None
 
@@ -906,67 +970,6 @@ class Image(object):
             f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
             pI[:, :, i] = f(pvu).reshape(pI.shape[0:2])
         return pI
-
-# ---- Static methods (public) ----
-
-def get_sensor_size(make, model):
-    """
-    Get a camera model's CCD sensor width and height in mm.
-
-    Data is from Digital Photography Review (https://dpreview.com).
-    See also https://www.dpreview.com/articles/8095816568/sensorsizes.
-
-    Arguments:
-        make (str): Camera make (EXIF Make)
-        model (str): Camera model (EXIF Model)
-
-    Return:
-        list: Camera sensor width and height in mm
-    """
-    sensor_sizes = { # mm
-        'NIKON CORPORATION NIKON D2X': [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
-        'NIKON CORPORATION NIKON D200': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
-        'NIKON CORPORATION NIKON D300S': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond300s/2
-        'NIKON E8700': [8.8, 6.6], # https://www.dpreview.com/reviews/nikoncp8700/2
-        'Canon Canon EOS 20D': [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
-        'Canon Canon EOS 40D': [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
-    }
-    if make and model:
-        make_model = make.strip() + " " + model.strip()
-    else:
-        make_model = ""
-    if sensor_sizes.has_key(make_model):
-        return sensor_sizes[make_model]
-    else:
-        raise KeyError("No sensor size found for: " + make_model)
-
-def fmm_to_fpx(fmm, sensorsz, imgsz):
-    """
-    Convert focal length in millimeters to pixels.
-
-    Arguments:
-        fmm (array-like): Focal length in millimeters [fx, fy]
-        sensorsz (array-like): Sensor size in millimeters [nx, ny]
-        imgsz (array-like): Image size in pixels [nx, ny]
-    """
-    fmm, sensorsz, imgsz = (
-        _format_list(i, length=2) for i in (fmm, sensorsz, imgsz)
-        )
-    return fmm * imgsz / sensorsz
-
-def fpx_to_fmm(fpx, sensorsz, imgsz):
-    """
-    Convert focal length in pixels to millimeters.
-
-    Arguments:
-        fpx (array-like): Focal length in pixels [fx, fy]
-        sensorsz (array-like): Sensor size in millimeters [nx, ny]
-        imgsz (array-like): Image size in pixels [nx, ny]
-    """
-    fpx, sensorsz, imgsz = (
-        _format_list(i, length=2) for i in (fpx, sensorsz, imgsz)
-        )
-    return fpx * sensorsz / imgsz
 
 # ---- Static methods (private) ----
 

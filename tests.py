@@ -111,7 +111,7 @@ def test_image_init():
     assert img.path == path
     assert img.datetime == img.exif.datetime
     assert all(img.cam.imgsz == img.exif.size)
-    sensorsz = image.get_sensor_size(img.exif.make, img.exif.model)
+    sensorsz = image.Camera.get_sensor_size(img.exif.make, img.exif.model)
     assert all(img.cam.f == img.exif.fmm * img.exif.size / sensorsz)
     # Override defaults
     img_time = datetime.datetime(2014, 10, 13)

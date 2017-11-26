@@ -1,5 +1,6 @@
 import numpy as np
 import cPickle
+import json
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -53,3 +54,16 @@ def hist_match(source, template):
 
     return interp_t_values[bin_idx].reshape(oldshape)
 
+def merge_dicts(*args):
+    """
+    Merge dictionaries.
+
+    Precedence goes to the latter value for each key.
+
+    Arguments:
+        *args: Dictionaries
+    """
+    merge = dict()
+    for d in args:
+        merge.update(d)
+    return merge

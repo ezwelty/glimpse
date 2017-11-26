@@ -13,6 +13,7 @@ if sys.platform == "darwin":
     import matplotlib
     matplotlib.use('TkAgg')
 import matplotlib.pyplot
+import helper
 
 class Camera(object):
     """
@@ -26,8 +27,6 @@ class Camera(object):
     Arguments:
         fmm (array_like): Focal length in millimeters [fx, fy]
         sensorsz (array_like): Sensor size in millimters [nx, ny]
-        path (str): Path to JSON camera file (see `Camera.write()`).
-            Takes precedence if not `None` (default).
 
     Attributes:
         vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
@@ -50,17 +49,10 @@ class Camera(object):
         original_vector (array): Original value of `vector`
     """
 
-    def __init__(self, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
-        fmm=None, sensorsz=None, vector=None, path=None):
+    def __init__(self, vector=None, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
+        sensorsz=None, fmm=None):
         self.vector = np.full(20, np.nan, dtype=float)
-        if path is not None:
-            with open(path, "r") as fp:
-                args = json.load(fp)
-            for key in args.keys():
-                # Replace None with np.nan
-                value = [np.nan if item is None else item for item in args[key]]
-                setattr(self, key, value)
-        elif vector is not None:
+        if vector is not None:
             self.vector = np.asarray(vector, dtype=float)[0:20]
         else:
             self.xyz = xyz
@@ -75,6 +67,28 @@ class Camera(object):
             self.p = p
         self.original_vector = self.vector
         self.sensorsz = sensorsz
+
+    @classmethod
+    def read(cls, path, **kwargs):
+        """
+        Read Camera from JSON.
+
+        See `.write()` for the reverse.
+
+        Arguments:
+            path (str): Path to JSON file
+            **kwargs (dict): Additional arguments passed to `Camera()`.
+                These take precedence over arguments read from file.
+        """
+        with open(path, "r") as fp:
+            json_args = json.load(fp)
+        for key in json_args.keys():
+            value = [np.nan if item is None else item for item in json_args[key]]
+            if all([item is np.nan for item in value]):
+                value = None
+            json_args[key] = value
+        args = helper.merge_dicts(json_args, kwargs)
+        return cls(**args)
 
     # ---- Properties (dependent) ----
 
@@ -136,7 +150,10 @@ class Camera(object):
 
     @property
     def sensorsz(self):
-        return self._sensorsz
+        if self._sensorsz is not None:
+            return self._sensorsz
+        else:
+            return np.full(2, np.nan)
 
     @sensorsz.setter
     def sensorsz(self, value):
@@ -212,9 +229,9 @@ class Camera(object):
             path (str): Path of file to write to.
                 if `None` (default), a JSON-formatted string is returned.
         """
-        keys = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
-        key_strings = ['    "' + key + '": ' + str(list(getattr(self, key))).replace("nan", "null") for key in keys]
-        json_string = "{\n" + ",\n".join(key_strings) + "\n}"
+        attributes=['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p', 'sensorsz']
+        lines = ['    "' + name + '": ' + str(list(getattr(self, name))).replace("nan", "null") for name in attributes]
+        json_string = "{\n" + ",\n".join(lines) + "\n}"
         if path:
             with open(path, "w") as fp:
                 fp.write(json_string)

@@ -1,5 +1,6 @@
 import numpy as np
 import cPickle
+import pyproj
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -100,3 +101,33 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
     if ltype:
         obj = ltype(obj)
     return obj
+
+def sp_transform(points, current, target):
+    """
+    Transform points between spatial coordinate systems.
+
+    Coordinate systems can be specified either as an
+    `int` (EPSG code), `dict` (arguments to `pyproj.Proj()`), or `pyproj.Proj`.
+
+    Arguments:
+        points (array): Point coordinates [x, y(, z)]
+        current: Current coordinate system
+        target: Target coordinate system
+    """
+    def build_proj(obj):
+        if isinstance(obj, pyproj.Proj):
+            return obj
+        elif isinstance(obj, int):
+            return pyproj.Proj(init="epsg:" + str(obj))
+        elif isinstance(obj, dict):
+            return pyproj.Proj(**obj)
+        else:
+            raise ValueError("Cannot coerce input to pyproj.Proj")
+    current = build_proj(current)
+    target = build_proj(target)
+    if points.shape[1] < 3:
+        z = None
+    else:
+        z = points[:, 2]
+    result = pyproj.transform(current, target, x=points[:, 0], y=points[:, 1], z=z)
+    return np.column_stack(result)

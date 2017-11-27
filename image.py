@@ -255,7 +255,7 @@ class Camera(object):
         The original state of the new object (`original_vector`)
         is set to the current state of the old object.
         """
-        return Camera(vector=self.vector.copy())
+        return Camera(vector=self.vector.copy(), sensorsz=self.sensorsz)
 
     def reset(self):
         """

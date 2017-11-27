@@ -1,6 +1,8 @@
 import numpy as np
 import cPickle
 import pyproj
+import geojson
+import json
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -131,3 +133,23 @@ def sp_transform(points, current, target):
         z = points[:, 2]
     result = pyproj.transform(current, target, x=points[:, 0], y=points[:, 1], z=z)
     return np.column_stack(result)
+
+def read_geojson(path, crs=None):
+    """
+    Read GeoJSON to coordinate arrays.
+
+    Arguments:
+        path (str): Path to file
+        proj: Target coordinate system for transformation (see `sp_transform()`).
+            Assumes coordinates in file are EPSG:4326 (WGS84 Longitude, Latitude).
+    """
+    with open(path, 'r') as fp:
+        features = geojson.load(fp)['features']
+    if crs is None:
+        crs = 4326
+    return [sp_transform(np.vstack(feature['geometry']['coordinates']), 4326, crs)
+        for feature in features]
+
+def read_json(path):
+    with open(path, "r") as fp:
+        return json.load(fp)

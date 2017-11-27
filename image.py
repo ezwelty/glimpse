@@ -6,7 +6,6 @@ import PIL.Image
 import scipy.interpolate
 import shutil
 import os.path
-import json
 # HACK: See https://stackoverflow.com/questions/21784641/installation-issue-with-matplotlib-python#comment56913201_21789908
 import sys
 if sys.platform == "darwin":
@@ -84,8 +83,7 @@ class Camera(object):
             **kwargs (dict): Additional arguments passed to `Camera()`.
                 These take precedence over arguments read from file.
         """
-        with open(path, "r") as fp:
-            json_args = json.load(fp)
+        json_args = helper.read_json(path)
         for key in json_args.keys():
             value = [np.nan if item is None else item for item in json_args[key]]
             if all([item is np.nan for item in value]):
@@ -795,12 +793,13 @@ class Image(object):
 
     Arguments:
         path (str): Path to image file
-        datetime (datetime): Capture date and time. Unless specified, it is read from the metadata.
-        camera_args (dict): Arguments passed to `Camera()`.
+        cam (Camera, dict, or str): Camera object or arguments passed to `Camera()`.
+            If string, assumes a JSON file path and reads arguments from file.
             If `imgsz` is missing, the actual size of the image is used.
             If `f` is missing, an attempt is made to specify both `fmm` and `sensorsz`.
             If `fmm` is missing, it is read from the metadata, and if `sensorsz` is missing,
             `Camera.get_sensor_size()` is called with `make` and `model` read from the metadata.
+        datetime (datetime): Capture date and time. Unless specified, it is read from the metadata.
 
     Attributes:
         path (str): Path to the image file
@@ -809,25 +808,30 @@ class Image(object):
         cam (Camera): Camera object
     """
 
-    def __init__(self, path, datetime=None, camera_args=None):
+    def __init__(self, path, cam=None, datetime=None):
         self.path = path
         self.exif = Exif(path=path)
         if datetime:
             self.datetime = datetime
         else:
             self.datetime = self.exif.datetime
-        if not camera_args:
-            camera_args = {}
         # TODO: Throw warning if `imgsz` has different aspect ratio than file size.
-        if not camera_args.has_key('vector'):
-            if not camera_args.has_key('imgsz'):
-                camera_args['imgsz'] = self.exif.size
-            if not camera_args.has_key('f'):
-                if not camera_args.has_key('fmm'):
-                    camera_args['fmm'] = self.exif.fmm
-                if not camera_args.has_key('sensorsz'):
-                    camera_args['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
-        self.cam = Camera(**camera_args)
+        if isinstance(cam, Camera):
+            self.cam = cam
+        else:
+            if isinstance(cam, str):
+                cam = helper.read_json(cam)
+            elif cam is None:
+                cam = dict()
+            if not cam.has_key('vector'):
+                if not cam.has_key('imgsz'):
+                    cam['imgsz'] = self.exif.size
+                if not cam.has_key('f'):
+                    if not cam.has_key('fmm'):
+                        cam['fmm'] = self.exif.fmm
+                    if not cam.has_key('sensorsz'):
+                        cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
+            self.cam = Camera(**cam)
         self.I = None
 
     def copy(self):
@@ -836,7 +840,7 @@ class Image(object):
 
         Copies camera, rereads exif from file, and does not copy cached image data (self.I).
         """
-        return Image(path=self.path, camera_args=dict(vector=self.cam.vector.copy()))
+        return Image(path=self.path, cam=self.cam.copy())
 
     def read(self):
         """

@@ -113,8 +113,8 @@ def test_image_init():
     assert all(img.cam.f == img.exif.fmm * img.exif.size / sensorsz)
     # Override defaults
     img_time = datetime.datetime(2014, 10, 13)
-    camera_args = {'imgsz': [100, 100], 'sensorsz': [10, 10]}
-    img = image.Image(path, datetime=img_time, camera_args=camera_args)
+    camera_args = dict(imgsz=[100, 100], sensorsz=[10, 10])
+    img = image.Image(path, cam=camera_args, datetime=img_time)
     assert img.datetime == img_time
     assert all(img.cam.imgsz == camera_args['imgsz'])
     assert all(img.cam.f == img.exif.fmm * np.divide(camera_args['imgsz'], camera_args['sensorsz']))

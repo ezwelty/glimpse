@@ -956,11 +956,11 @@ def camera_scale_factors(cam, controls=None):
             if isinstance(control, (Points, Lines)) and cam is control.cam and not control.directions:
                 weights.append(control.size())
                 if isinstance(control, Points):
-                    means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz, axis=1))
+                    means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
                 elif isinstance(control, Lines):
-                    means.append(np.linalg.norm(np.vstack(control.xyzs).mean(axis=0) - cam.xyz, axis=1))
+                    means.append(np.linalg.norm(np.vstack(control.xyzs).mean(axis=0) - cam.xyz))
         if means:
-            dpixels[0:3] = cam.f.mean() / np.average(means, weights=weight)
+            dpixels[0:3] = cam.f.mean() / np.average(means, weights=weights)
     ## viewdir[0, 1]
     # First angle rotates camera left-right
     # Second angle rotates camera up-down

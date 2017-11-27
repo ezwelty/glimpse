@@ -46,16 +46,18 @@ class Points(object):
         """
         return len(self.uv)
 
-    def observed(self, index=slice(None)):
+    def observed(self, index=None):
         """
         Return observed image coordinates.
 
         Arguments:
             index (array_like or slice): Indices of points to return, or all if `None`
         """
+        if index is None:
+            index = slice(None)
         return self.uv[index]
 
-    def predicted(self, index=slice(None)):
+    def predicted(self, index=None):
         """
         Predict image coordinates from world coordinates.
 
@@ -65,6 +67,8 @@ class Points(object):
         Arguments:
             index (array_like or slice): Indices of world points to project, or all if `None`
         """
+        if index is None:
+            index = slice(None)
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
         return self.cam.project(self.xyz[index], directions=self.directions)

@@ -2,6 +2,7 @@ import numpy as np
 import scipy.interpolate
 import scipy.ndimage.filters
 import scipy.misc
+import gdal
 
 class DEM(object):
     """
@@ -28,12 +29,42 @@ class DEM(object):
             Z (array): Grid of values on a regular xy grid
             x (object): Either `xlim`, `x`, or `X`
             y (object): Either `ylim`, `y`, or `Y`
+            datetime (datetime): Capture date and time
         """
         self.Z = Z
         self._Zf = None
         self.xlim, self._x, self._X = self._parse_x(x)
         self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
+
+    @classmethod
+    def read(cls, path, x=None, y=None, datetime=None):
+        """
+        Read DEM from raster file.
+
+        See `gdal.Open()` for details.
+
+        Arguments:
+            path (str): Path to file
+            x (object): Either `xlim`, `x`, or `X`.
+                If `None` (default), read from file.
+            y (object): Either `ylim`, `y`, or `Y`.
+                If `None` (default), read from file.
+            datetime (datetime): Capture date and time
+        """
+        path = "cg/arcticdem_10m.tif"
+        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        band = raster.GetRasterBand(1)
+        Z = band.ReadAsArray()
+        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
+        # HACK: Use < -9998 since most common are -9999 and -3.4e38
+        Z[Z < -9998] = np.nan
+        transform = raster.GetGeoTransform()
+        if x is None:
+            x = transform[0] + transform[1] * np.array([0, raster.RasterXSize])
+        if y is None:
+            y = transform[3] + transform[5] * np.array([0, raster.RasterYSize])
+        return cls(Z, x=x, y=y, datetime=datetime)
 
     @property
     def Z(self):
@@ -54,7 +85,7 @@ class DEM(object):
 
     @property
     def zlim(self):
-        value = [self.Z.min(), self.Z.max()]
+        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
         return np.array(value)
 
     @property
@@ -70,7 +101,7 @@ class DEM(object):
     @property
     def n(self):
         value = [self.Z.shape[1], self.Z.shape[0]]
-        return np.asarray(value, int)
+        return np.array(value, dtype=int)
 
     @property
     def d(self):

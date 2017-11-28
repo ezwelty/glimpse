@@ -1,11 +1,5 @@
 import numpy as np
 import scipy.spatial
-# HACK: See https://stackoverflow.com/questions/21784641/installation-issue-with-matplotlib-python#comment56913201_21789908
-import sys
-if sys.platform == "darwin":
-    import matplotlib
-    matplotlib.use('TkAgg')
-import matplotlib.pyplot
 import cv2
 import lmfit
 

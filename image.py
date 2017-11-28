@@ -6,11 +6,6 @@ import PIL.Image
 import scipy.interpolate
 import shutil
 import os.path
-# HACK: See https://stackoverflow.com/questions/21784641/installation-issue-with-matplotlib-python#comment56913201_21789908
-import sys
-if sys.platform == "darwin":
-    import matplotlib
-    matplotlib.use('TkAgg')
 import matplotlib.pyplot
 import helper
 

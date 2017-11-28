@@ -145,8 +145,8 @@ class DEM(object):
     def Zf(self):
         if self._Zf is None:
             sign = np.sign(self.d).astype(int)
-            self._Zf = scipy.interpolate.RectBivariateSpline(
-                self.x[::sign[0]], self.y[::sign[1]], np.nan_to_num(self.Z[::sign[1], ::sign[0]]).T, kx=3, ky=3, s=0)
+            self._Zf = scipy.interpolate.RegularGridInterpolator(
+                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]], method="linear")
         return self._Zf
 
     # ---- Methods (public) ----
@@ -202,36 +202,16 @@ class DEM(object):
         origin = np.append(self.xlim[0], self.ylim[0])
         return (rowcol + 0.5)[:, ::-1] * self.d + origin
 
-    def sample(self, xy):
+    def sample(self, xy, method="linear"):
         """
         Sample `Z` at points.
-
-        Interpolation is performed using a 3rd order spline.
-        Missing values are currently replaced with zeros.
 
         Arguments:
             xy (array): Point coordinates (Nx2)
-
-        Returns:
-            array: Value of `Z` interpolated at each point (Nx1).
+            method (str): Interpolation method,
+                either "linear" (default) or "nearest"
         """
-        return self.Zf(xy[:, 0], xy[:, 1], grid=False)
-
-    def sample_grid(self, x, y):
-        """
-        Sample `Z` at points.
-
-        Interpolation is performed using a 3rd order spline.
-        Missing values are currently replaced with zeros.
-
-        Arguments:
-            x, y (array_like): Coordinates specifying points on a grid.
-                Arrays must be sorted in increasing order.
-
-        Returns:
-            array: Value of `Z` interpolated at each point, with x as columns and y as rows.
-        """
-        return self.Zf(x, y, grid=True).transpose()
+        return self.Zf(xy, method=method)
 
     def plot(self):
         """

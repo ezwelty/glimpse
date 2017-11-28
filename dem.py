@@ -132,6 +132,45 @@ class DEM(object):
         """
         return np.logical_and(xy >= self.min[0:2], xy <= self.max[0:2]).all(axis = 1)
 
+    def xy_to_rowcol(self, xy, snap=False):
+        """
+        Return row,col indices of x,y coordinates.
+
+        See `.rowcol_to_xy()` for the inverse.
+
+        Arguments:
+            xy (array): Spatial coordinates (Nx2)
+            snap (bool): Whether to snap indices to nearest integers (cell centers).
+                Points on cell edges snap to higher indices, except
+                points on right or bottom edges snap down to stay in bounds.
+        """
+        origin = np.append(self.xlim[0], self.ylim[0])
+        colrow = ((xy - origin) / self.d - 0.5)
+        if snap:
+            temp = np.floor(colrow + 0.5).astype(int)
+            # Points on right or bottom edges snap down to stay in bounds
+            is_outer_edge = xy == np.append(self.xlim[1], self.ylim[1])
+            temp[is_outer_edge] -= 1
+            return temp[:, ::-1]
+        else:
+            return colrow[:, ::-1]
+
+    def rowcol_to_xy(self, rowcol):
+        """
+        Return x,y coordinates of row,col indices.
+
+        Places integer indices at the centers of each cell.
+        Therefore, the upper left corner is [-0.5, -0.5]
+        and the center of that cell is [0, 0].
+
+        See `.xy_to_rowcol()` for the inverse.
+
+        Arguments:
+            rowcol (array): Array indices (Nx2)
+        """
+        origin = np.append(self.xlim[0], self.ylim[0])
+        return (rowcol + 0.5)[:, ::-1] * self.d + origin
+
     def sample(self, xy):
         """
         Sample `Z` at points.
@@ -175,9 +214,6 @@ class DEM(object):
         Returns:
             DEM: New object (if `copy=True`)
         """
-        if xlim is None and ylim is None:
-            if copy:
-                return self
         # Intersect xlim
         if xlim is None:
             xlim = self.xlim
@@ -204,19 +240,27 @@ class DEM(object):
                 raise ValueError("Crop bounds (ylim) do not intersect DEM.")
             if np.diff(self.ylim) < 0:
                 ylim = ylim[::-1]
+        # Test for equality
+        if all(xlim == self.xlim) and all(ylim == self.ylim):
+            if copy:
+                return DEM(self.Z, self.xlim, self.ylim)
+            else:
+                return None
         # Convert xy limits to grid indices
-        xy = np.array([xlim, ylim]).transpose()
-        rc = self._xy_to_rowcol(xy)
-        is_not_edge = (xy[1, :] % self.d != 0)[::-1]
+        xy = np.column_stack((xlim, ylim))
+        rc = self.xy_to_rowcol(xy, snap=True)
+        # Snap down bottom-right, non-outer edges
+        # see .xy_to_rowcol()
+        bottom_right = np.append(self.xlim[1], self.ylim[1])
+        is_edge = (bottom_right - xy[1, :]) % self.d == 0
+        is_outer_edge = xy[1, :] == bottom_right
+        snap_down = (is_edge & ~is_outer_edge)
+        rc[1, snap_down[::-1]] -= 1
         # Crop DEM
-        Z = self.Z[rc[0, 0]:rc[1, 0] + int(is_not_edge[0]), rc[0, 1]:rc[1, 1] + int(is_not_edge[1])]
-        new_xy = self._rowcol_to_xy(rc)
-        new_xlim = new_xy[:, 0]
-        if not np.diff(new_xlim):
-            new_xlim[1] += self.d[0]
-        new_ylim = new_xy[:, 1]
-        if not np.diff(new_ylim):
-            new_ylim[1] += self.d[1]
+        Z = self.Z[rc[0, 0]:rc[1, 0] + 1, rc[0, 1]:rc[1, 1] + 1]
+        new_xy = self.rowcol_to_xy(rc)
+        new_xlim = new_xy[:, 0] + np.array([-0.5, 0.5]) * self.d[0]
+        new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[0]
         if copy:
             return DEM(Z, new_xlim, new_ylim)
         else:
@@ -335,17 +379,6 @@ class DEM(object):
     def _clear_cache(self, attributes=['x', 'X', 'y', 'Y', 'Zf']):
         for attr in attributes:
             setattr(self, '_' + attr, None)
-
-    def _xy_to_rowcol(self, xy):
-        origin = np.append(self.xlim[0], self.ylim[0])
-        colrow = np.floor((xy - origin) / self.d).astype(int)
-        return colrow[:, ::-1]
-
-    def _rowcol_to_xy(self, rowcol):
-        colrow = rowcol[:, ::-1]
-        origin = np.append(self.xlim[0], self.ylim[0])
-        xy = colrow * self.d + origin
-        return xy
 
     def _parse_x(self, obj):
         """

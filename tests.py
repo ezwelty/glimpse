@@ -175,7 +175,7 @@ def test_dem_xy():
     assert np.array_equiv(dem.y, y)
 
 def test_dem_sample(tol=1e-13):
-    Z = np.reshape(range(0, 16, 1), [4, 4])
+    Z = np.arange(16).reshape(4, 4)
     dem = DEM.DEM(Z, [-0.5, 3.5], [-0.5, 3.5])
     # Sample cells centers along diagonal
     xy_diagonal = np.array([dem.x, dem.y]).transpose()
@@ -190,7 +190,7 @@ def test_dem_sample(tol=1e-13):
     assert np.all(dz_transect < tol)
 
 def test_dem_crop_ascending():
-    Z = np.arange(1, 10, 1).reshape([3, 3])
+    Z = np.arange(9).reshape([3, 3])
     dem = DEM.DEM(Z, [0, 3], [0, 3])
     # Out of bounds
     with pytest.raises(Exception):
@@ -226,7 +226,7 @@ def test_dem_crop_ascending():
     assert np.array_equiv(cdem.Z, Z[1:2, 1:2])
 
 def test_dem_crop_descending():
-    Z = np.arange(1, 10, 1).reshape([3, 3])
+    Z = np.arange(9).reshape([3, 3])
     dem = DEM.DEM(Z, [3, 0], [3, 0])
     # Equal bounds
     cdem = dem.crop(xlim=[0, 3], ylim=[0, 3])

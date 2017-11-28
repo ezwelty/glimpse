@@ -1,8 +1,8 @@
 import numpy as np
 import scipy.interpolate
-import scipy.ndimage.filters
-import scipy.misc
+import scipy.ndimage
 import gdal
+import matplotlib
 
 class DEM(object):
     """
@@ -233,6 +233,18 @@ class DEM(object):
         """
         return self.Zf(x, y, grid=True).transpose()
 
+    def plot(self):
+        """
+        Plot a DEM.
+
+        Plots a DEM as a 2-dimensional hillshade.
+        """
+        light = matplotlib.colors.LightSource(azdeg=315, altdeg=45)
+        matplotlib.pyplot.imshow(
+            light.hillshade(self.Z, dx=self.d[0], dy=self.d[1]),
+            cmap='gray',
+            extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]))
+
     def crop(self, xlim=None, ylim=None, copy=True):
         """
         Crop a `DEM`.
@@ -310,7 +322,7 @@ class DEM(object):
         Returns:
             DEM: New object (if `copy=True`)
         """
-        Z = scipy.misc.imresize(self.Z, size=float(scale), interp='bilinear')
+        Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
         if copy:
             return DEM(Z, self.xlim, self.ylim)
         else:

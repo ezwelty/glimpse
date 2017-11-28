@@ -181,13 +181,6 @@ def test_dem_sample(tol=1e-13):
     xy_diagonal = np.array([dem.x, dem.y]).transpose()
     dz_points = dem.sample(xy_diagonal) - dem.Z.diagonal()
     assert np.all(dz_points < tol)
-    # Sample cell center grid
-    dz_grid = dem.sample_grid(dem.x, dem.y) - dem.Z
-    assert np.all(dz_grid < tol)
-    # Sample transect through cell centers
-    x_transect = np.arange(0, 3.5, 0.5)
-    dz_transect = dem.sample_grid(x_transect, 0).flatten() - x_transect
-    assert np.all(dz_transect < tol)
 
 def test_dem_crop_ascending():
     Z = np.arange(9).reshape([3, 3])

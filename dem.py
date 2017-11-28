@@ -1,4 +1,3 @@
-import operator
 import numpy as np
 import scipy.interpolate
 import scipy.ndimage.filters
@@ -36,7 +35,9 @@ class DEM(object):
         self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
 
-    Z = property(operator.attrgetter('_Z'))
+    @property
+    def Z(self):
+        return self._Z
 
     @Z.setter
     def Z(self, value):
@@ -114,8 +115,7 @@ class DEM(object):
         if self._Zf is None:
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RectBivariateSpline(
-                self.x[::sign[0]], self.y[::sign[1]], np.nan_to_num(self.Z[::sign[1], ::sign[0]]).T, kx=3, ky=3, s=0
-                )
+                self.x[::sign[0]], self.y[::sign[1]], np.nan_to_num(self.Z[::sign[1], ::sign[0]]).T, kx=3, ky=3, s=0)
         return self._Zf
 
     # ---- Methods (public) ----

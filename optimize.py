@@ -2,6 +2,7 @@ import numpy as np
 import scipy.spatial
 import cv2
 import lmfit
+import matplotlib
 
 # ---- Controls ----
 

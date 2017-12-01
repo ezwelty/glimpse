@@ -66,11 +66,10 @@ def parse_svg(path, imgsz=None):
         # Use default scale
         scale = np.array([1, 1], dtype=float)
     # Parse all data or g[@id] node not ancestors of g[@id] and who are (or are ancestors of) data
-    nodes = tree.xpath("""//*[
-        not(ancestor::g[@id]) and
-        ((self::g[@id]) or (self::path | self::line | self::polyline | self::polygon)) and
-        (descendant-or-self::path | descendant-or-self::line | descendant-or-self::polyline | descendant-or-self::polygon)
-        ]""")
+    tags = ["path", "line", "polyline", "polygon", "circle"]
+    selfs = " | ".join(["self::" + tag for tag in tags])
+    descendants = " | ".join(["descendant-or-self::" + tag for tag in tags])
+    nodes = tree.xpath("//*[not(ancestor::g[@id]) and (self::g[@id] or (" + selfs + ")) and (" + descendants + ")]")
     return parse_svg_nodes(nodes, scale=scale)
 
 # ---- Helpers ----
@@ -113,6 +112,8 @@ def parse_svg_nodes(nodes, scale=None):
                 branch[id] = parse_polyline(nodes[i].attrib['points'])
             elif tag == 'line':
                 branch[id] = parse_line(**dict((k, nodes[i].attrib[k]) for k in ('x1', 'y1', 'x2', 'y2')))
+            elif tag == 'circle':
+                branch[id] = parse_circle(**dict((k, nodes[i].attrib[k]) for k in ('cx', 'cy')))
             if scale is not None and isinstance(branch[id], np.ndarray):
                 branch[id] *= scale
     return branch
@@ -261,3 +262,18 @@ def parse_path(d):
         else:
             print "Unsupported tag encountered: " + tag
     return np.vstack(X)
+
+def parse_circle(cx, cy):
+    """
+    Return circle center coordinate.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/circle
+
+    Arguments:
+        cx (str): Circle 'cx' attribute
+        cy (str): Circle 'cy' attribute
+
+    Returns:
+        array: Coordinates x,y (1x2)
+    """
+    return np.array([cx, cy], dtype=float).reshape((1, 2))

@@ -8,6 +8,7 @@ import shutil
 import os.path
 import matplotlib.pyplot
 import helper
+import copy
 
 class Camera(object):
     """
@@ -816,6 +817,8 @@ class Image(object):
         else:
             if isinstance(cam, str):
                 cam = helper.read_json(cam)
+            elif isinstance(cam, dict):
+                cam = copy.deepcopy(cam)
             elif cam is None:
                 cam = dict()
             if not cam.has_key('vector'):

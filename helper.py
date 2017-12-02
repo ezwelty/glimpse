@@ -3,6 +3,9 @@ import cPickle
 import pyproj
 import geojson
 import json
+import collections
+import copy
+import dem
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -112,7 +115,7 @@ def sp_transform(points, current, target):
     `int` (EPSG code), `dict` (arguments to `pyproj.Proj()`), or `pyproj.Proj`.
 
     Arguments:
-        points (array): Point coordinates [x, y(, z)]
+        points (array): Point coordinates [[x, y(, z)]]
         current: Current coordinate system
         target: Target coordinate system
     """
@@ -134,22 +137,133 @@ def sp_transform(points, current, target):
     result = pyproj.transform(current, target, x=points[:, 0], y=points[:, 1], z=z)
     return np.column_stack(result)
 
-def read_geojson(path, crs=None):
+def read_json(path, **kwargs):
     """
-    Read GeoJSON to coordinate arrays.
+    Read JSON from file.
 
     Arguments:
         path (str): Path to file
-        proj: Target coordinate system for transformation (see `sp_transform()`).
-            Assumes coordinates in file are EPSG:4326 (WGS84 Longitude, Latitude).
+        kwargs (dict): Additional arguments passed to `json.load()`
     """
-    with open(path, 'r') as fp:
-        features = geojson.load(fp)['features']
-    if crs is None:
-        crs = 4326
-    return [sp_transform(np.vstack(feature['geometry']['coordinates']), 4326, crs)
-        for feature in features]
-
-def read_json(path):
     with open(path, "r") as fp:
-        return json.load(fp)
+        return json.load(fp, **kwargs)
+
+def write_json(obj, path=None, **kwargs):
+    """
+    Write object to JSON.
+
+    Arguments:
+        obj: Object to write as JSON
+        path (str): Path to file. If `None`, result is returned as a string.
+        kwargs (dict): Additional arguments passed to `json.dump()` or `json.dumps()`
+    """
+    if path:
+        with open(path, "w") as fp:
+            json.dump(obj, fp, **kwargs)
+        return None
+    else:
+        return json.dumps(obj, **kwargs)
+
+def read_geojson(path, key=None, crs=None, **kwargs):
+    """
+    Read GeoJSON from file.
+
+    Arguments:
+        path (str): Path to file
+        key (str): Feature property to set as feature key
+        crs: Target coordinate system for transformation.
+            Assumes GeoJSON coordinates are WGS 84
+            [Longitude (degrees), Latitude (degrees), Height above ellipsoid (meters)].
+            If `None`, coordinates are unchanged.
+        kwargs (dict): Additional arguments passed to `read_json()`
+    """
+    obj = read_json(path, **kwargs)
+    for feature in obj['features']:
+        coords = np.atleast_2d(feature['geometry']['coordinates'])
+        if crs:
+            coords = sp_transform(coords, 4326, crs)
+        feature['geometry']['coordinates'] = coords
+    if key:
+        obj['features'] = dict((feature['properties'][key], feature) for feature in obj['features'])
+    return obj
+
+def write_geojson(obj, path=None, crs=None, **kwargs):
+    """
+    Write object to GeoJSON.
+
+    Arguments:
+        obj (dict): Object to write as GeoJSON
+        path (str): Path to file. If `None`, result is returned as a string.
+        crs: Current coordinate system for transformation to WGS 84
+            [Longitude (degrees), Latitude (degrees), Height above ellipsoid (meters)].
+            If `None`, coordinates are unchanged.
+        kwargs (dict): Additional arguments passed to `write_json()`
+    """
+    obj = copy.deepcopy(obj)
+    if isinstance(obj['features'], dict):
+        obj['features'] = obj['features'].values()
+    for feature in obj['features']:
+        coords = np.atleast_2d(feature['geometry']['coordinates'])
+        if crs:
+            coords = sp_transform(coords, crs, 4326)
+        if len(coords) < 2:
+            coords = coords.reshape(-1)
+        feature['geometry']['coordinates'] = coords.tolist()
+    return write_json(obj, path=path, **kwargs)
+
+def elevate_geojson(obj, elevation):
+    """
+    Add or update GeoJSON elevations.
+
+    Arguments:
+        obj (dict): Object to modify
+        elevation: Elevation, as either
+            the elevation of all features (int or float),
+            the name of the feature property containing elevation (str), or
+            digital elevation model from which to sample elevation (`dem.DEM`).
+    """
+    for feature in obj['features']:
+        xy = np.atleast_2d(feature['geometry']['coordinates'])[:, 0:2]
+        if isinstance(elevation, str):
+            z = np.repeat(feature['properties'][elevation], len(xy))
+        elif isinstance(elevation, (int, float)):
+            z = np.repeat(elevation, len(xy))
+        elif isinstance(elevation, dem.DEM):
+            z = elevation.sample(xy)
+        xyz = np.column_stack((xy, z))
+        feature['geometry']['coordinates'] = xyz
+
+def ordered_geojson(obj, properties=None,
+    keys=['type', 'properties', 'features', 'geometry', 'coordinates']):
+    """
+    Return ordered GeoJSON.
+
+    Arguments:
+        obj (dict): Object to order
+        properties (list): Order of properties (any unnamed are returned last)
+        keys (list): Order of keys (any unnamed are returned last)
+    """
+    def order_item(d, name=None):
+        if isinstance(d, list):
+            index = range(len(d))
+        elif isinstance(d, dict):
+            index = d.keys()
+        else:
+            return d
+        for i in index:
+            d[i] = order_item(d[i], name=i)
+        if isinstance(d, dict):
+            if properties and name == 'properties':
+                ordered_keys = ([key for key in properties if key in index]
+                    + [key for key in index if key not in properties])
+                return collections.OrderedDict((k, d[k]) for k in ordered_keys)
+            elif keys and name != 'properties':
+                ordered_keys = ([key for key in keys if key in index]
+                    + [key for key in index if key not in keys])
+                return collections.OrderedDict((k, d[k]) for k in ordered_keys)
+            else:
+                return d
+        else:
+            return d
+    obj = copy.deepcopy(obj)
+    return order_item(obj)

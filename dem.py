@@ -52,7 +52,6 @@ class DEM(object):
                 If `None` (default), read from file.
             datetime (datetime): Capture date and time
         """
-        path = "cg/arcticdem_10m.tif"
         raster = gdal.Open(path, gdal.GA_ReadOnly)
         band = raster.GetRasterBand(1)
         Z = band.ReadAsArray()
@@ -213,16 +212,16 @@ class DEM(object):
         """
         return self.Zf(xy, method=method)
 
-    def plot(self):
+    def plot(self, array=None, cmap="gray", alpha=1):
         """
         Plot a DEM.
 
         Plots a DEM as a 2-dimensional hillshade.
         """
-        light = matplotlib.colors.LightSource(azdeg=315, altdeg=45)
-        matplotlib.pyplot.imshow(
-            light.hillshade(self.Z, dx=self.d[0], dy=self.d[1]),
-            cmap='gray',
+        if array is None:
+            light = matplotlib.colors.LightSource(azdeg=315, altdeg=45)
+            array = light.hillshade(self.Z, dx=self.d[0], dy=self.d[1])
+        matplotlib.pyplot.imshow(array, cmap=cmap, alpha=alpha,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]))
 
     def crop(self, xlim=None, ylim=None, copy=True):

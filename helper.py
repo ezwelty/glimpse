@@ -267,3 +267,14 @@ def ordered_geojson(obj, properties=None,
             return d
     obj = copy.deepcopy(obj)
     return order_item(obj)
+
+def split_true(x, mask, axis=0):
+    """
+    Split array by boolean mask.
+    """
+    # See https://stackoverflow.com/a/36518315/8161503
+    cuts = np.nonzero(mask[1:] != mask[:-1])[0] + 1
+    if len(cuts) is 0 and mask[0] is False:
+        return []
+    cx = np.split(x, cuts, axis=axis)
+    return cx[0::2] if mask[0] else cx[1::2]

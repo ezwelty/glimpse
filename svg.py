@@ -194,7 +194,7 @@ def parse_path(d):
             X.insert(i, X[0][0])
             continue
         else:
-            data = np.array(re.findall("[\.0-9\-]+", numbers[i]), dtype=float)
+            data = np.array(re.findall("\-*[\.0-9]+", numbers[i]), dtype=float)
         if len(data) % 2 == 0:
             data = data.reshape((-1, 2))
         # moveto: M (x,y)+ | m (dx,dy)+

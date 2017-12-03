@@ -336,9 +336,7 @@ class Camera(object):
         xyz = self._camera2world(xy)
         return xyz
 
-    # ---- Methods (private) ----
-
-    def _infront(self, xyz, directions=False):
+    def infront(self, xyz, directions=False):
         """
         Test whether world coordinates are in front of the camera.
 
@@ -353,7 +351,7 @@ class Camera(object):
         z = np.dot(dxyz, self.R.T)[:, 2]
         return z > 0
 
-    def _inframe(self, uv):
+    def inframe(self, uv):
         """
         Test whether image coordinates are in or on the image frame.
 
@@ -361,6 +359,19 @@ class Camera(object):
             uv (array) Image coordinates (Nx2)
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
+
+    def inview(self, xyz, directions=False):
+        """
+        Test whether world coordinates are within view.
+
+        Arguments:
+            xyz (array): World coordinates (Nx3) or normalized camera coordinates (Nx2)
+            directions (bool): Whether `xyz` are absolute coordinates (`False`) or ray directions (`True`)
+        """
+        uv = self.project(xyz, directions=directions)
+        return self.inframe(uv)
+
+    # ---- Methods (private) ----
 
     def _radial_distortion(self, r2):
         """

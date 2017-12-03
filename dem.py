@@ -218,17 +218,33 @@ class DEM(object):
         """
         return self.Zf(xy, method=method)
 
-    def plot(self, array=None, cmap="gray", alpha=1):
+    def plot(self, array=None, **kwargs):
         """
         Plot a DEM.
 
-        Plots a DEM as a 2-dimensional hillshade.
+        Arguments:
+            array (array): Values to plot. If `None`, `.Z` is used.
+            kwargs (dict): Arguments passed to `matplotlib.pyplot.imshow()`
         """
         if array is None:
-            light = matplotlib.colors.LightSource(azdeg=315, altdeg=45)
-            array = light.hillshade(self.Z, dx=self.d[0], dy=self.d[1])
-        matplotlib.pyplot.imshow(array, cmap=cmap, alpha=alpha,
-            extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]))
+            array = self.Z
+        matplotlib.pyplot.imshow(array,
+            extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
+            **kwargs)
+
+    def hillshade(self, azimuth=315, altitude=45, **kwargs):
+        """
+        Return the illumination intensity of the surface.
+
+        Arguments:
+            azimuth (number): Azimuth angle of the light source
+                (0-360, degrees clockwise from North)
+            altitude (number): Altitude angle of the light source
+                (0-90, degrees up from horizontal)
+            kwargs (dict): Arguments passed to `matplotlib.colors.LightSource.hillshade()`
+        """
+        light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
+        return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
 
     def crop(self, xlim=None, ylim=None, copy=True):
         """
@@ -372,7 +388,7 @@ class DEM(object):
         Y = self.Y.flatten() - xyz[1]
         Z = self.Z.flatten() - xyz[2]
         # NOTE: Compute dx, dz, then elevation angle instead?
-        d = (X ** 2 + Y ** 2 + Z ** 2) ** 0.5
+        d = np.sqrt(X**2 + Y**2 + Z**2)
         x = (np.arctan2(Y, X) + np.pi) / (np.pi * 2) # ???
         y = Z / d
         # Slow:
@@ -382,7 +398,7 @@ class DEM(object):
             ))
         loopix = np.argwhere(np.diff(x[ix]) < 0).flatten()
         vis = np.ones(len(x), dtype=bool)
-        maxd = d.max()
+        maxd = np.nanmax(d)
         # Number of points in voxel horizon:
         N = np.ceil(2 * np.pi / (abs(self.d[0]) / maxd))
         voxx = np.linspace(0, 1, int(N) + 1)

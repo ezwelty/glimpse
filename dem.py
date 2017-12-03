@@ -38,14 +38,18 @@ class DEM(object):
         self.datetime = datetime
 
     @classmethod
-    def read(cls, path, x=None, y=None, datetime=None):
+    def read(cls, path, band=1, x=None, y=None, datetime=None):
         """
         Read DEM from raster file.
 
         See `gdal.Open()` for details.
+        If raster is float and has a defined no-data value,
+        no-data values are replaced with NaN.
+        Otherwise, the raster data is unchanged.
 
         Arguments:
             path (str): Path to file
+            band (int): Raster band to read (1 = first band)
             x (object): Either `xlim`, `x`, or `X`.
                 If `None` (default), read from file.
             y (object): Either `ylim`, `y`, or `Y`.
@@ -53,11 +57,13 @@ class DEM(object):
             datetime (datetime): Capture date and time
         """
         raster = gdal.Open(path, gdal.GA_ReadOnly)
-        band = raster.GetRasterBand(1)
+        band = raster.GetRasterBand(band)
         Z = band.ReadAsArray()
         # FIXME: band.GetNoDataValue() not equal to read values due to rounding
         # HACK: Use < -9998 since most common are -9999 and -3.4e38
-        Z[Z < -9998] = np.nan
+        nan_value = band.GetNoDataValue()
+        if np.issubdtype(Z.dtype, float) and nan_value:
+            Z[Z == nan_value] = np.nan
         transform = raster.GetGeoTransform()
         if x is None:
             x = transform[0] + transform[1] * np.array([0, raster.RasterXSize])

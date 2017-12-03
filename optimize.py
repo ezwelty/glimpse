@@ -3,6 +3,7 @@ import scipy.spatial
 import cv2
 import lmfit
 import matplotlib
+import helper
 
 # ---- Controls ----
 
@@ -164,13 +165,23 @@ class Lines(object):
         """
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
-        # TODO: Clip world line to camera view. Needed for lines passing behind camera.
-        # Project world lines to camera
-        xys = [self.cam._world2camera(xyz, directions=self.directions) for xyz in self.xyzs]
-        # Interpolate so that projected vertices are ~1 pixel apart
-        xyis = [interpolate_line(xy, step=1/self.cam.f.mean(), normalized=False) for xy in xys]
-        # Project camera lines onto image
-        return [self.cam._camera2image(xyi) for xyi in xyis]
+        puvs = []
+        for xyz in self.xyzs:
+            # Project world lines to camera
+            xy = self.cam._world2camera(xyz, directions=self.directions)
+            # Discard nan values (behind camera)
+            xy = xy[~np.any(np.isnan(xy), axis=1), :]
+            # Interpolate to ~1 pixel density over image (and unchanged elsewhere)
+            if len(xy):
+                inview = self.cam.inview(xy)
+                segments = helper.boolean_split(xy, inview)
+                is_in = slice(0, None, 2) if inview[0] else slice(1, None, 2)
+                segments[is_in] = [interpolate_line(segment, step=1/self.cam.f.mean(), normalized=False)
+                    for segment in segments[is_in]]
+                puvs.append(self.cam._camera2image(np.vstack(segments)))
+        if len(puvs) is 0:
+            raise ValueError("All line vertices are behind camera")
+        return puvs
 
     def predicted(self, index=None):
         """
@@ -184,7 +195,7 @@ class Lines(object):
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        min_index = find_nearest_neighbors(self.observed(index=index), puv)
+        min_index = find_nearest_neighbors(self.observed(), puv)
         return puv[min_index, :]
 
     def is_static(self):

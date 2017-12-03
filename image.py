@@ -371,6 +371,26 @@ class Camera(object):
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
 
+    def centers(self, mode=None):
+        """
+        Return image coordinates of all grid cell centers.
+
+        Arguments:
+            mode (str): Image coordinates, returned as either
+
+                - "vectors": x (nx, ) and y (ny, ) coordinates
+                - "grids": x (ny, nx) and y (ny, nx) coordinates
+                - otherwise: x, y coordinates (ny * nx, 2)
+        """
+        u = np.linspace(0.5, self.imgsz[0] - 0.5, int(self.imgsz[0]))
+        v = np.linspace(0.5, self.imgsz[1] - 0.5, int(self.imgsz[1]))
+        if mode == "vectors":
+            return u, v
+        U, V = np.meshgrid(u, v)
+        if mode == "grids":
+            return U, V
+        return np.column_stack((U.flatten(), V.flatten()))
+
     # ---- Methods (private) ----
 
     def _radial_distortion(self, r2):

@@ -28,16 +28,9 @@ def test_camera_idealize(c=1, k=1, p=1):
     assert (cam.k == 0).all()
     assert (cam.p == 0).all()
 
-def pixel_centers(cam):
-    """Return image coordinates of all pixel centers (Nx2)."""
-    u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
-    v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))
-    U, V = np.meshgrid(u, v)
-    return np.column_stack((U.flatten(), V.flatten()))
-
 def reprojection_errors(cam):
     """Compute reprojection errors at all pixel centers."""
-    uv = pixel_centers(cam)
+    uv = cam.centers()
     dxyz = cam.invproject(uv)
     puv = cam.project(dxyz, directions=True)
     return np.sqrt(np.sum((puv - uv)**2, axis=1))

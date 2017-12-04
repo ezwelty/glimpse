@@ -391,6 +391,20 @@ class Camera(object):
             return U, V
         return np.column_stack((U.flatten(), V.flatten()))
 
+    def rasterize(self, uv, values, fun=np.mean):
+        """
+        Convert points to a raster image.
+
+        Arguments:
+            uv (array): Image point coordinates (Nx2)
+            values (array): Point values
+            fun (function): Aggregate function to apply to values of overlapping points
+        """
+        is_in = self.inframe(uv)
+        shape = (int(self.imgsz[1]), int(self.imgsz[0]))
+        return helper.rasterize_points(uv[is_in, 1].astype(int), uv[is_in, 0].astype(int),
+            values[is_in], shape, fun=fun)
+
     # ---- Methods (private) ----
 
     def _radial_distortion(self, r2):

@@ -6,6 +6,7 @@ import json
 import collections
 import copy
 import dem
+import pandas
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -280,3 +281,28 @@ def boolean_split(x, mask, axis=0):
     if len(cuts) is 0 and mask[0] is False:
         return []
     return np.split(x, cuts, axis=axis)
+
+def rasterize_points(rows, cols, values, shape, fun=np.mean):
+    """
+    Rasterize points by array indices.
+
+    Points are aggregated by equal row and column indices and the specified function,
+    then inserted into an empty array.
+
+    Arguments:
+        rows (array): Point row indices
+        cols (array): Point column indices
+        values (array): Point value
+        shape (tuple): Output array row and column size
+        fun (function): Aggregate function to apply to values of overlapping points
+
+    Returns:
+        array: Float array of shape `shape` with aggregated point values
+            where available and `NaN` elsewhere
+    """
+    df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
+    groups = df.groupby(('row', 'col')).aggregate(fun).reset_index()
+    idx = np.ravel_multi_index((groups.row.as_matrix(), groups.col.as_matrix()), shape)
+    grid = np.full(shape, np.nan)
+    grid.flat[idx] = groups.value.as_matrix()
+    return grid

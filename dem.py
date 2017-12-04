@@ -3,6 +3,7 @@ import scipy.interpolate
 import scipy.ndimage
 import gdal
 import matplotlib
+import helper
 
 class DEM(object):
     """
@@ -245,6 +246,20 @@ class DEM(object):
         """
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
+
+    def rasterize(self, xy, values, fun=np.mean):
+        """
+        Convert points to a raster image.
+
+        Arguments:
+            xy (array): Point coordinates (Nx2)
+            values (array): Point values
+            fun (function): Aggregate function to apply to values of overlapping points
+        """
+        is_in = self.inbounds(xy)
+        rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
+        return helper.grid_points(rowcol[:, 0], rowcol[:, 1],
+            values[is_in], self.Z.shape, fun=fun)
 
     def crop(self, xlim=None, ylim=None, copy=True):
         """

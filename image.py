@@ -936,7 +936,7 @@ class Image(object):
             else:
                 im = PIL.Image.fromarray(I)
             # For JPEG file extensions, see https://stackoverflow.com/a/23424597/8161503
-            if ext in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
+            if ext.lower() in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
                 exif = self.exif.copy()
                 exif.set_tag('PixelXDimension', im.size[0])
                 exif.set_tag('PixelYDimension', im.size[1])
@@ -962,6 +962,10 @@ class Image(object):
         if extent is None:
             extent=(0, I.shape[1], I.shape[0], 0)
         matplotlib.pyplot.imshow(I, origin=origin, extent=extent, **params)
+
+    def set_plot_limits(self):
+        matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
+        matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
     def project(self, cam, method="linear"):
         """

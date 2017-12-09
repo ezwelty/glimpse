@@ -152,10 +152,14 @@ class DEM(object):
         if self._Zf is None:
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RegularGridInterpolator(
-                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]], method="linear")
+                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]],
+                method="linear", bounds_error=False)
         return self._Zf
 
     # ---- Methods (public) ----
+
+    def copy(self):
+        return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
 
     def inbounds(self, xy):
         """
@@ -192,6 +196,9 @@ class DEM(object):
         else:
             return colrow[:, ::-1]
 
+    def rowcol_to_idx(self, rowcol):
+        return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.Z.shape)
+
     def rowcol_to_xy(self, rowcol):
         """
         Return x,y coordinates of row,col indices.
@@ -208,7 +215,7 @@ class DEM(object):
         origin = np.append(self.xlim[0], self.ylim[0])
         return (rowcol + 0.5)[:, ::-1] * self.d + origin
 
-    def sample(self, xy, method="linear"):
+    def sample(self, xy, indices=False, method="linear"):
         """
         Sample `Z` at points.
 
@@ -217,9 +224,19 @@ class DEM(object):
             method (str): Interpolation method,
                 either "linear" (default) or "nearest"
         """
-        return self.Zf(xy, method=method)
+        if indices:
+            return self.Z.flat[self.rowcol_to_idx(xy)]
+        else:
+            return self.Zf(xy, method=method)
 
-    def plot(self, array=None, **kwargs):
+    def resample(self, dem, method="linear"):
+        xy = np.column_stack((dem.X.flatten(), dem.Y.flatten()))
+        Z = self.sample(xy, method=method)
+        self.Z = Z.reshape(dem.Z.shape)
+        self.xlim, self._x, self._X = self._parse_x(dem.X)
+        self.ylim, self._y, self._Y = self._parse_y(dem.Y)
+
+    def plot(self, array=None, cmap="gray", **kwargs):
         """
         Plot a DEM.
 
@@ -231,7 +248,11 @@ class DEM(object):
             array = self.Z
         matplotlib.pyplot.imshow(array,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
-            **kwargs)
+            cmap=cmap, **kwargs)
+
+    def set_plot_limits(self):
+        matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
+        matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
 
     def hillshade(self, azimuth=315, altitude=45, **kwargs):
         """
@@ -258,20 +279,18 @@ class DEM(object):
         """
         is_in = self.inbounds(xy)
         rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
-        return helper.grid_points(rowcol[:, 0], rowcol[:, 1],
+        return helper.rasterize_points(rowcol[:, 0], rowcol[:, 1],
             values[is_in], self.Z.shape, fun=fun)
 
-    def crop(self, xlim=None, ylim=None, copy=True):
+    def crop(self, xlim=None, ylim=None, zlim=None):
         """
         Crop a `DEM`.
 
         Arguments:
             xlim (array_like): Cropping bounds in x
             ylim (array_like): Cropping bounds in y
-            copy (bool): Whether to return result as new `DEM`
-
-        Returns:
-            DEM: New object (if `copy=True`)
+            zlim (array_like): Cropping bounds in z.
+                Values outside range are set to `nan`.
         """
         # Intersect xlim
         if xlim is None:
@@ -299,87 +318,58 @@ class DEM(object):
                 raise ValueError("Crop bounds (ylim) do not intersect DEM.")
             if np.diff(self.ylim) < 0:
                 ylim = ylim[::-1]
-        # Test for equality
-        if all(xlim == self.xlim) and all(ylim == self.ylim):
-            if copy:
-                return DEM(self.Z, self.xlim, self.ylim)
-            else:
-                return None
-        # Convert xy limits to grid indices
-        xy = np.column_stack((xlim, ylim))
-        rc = self.xy_to_rowcol(xy, snap=True)
-        # Snap down bottom-right, non-outer edges
-        # see .xy_to_rowcol()
-        bottom_right = np.append(self.xlim[1], self.ylim[1])
-        is_edge = (bottom_right - xy[1, :]) % self.d == 0
-        is_outer_edge = xy[1, :] == bottom_right
-        snap_down = (is_edge & ~is_outer_edge)
-        rc[1, snap_down[::-1]] -= 1
-        # Crop DEM
-        Z = self.Z[rc[0, 0]:rc[1, 0] + 1, rc[0, 1]:rc[1, 1] + 1]
-        new_xy = self.rowcol_to_xy(rc)
-        new_xlim = new_xy[:, 0] + np.array([-0.5, 0.5]) * self.d[0]
-        new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[0]
-        if copy:
-            return DEM(Z, new_xlim, new_ylim)
-        else:
+        # Apply new x,y limits
+        if any(xlim != self.xlim) or any(ylim != self.ylim):
+            # Convert xy limits to grid indices
+            xy = np.column_stack((xlim, ylim))
+            rc = self.xy_to_rowcol(xy, snap=True)
+            # Snap down bottom-right, non-outer edges
+            # see .xy_to_rowcol()
+            bottom_right = np.append(self.xlim[1], self.ylim[1])
+            is_edge = (bottom_right - xy[1, :]) % self.d == 0
+            is_outer_edge = xy[1, :] == bottom_right
+            snap_down = (is_edge & ~is_outer_edge)
+            rc[1, snap_down[::-1]] -= 1
+            # Crop DEM
+            Z = self.Z[rc[0, 0]:rc[1, 0] + 1, rc[0, 1]:rc[1, 1] + 1]
+            new_xy = self.rowcol_to_xy(rc)
+            new_xlim = new_xy[:, 0] + np.array([-0.5, 0.5]) * self.d[0]
+            new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[0]
             self.Z = Z
             self.xlim = new_xlim
             self.ylim = new_ylim
+        # Apply zlim
+        if zlim is not None:
+            self.Z[(self.Z < min(zlim)) & (self.Z > max(zlim))] = np.nan
 
-    def resize(self, scale, copy=True):
+    def resize(self, scale):
         """
         Resize a `DEM`.
 
         Arguments:
             scale (float): Fraction of current size
-            copy (bool): Whether to return result as new `DEM`
-
-        Returns:
-            DEM: New object (if `copy=True`)
         """
-        Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
-        if copy:
-            return DEM(Z, self.xlim, self.ylim)
-        else:
-            self.Z = Z
+        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
 
-    def fill_crevasses_simple(self, maximum_filter_size=5, gaussian_filter_sigma=5, copy=True):
+    def fill_crevasses_simple(self, maximum_filter_size=5, gaussian_filter_sigma=5):
         """
         Apply a maximum filter to `Z`, then perform Gaussian smoothing (fast).
 
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-            copy (bool): Whether to return result as new `DEM`
-
-        Returns:
-            DEM: New object (if `copy=True`)
         """
-        Z = scipy.ndimage.filters.gaussian_filter(
+        self.Z = scipy.ndimage.filters.gaussian_filter(
             scipy.ndimage.filters.maximum_filter(self.Z, size=maximum_filter_size),
-            sigma=gaussian_filter_sigma
-            )
-        if copy:
-            xs = [self._X, self._x, self.xlim]
-            x = next(item for item in xs if item is not None)
-            ys = [self._Y, self._y, self.ylim]
-            y = next(item for item in ys if item is not None)
-            return DEM(Z, x, y)
-        else:
-            self.Z = Z
+            sigma=gaussian_filter_sigma)
 
-    def fill_crevasses_complex(self, maximum_filter_size=5, gaussian_filter_sigma=5, copy=True):
+    def fill_crevasses_complex(self, maximum_filter_size=5, gaussian_filter_sigma=5):
         """
         Find the local maxima of `Z`, fit a surface through them, then perform Gaussian smoothing (slow).
 
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-            copy (bool): Whether to return result as new `DEM`
-
-        Returns:
-            DEM: New object (if `copy=True`)
         """
         Z_maxima = scipy.ndimage.filters.maximum_filter(self.Z, size=maximum_filter_size)
         is_max = (Z_maxima == self.Z).ravel()
@@ -388,15 +378,7 @@ class DEM(object):
         Zmax = self.Z.ravel()[is_max]
         max_interpolant = scipy.interpolate.LinearNDInterpolator(np.vstack((Xmax, Ymax)).T, Zmax)
         Z_fmax = max_interpolant(self.X.ravel(), self.Y.ravel()).reshape(self.Z.shape)
-        Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
-        if copy:
-            xs = [self._X, self._x, self.xlim]
-            x = next(item for item in xs if item is not None)
-            ys = [self._Y, self._y, self.ylim]
-            y = next(item for item in ys if item is not None)
-            return DEM(Z, x, y)
-        else:
-            self.Z = Z
+        self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
 
     def visible(self, xyz):
         X = self.X.flatten() - xyz[0]
@@ -407,10 +389,8 @@ class DEM(object):
         x = (np.arctan2(Y, X) + np.pi) / (np.pi * 2) # ???
         y = Z / d
         # Slow:
-        ix = np.lexsort((
-                x,
-                np.round(((X / abs(self.d[0])) ** 2 + (Y / abs(self.d[1])) ** 2) ** 0.5),
-            ))
+        ix = np.lexsort((x,
+            np.round(((X / abs(self.d[0])) ** 2 + (Y / abs(self.d[1])) ** 2) ** 0.5)))
         loopix = np.argwhere(np.diff(x[ix]) < 0).flatten()
         vis = np.ones(len(x), dtype=bool)
         maxd = np.nanmax(d)
@@ -432,6 +412,150 @@ class DEM(object):
                 vis[lp[1:end]] = np.interp(xx[1:end], voxx, voxy) < yy[1:end]
             voxy = np.maximum(voxy, np.interp(voxx, xx, yy))
         return vis.reshape(self.Z.shape)
+
+    def visible2(self, xyz):
+        # NOTE: Assumes square grid
+        # Compute distance to all cell centers
+        dx = self.X.flatten() - xyz[0]
+        dy = self.Y.flatten() - xyz[1]
+        dz = self.Z.flatten() - xyz[2]
+        dxy2 = (dx**2 + dy**2)
+        dxy =  np.sqrt(dxy2)
+        # dxyz = np.sqrt((dxy2 + dz**2))
+        dxy_cell = (dxy / abs(self.d[0]) + 0.5).astype(int)
+        # Compute heading (-pi to pi CW from -y axis)
+        heading = np.arctan2(dy, dx)
+        # Sort cells by distance, then heading
+        ix = np.lexsort((heading, dxy_cell))
+        dxy_cell_sorted = dxy_cell[ix]
+        # Compute start and end indices of each ring
+        rings = np.flatnonzero(np.diff(dxy_cell_sorted)) + 1
+        if len(rings):
+            if dxy_cell_sorted[0]:
+                # Include first ring
+                rings = np.hstack((0, rings))
+        else:
+            if dxy_cell_sorted[0]:
+                # Single ring starting at 0
+                rings = np.array([0])
+            else:
+                # Single co-located pixel, return all visible
+                return np.ones(self.Z.shape, dtype=bool)
+        rings = np.hstack((rings, len(ix)))
+        # Compute elevation
+        dxy[dxy == 0] = np.nan
+        # NOTE: Arctan necessary?
+        elevation = np.arctan(dz / dxy)
+        # Compute max number of points on most distant ring
+        # N = np.ceil(2 * np.pi * (dxy[ix[-1]] / abs(self.d[0]))).astype(int)
+        N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
+        # Initialize loop
+        # NOTE: N or N + 1 ?
+        vis = np.zeros(self.Z.size, dtype=bool)
+        headings = np.linspace(-np.pi, np.pi, N)
+        headings_f = scipy.interpolate.interp1d(headings, np.arange(N), kind='nearest', assume_sorted=True)
+        max_elevations = np.full(N, -np.inf)
+        max_elevation_ix = np.full(N, np.nan)
+        # Loop through rings
+        # NOTE: Why len(rings) - 1 ?
+        period = 2 * np.pi
+        for k in range(len(rings) - 1):
+            rix = ix[rings[k]:rings[k + 1]]
+            rheading = heading[rix]
+            relev = elevation[rix]
+            # Visibility
+            if k > 0:
+                # NOTE: Throws warning if np.nan in relev
+                is_visible = relev >= np.interp(rheading, headings, max_elevations, period=period)
+            else:
+                # First ring is always visible
+                is_visible = np.ones(relev.shape, dtype=bool)
+            vis[rix] = is_visible
+            max_elevations = np.fmax(max_elevations, np.interp(headings, rheading, relev, period=period)) # ignores nan
+            # Horizon
+            rhix = headings_f(rheading[is_visible]).astype(int)
+            max_elevation_ix[rhix] = rix[is_visible]
+        # Compute xyz of horizon
+        is_not_nan = ~np.isnan(max_elevation_ix)
+        # TODO: Insert NaN where value missing?
+        # TODO: Set edges to nan (edge never horizon)
+        hix = max_elevation_ix[is_not_nan].astype(int)
+        hxyz = np.column_stack((self.X.flat[hix], self.Y.flat[hix], self.Z.flat[hix]))
+        # thetas = headings[is_not_nan] * 2 * np.pi - np.pi
+        # hdxy = dxy_cell[hix] * self.d[0]
+        # hdz = max_elevations[is_not_nan] * hdxy
+        # hxyz2 = xyz + np.column_stack((hdxy[:, None] * np.column_stack((np.cos(thetas), np.sin(thetas))), hdz[:, None]))
+        return vis.reshape(self.Z.shape), hxyz#, hxyz2
+
+    def horizon(self, origin, headings=np.arange(360), corrected=True):
+        # TODO: Radius min, max (by slicing bresenham line)
+        n = len(headings)
+        # Compute ray directions (2d)
+        thetas = - (headings - 90) * np.pi / 180
+        directions = np.column_stack((np.cos(thetas), np.sin(thetas)))
+        # Intersect with box (2d)
+        box = np.concatenate((self.min[0:2], self.max[0:2]))
+        xy_starts, xy_ends = helper.intersect_rays_box(origin[0:2], directions, box)
+        # Convert spatial coordinates (x, y) to grid indices (xi, yi)
+        inside = self.inbounds(np.atleast_2d(origin[0:2]))[0]
+        if inside:
+            # If inside, start at origin
+            rowcol = self.xy_to_rowcol(np.atleast_2d(origin[0:2]), snap=True)
+            starts = np.repeat(rowcol[:, ::-1], n, axis=0)
+        else:
+            rowcol = self.xy_to_rowcol(xy_starts)
+            starts = rowcol[:, ::-1]
+        rowcol = self.xy_to_rowcol(xy_ends, snap=True)
+        ends = rowcol[:, ::-1]
+        # Iterate over line in each direction
+        hxyz = np.full((n, 3), np.nan)
+        for i in range(n):
+            rowcol = helper.bresenham_line(starts[i, :], ends[i, :])[:, ::-1]
+            if inside:
+                # Skip start cell
+                rowcol = rowcol[1:]
+            idx = self.rowcol_to_idx(rowcol)
+            # TODO: Precompute Z.flatten()?
+            dz = self.Z.flat[idx] - origin[2]
+            xy = self.rowcol_to_xy(rowcol)
+            dxy = np.sqrt(np.sum((xy - origin[0:2])**2, axis=1))
+            maxi = np.nanargmax(dz / dxy)
+            # Save point it not last non-nan value
+            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1:])):
+                hxyz[i, 0:2] = xy[maxi, :]
+                hxyz[i, 2] = dz[maxi]
+        hxyz[:, 2] += origin[2]
+        if corrected:
+            # Correct for earth curvature and refraction
+            # e.g. http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
+            # z_actual = z_surface - 0.87 * distance^2 / diameter_earth
+            hxyz[:, 2] -= 0.87 * np.sum((origin[0:2] - hxyz[:, 0:2])**2, axis=1) / 12.74e6
+        # Split at NaN
+        mask = np.isnan(hxyz[:, 0])
+        splits = helper.boolean_split(hxyz, mask, axis=0, circular=True)
+        if mask[0]:
+            # Starts with isnan group
+            return splits[1::2]
+        else:
+            # Starts with not-isnan group
+            return splits[0::2]
+
+    def fill_circle(self, center, radius, value=np.nan):
+        # Circle indices
+        rowcol = self.xy_to_rowcol(np.atleast_2d(center[0:2]), snap=True)
+        r = np.round(radius / self.d[0])
+        xyi = helper.bresenham_circle(rowcol[0, ::-1], r).astype(int)
+        # Filled circle indices
+        ind = []
+        y = np.unique(xyi[:, 1])
+        yin = (y > -1) & (y < self.n[1])
+        for yi in y[yin]:
+            xb = xyi[xyi[:, 1] == yi, 0]
+            xi = range(max(xb.min(), 0), min(xb.max(), self.n[0] - 1) + 1)
+            rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
+            ind.extend(self.rowcol_to_idx(rowcols))
+        # Apply
+        self.Z.flat[ind] = value
 
     # ---- Methods (private) ----
 

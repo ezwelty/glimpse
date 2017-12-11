@@ -55,6 +55,8 @@ class Camera(object):
             self.xyz = xyz
             self.viewdir = viewdir
             self.imgsz = imgsz
+            if (fmm is not None or cmm is not None) and sensorsz is None:
+                raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
             if sensorsz is not None and fmm is not None:
                 self.f = helper.format_list(fmm, length=2) * self.imgsz / self.sensorsz
             else:

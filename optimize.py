@@ -4,6 +4,7 @@ import cv2
 import lmfit
 import matplotlib
 import helper
+import sys
 
 # ---- Controls ----
 
@@ -632,6 +633,10 @@ class Cameras(object):
                 by group or camera (group, cam0, cam1, ...),
                 then ordered by position in `Camera.vector`.
         """
+        def callback(params, iter, resid, *args, **kwargs):
+            err = np.sqrt(np.sum(resid.reshape(-1, 2)**2, axis=1)).mean()
+            sys.stdout.write("\r" + str(err))
+            sys.stdout.flush()
         iterations = max(
             len(cam_params) if cam_params else 0,
             len(group_params) if group_params else 0)
@@ -646,8 +651,9 @@ class Cameras(object):
                 if values is not None:
                     model.set_cameras(params=values)
             self.update_params()
-        minimizer = lmfit.Minimizer(self.residuals, self.params, fcn_kws=dict(index=index), **self.options)
+        minimizer = lmfit.Minimizer(self.residuals, self.params, iter_cb=callback, fcn_kws=dict(index=index), **self.options)
         result = minimizer.leastsq()
+        sys.stdout.write("\n")
         values = np.array(result.params.valuesdict().values())
         if iterations:
             self.reset_cameras()

@@ -242,6 +242,30 @@ class Camera(object):
         else:
             raise KeyError("No sensor size found for: " + make_model)
 
+    @staticmethod
+    def get_scale_from_size(old_size, new_size):
+        """
+        Return the scale factor that achieves the target image size.
+
+        Arguments:
+            old_size (array-like): Initial image size [nx, ny]
+            new_size (array-like): Target image size [nx, ny]
+        """
+        old_size = np.floor(np.array(old_size) + 0.5)
+        new_size = np.floor(np.array(new_size) + 0.5)
+        if all(new_size == old_size):
+            return 1
+        scale_bounds = new_size / old_size
+        if scale_bounds[0] == scale_bounds[1]:
+            return scale_bounds[0]
+        def err(scale):
+            return np.sum(np.abs(np.floor(scale * old_size + 0.5) - new_size))
+        fit = scipy.optimize.minimize(err, x0=scale_bounds.mean(), bounds=[scale_bounds])
+        if err(fit['x']) > 0:
+            raise ValueError("No scale can achieve the target size")
+        else:
+            return fit['x']
+
     # ---- Methods (public) ----
 
     def copy(self):
@@ -291,20 +315,23 @@ class Camera(object):
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
 
-    def resize(self, scale):
+    def resize(self, size):
         """
-        Resize a camera by a scale factor.
+        Resize the camera.
 
         Image size (`imgsz`), focal length (`f`), and principal point offset (`c`) are scaled accordingly.
 
         Arguments:
-            scale (scalar): Scale factor
+            size: Either scale factor (scalar) or target image size (length-2)
         """
-        target_size = np.round(self.imgsz * float(scale))
-        scale = target_size / self.imgsz
-        self.imgsz *= scale
-        self.f *= scale
-        self.c *= scale
+        scale1d = np.atleast_1d(size)
+        if len(scale1d) > 1:
+            scale1d = Camera.get_scale_from_size(self.imgsz, scale1d)
+        new_size = np.floor(scale1d * self.imgsz + 0.5)
+        scale2d = new_size / self.imgsz
+        self.imgsz *= scale2d
+        self.f *= scale2d
+        self.c *= scale2d
 
     def project(self, xyz, directions=False):
         """

@@ -14,3 +14,6 @@ __pycache__/
 
 # Pyenv
 .python-version
+
+/cg-calibrations/svg/*.JPG
+/cg-calibrations/svg/*.TIF

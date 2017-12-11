@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="816.0px" height="612.0px" viewBox="0 0 816.0 612.0" enable-background="new 0 0 816.0 612.0">
+    <g id="image">
+        <image overflow="visible" width="3264.0" height="2448.0" xlink:href="CG04_20040709_160053.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="cairin-up" cx="708.5" cy="516.1" r="0.25" fill="red"/>
+        <circle id="cairin-dwn" cx="450.875" cy="516.5" r="0.25" fill="red"/>
+        <circle id="kaidin-cairin" cx="490.45" cy="208.7" r="0.25" fill="red"/>
+        <circle id="P4930" cx="553.5" cy="181.625" r="0.25" fill="red"/>
+        <circle id="P7010" cx="718.0" cy="185.4" r="0.25" fill="red"/>
+        <circle id="blotch" cx="100.25" cy="264.05" r="0.25" fill="red"/>
+        <circle id="nipple" cx="397.25" cy="234.5" r="0.25" fill="red"/>
+        <circle id="splitrock" cx="465.375" cy="248.25" r="0.25" fill="red"/>
+        <circle id="cluster" cx="469.3" cy="253.55" r="0.25" fill="red"/>
+        <circle id="T20040709-01" cx="63.625" cy="199.375" r="0.25" fill="red"/>
+        <circle id="T20040709-02" cx="241.875" cy="242.0" r="0.25" fill="red"/>
+        <circle id="T20040709-03" cx="211.125" cy="213.625" r="0.25" fill="red"/>
+        <circle id="T20040709-04" cx="197.625" cy="198.875" r="0.25" fill="red"/>
+        <circle id="T20040709-05" cx="292.25" cy="228.625" r="0.25" fill="red"/>
+        <circle id="T20040709-06" cx="418.375" cy="263.875" r="0.25" fill="red"/>
+        <circle id="T20040709-07" cx="401.375" cy="238.625" r="0.25" fill="red"/>
+        <circle id="T20040709-08" cx="402.375" cy="242.125" r="0.25" fill="red"/>
+        <circle id="T20040709-09" cx="309.25" cy="167.625" r="0.25" fill="red"/>
+        <circle id="T20040709-10" cx="302.125" cy="184.875" r="0.25" fill="red"/>
+        <circle id="T20040709-11" cx="285.0" cy="147.75" r="0.25" fill="red"/>
+        <circle id="T20040709-12" cx="123.5" cy="204.875" r="0.25" fill="red"/>
+    </g>
+</svg>

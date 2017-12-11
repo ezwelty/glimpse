@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="968.0px" height="648.0px" viewBox="0 0 968.0 648.0" enable-background="new 0 0 968.0 648.0">
+    <g id="image">
+        <image overflow="visible" width="3872.0" height="2592.0" xlink:href="AK02_20070922_195333.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="P7010" cx="61.0625" cy="111.3125" r="0.25" fill="red"/>
+        <circle id="TOOTH" cx="247.0625" cy="97.5625" r="0.25" fill="red"/>
+        <circle id="P7930" cx="315.4375" cy="96.125" r="0.25" fill="red"/>
+        <circle id="TRIANGLEPK" cx="448.3125" cy="82.0625" r="0.25" fill="red"/>
+        <circle id="clubarm" cx="495.125" cy="156.125" r="0.25" fill="red"/>
+        <circle id="bullseye" cx="511.6875" cy="157.5625" r="0.25" fill="red"/>
+        <circle id="xcrack" cx="630.5" cy="171.375" r="0.25" fill="red"/>
+        <circle id="wfalls" cx="691.3125" cy="188.75" r="0.25" fill="red"/>
+        <circle id="JNCSLDR" cx="750.625" cy="204.125" r="0.25" fill="red"/>
+        <circle id="pinch" cx="942.5" cy="157.25" r="0.25" fill="red"/>
+        <circle id="T20070922-05" cx="299.0" cy="263.0625" r="0.25" fill="red"/>
+        <circle id="T20070922-06" cx="693.75" cy="348.0" r="0.25" fill="red"/>
+    </g>
+</svg>

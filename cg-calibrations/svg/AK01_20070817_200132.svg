@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="968.0px" height="648.0px" viewBox="0 0 968.0 648.0" enable-background="new 0 0 968.0 648.0">
+    <g id="image">
+        <image overflow="visible" width="3872.0" height="2592.0" xlink:href="AK01_20070817_200132.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="P8249" cx="43.0" cy="155.0" r="0.25" fill="red"/>
+        <circle id="P8510" cx="82.5" cy="148.75" r="0.25" fill="red"/>
+        <circle id="P6940" cx="135.25" cy="159.25" r="0.25" fill="red"/>
+        <circle id="P6330" cx="267.75" cy="155.25" r="0.25" fill="red"/>
+        <circle id="P5360" cx="345.25" cy="153.75" r="0.25" fill="red"/>
+        <circle id="P5090" cx="440.75" cy="147.25" r="0.25" fill="red"/>
+        <circle id="P5170" cx="486.75" cy="145.0" r="0.25" fill="red"/>
+        <circle id="nosebridge" cx="696.25" cy="211.25" r="0.25" fill="red"/>
+        <circle id="shorenode" cx="929.0" cy="327.25" r="0.25" fill="red"/>
+    </g>
+</svg>

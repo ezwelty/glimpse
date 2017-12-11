@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="636.0px" height="424.0px" viewBox="0 0 636.0 424.0" enable-background="new 0 0 636.0 424.0">
+    <g id="image">
+        <image overflow="visible" width="2544.0" height="1696.0" xlink:href="CG06_20060727_195951.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="BBCFG" cx="146.0625" cy="400.625" r="0.25" fill="red"/>
+        <circle id="kadin-cairin" cx="305.75" cy="159.0" r="0.25" fill="red"/>
+        <circle id="P4930" cx="339.4175" cy="150.375" r="0.25" fill="red"/>
+        <circle id="P7010" cx="457.4175" cy="146.0" r="0.25" fill="red"/>
+        <circle id="TOOTH" cx="553.4175" cy="133.375" r="0.25" fill="red"/>
+        <circle id="P7930" cx="591.875" cy="129.75" r="0.25" fill="red"/>
+        <circle id="nipple" cx="233.7925" cy="182.7075" r="0.25" fill="red"/>
+        <circle id="splitrock" cx="288.7075" cy="189.625" r="0.25" fill="red"/>
+        <circle id="cluster" cx="292.2925" cy="193.4175" r="0.25" fill="red"/>
+        <circle id="T20060727-01" cx="8.4375" cy="244.0" r="0.25" fill="red"/>
+        <circle id="T20060727-02" cx="150.25" cy="196.25" r="0.25" fill="red"/>
+        <circle id="T20060727-03" cx="41.125" cy="168.125" r="0.25" fill="red"/>
+        <circle id="T20060727-04" cx="138.6875" cy="157.1875" r="0.25" fill="red"/>
+        <circle id="T20060727-05" cx="138.3125" cy="123.625" r="0.25" fill="red"/>
+        <circle id="T20060727-06" cx="177.6875" cy="117.875" r="0.25" fill="red"/>
+        <circle id="T20060727-07" cx="188.625" cy="154.75" r="0.25" fill="red"/>
+    </g>
+</svg>

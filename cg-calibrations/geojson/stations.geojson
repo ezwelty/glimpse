@@ -1,0 +1,433 @@
+{
+	"type": "FeatureCollection",
+	"features": [{
+		"type": "Feature",
+		"properties": {
+			"id": "AK01",
+			"name": "Kadin",
+			"fixed": false,
+			"viewdir": [60, -15, 0],
+			"notes": "Position estimated from AK01b. 2011: Position allowed to wander from AK01b position. Results appear excellent."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.1258523, 61.1253268, 499.562]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK01b",
+			"name": "Kadin",
+			"fixed": true,
+			"viewdir": [60, -5, 0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.1258154, 61.1251736, 463.26]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK02",
+			"name": "Waterline (wide)",
+			"fixed": true,
+			"viewdir": [-45.0, -5, 0.0],
+			"notes": "2011: Position calibrated with well educated initial guess and bundle adjustment over sequence. Excellent results."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0593079, 61.1175055, 88.62]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK02b",
+			"name": "Waterline (wide)",
+			"fixed": false,
+			"viewdir": [-10.0, -5, 0.0],
+			"notes": "Position esimated from AK02"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0593079, 61.1175055, 88.62]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK03",
+			"name": "Cliff",
+			"fixed": true,
+			"viewdir": [-45.0, -10, -2.0],
+			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Good agreement with aerial."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0553581, 61.1199847, 163.52]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK03b",
+			"name": "Cliff",
+			"fixed": true,
+			"viewdir": [-22.5, -5, 3.0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0553581, 61.1199847, 163.52]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK04",
+			"name": "Waterline (tight)",
+			"fixed": false,
+			"viewdir": [-45.0, -5, 0.0],
+			"notes": "Position estimated from AK02. 2011: Poorly constrained by ground control. Position allowed to wander from AK02 initial guess. Results appear good, but no asynchronous aerial."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0611688, 61.1177297, 86.575]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK09",
+			"name": "Camp",
+			"fixed": false,
+			"viewdir": [-5.0, -15, 0.0],
+			"notes": "Position estimated from AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK09b",
+			"name": "Camp",
+			"fixed": false,
+			"viewdir": [30.0, -10, 0.0],
+			"notes": "Position estimated using SfM"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495265, 61.1218314, 235.437]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK10",
+			"name": "Juncture",
+			"fixed": true,
+			"viewdir": [-165.0, -10, -4.0],
+			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle)."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0146686, 61.1882507, 478.96]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK10b",
+			"name": "Juncture",
+			"fixed": false,
+			"viewdir": [-149.5, -10, -2.5],
+			"notes": "Handheld GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0146748, 61.1882511, 479.0]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK11",
+			"name": "Great Nunatak",
+			"fixed": false,
+			"viewdir": [35.0, -20, 0.0],
+			"notes": "Position estimated from AK09b."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495265, 61.1218314, 235.437]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AK12",
+			"name": "Tower",
+			"fixed": false,
+			"viewdir": [35.0, -10, 0.0],
+			"notes": "Position estimated from AK09b."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495265, 61.1218314, 235.437]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKJNC",
+			"name": "Juncture",
+			"fixed": false,
+			"viewdir": [95.0, -10, 0.0],
+			"notes": "Source of position unknown."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0989788, 61.162396, 502.0]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKH09",
+			"name": "High Speed Camp",
+			"fixed": false,
+			"viewdir": [-10.0, -10, 0.0],
+			"notes": "Position estimated from AK09."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKHS1",
+			"name": "High Speed 1",
+			"fixed": false,
+			"viewdir": [-10.0, -20, 0.0],
+			"notes": "Position estimated from AK09."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKHS2",
+			"name": "High Speed 2",
+			"fixed": false,
+			"viewdir": [-10.0, -25, 0.0],
+			"notes": "Position estimated from AK09."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKHS3",
+			"name": "High Speed 3",
+			"fixed": false,
+			"viewdir": [-10.0, -20, 0.0],
+			"notes": "Position estimated from AK09."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKHS4",
+			"name": "High Speed 4",
+			"fixed": false,
+			"viewdir": [-15.0, -20, 0.0],
+			"notes": "Position estimated from AK09."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST01A",
+			"name": "Stereo Strobe A",
+			"fixed": true,
+			"viewdir": [-10.0, -5, 0.0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0560418, 61.1203304, 137.61]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST01B",
+			"name": "Stereo Strobe B",
+			"fixed": true,
+			"viewdir": [-5.0, -5, 0.0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0563451, 61.1203071, 137.82]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST02A",
+			"name": "Stereo 2009 A",
+			"fixed": false,
+			"viewdir": [10.0, -15, 0.0],
+			"notes": "Position estimated from AKST03A."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0479732, 61.1215609, 270.828]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST02B",
+			"name": "Stereo 2009 B",
+			"fixed": false,
+			"viewdir": [5.0, -15, -3.0],
+			"notes": "Position estimated from AKST03B."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495373, 61.1213125, 263.97]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST03A",
+			"name": "Stereo 2010 A",
+			"fixed": true,
+			"viewdir": [0.0, -5, 0.0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0479732, 61.1215609, 270.828]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKST03B",
+			"name": "Stereo 2010 B",
+			"fixed": true,
+			"viewdir": [5.0, 0, -4.0],
+			"notes": "Survey GPS"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495373, 61.1213125, 263.97]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CG04",
+			"name": "Columbia 2004",
+			"fixed": true,
+			"viewdir": [-85.0, -5, -3.0],
+			"notes": "Survey GPS. 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0502013, 61.1190274, 266.152]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CG05",
+			"name": "Columbia 2005",
+			"fixed": true,
+			"viewdir": [-65.0, 0, 0.0],
+			"notes": "Position assumed same as CG06. 2011: Position not allowed to drift from the CG06 position, which appears to be in the correct datum. Not good comparison with aerial because missing asynchronous image, and large calving occurs between oblique and aerial. Suspect calibration."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.05585, 61.1186521, 152.039]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CG06",
+			"name": "Columbia 2006",
+			"fixed": false,
+			"viewdir": [-78.0, 0, 0.0],
+			"notes": "Survey GPS. Double-check original GPS files. 2011: P, fpx, k bundle adjusted very tightly. Excellent agreement with aerial terminus. Either reported surveyed CG06 or BBCFG position under question. P=[497010.531, 6775998.065, 156.640] UTM, fpx=2487.4, k=[-0.2837, 0.5934]. File CG06.jpg P=[497128.2, 6775848.0, 150.2] UTM"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.05585, 61.1186521, 152.039]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CGBAY",
+			"name": "Columbia Bay",
+			"fixed": false,
+			"viewdir": [-85.0, -10, 0.0],
+			"notes": "Position estimated from AK03b."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0553581, 61.1199847, 163.52]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CGKDN",
+			"name": "Kadin Test",
+			"fixed": false,
+			"viewdir": [120.0, -5, 0.0],
+			"notes": "Position estimated from AK01b"
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.1258148, 61.1251736, 463.3]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "CGZM",
+			"name": "Columbia Zoom",
+			"fixed": false,
+			"viewdir": [-45.0, -45, 0.0],
+			"notes": "Position estimated from AK03b."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0553581, 61.1199847, 163.52]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "HI",
+			"name": "Heather Island",
+			"fixed": false,
+			"viewdir": [-30, 0, 0],
+			"notes": "Position estimated coarsely from topo map."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0372, 60.9884, 30]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
+			"id": "AKHS5",
+			"name": "High Speed 5",
+			"fixed": false,
+			"viewdir": [10, 0, 0],
+			"notes": "Position estimated from AK09b."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.0495265, 61.1218314, 235.437]
+		}
+	}]
+}

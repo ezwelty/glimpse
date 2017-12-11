@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="968.0px" height="648.0px" viewBox="0 0 968.0 648.0" enable-background="new 0 0 968.0 648.0">
+    <g id="image">
+        <image overflow="visible" width="3872.0" height="2592.0" xlink:href="AK03_20080208_205507.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="CCFG005" cx="58.25" cy="565.25" r="0.25" fill="red"/>
+        <circle id="CCFG004" cx="102.25" cy="590.5" r="0.25" fill="red"/>
+        <circle id="nipple" cx="39.5625" cy="218.75" r="0.25" fill="red"/>
+        <circle id="kadin-cairin" cx="155.125" cy="183.375" r="0.25" fill="red"/>
+        <circle id="P4930" cx="229.0" cy="170.75" r="0.25" fill="red"/>
+        <circle id="P7010" cx="398.25" cy="164.5625" r="0.25" fill="red"/>
+        <circle id="TOOTH" cx="523.4375" cy="148.0625" r="0.25" fill="red"/>
+        <circle id="P7930" cx="571.125" cy="144.4375" r="0.25" fill="red"/>
+        <circle id="TRIANGLEPK" cx="665.9375" cy="129.0625" r="0.25" fill="red"/>
+        <circle id="xcrack" cx="786.125" cy="206.25" r="0.25" fill="red"/>
+        <circle id="wfalls" cx="827.75" cy="208.5625" r="0.25" fill="red"/>
+    </g>
+</svg>

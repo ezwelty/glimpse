@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="724.0px" height="486.0px" viewBox="0 0 724.0 486.0" enable-background="new 0 0 724.0 486.0">
+    <g id="image">
+        <image overflow="visible" width="2896.0" height="1944.0" xlink:href="AK01b_20131106_192014.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="doug-06" cx="9.75" cy="118.5" r="0.25" fill="red"/>
+        <circle id="doug-07" cx="44.5" cy="125.25" r="0.25" fill="red"/>
+        <circle id="doug-03" cx="168.0" cy="129.5" r="0.25" fill="red"/>
+        <circle id="doug-09" cx="536.0" cy="128.5" r="0.25" fill="red"/>
+        <circle id="doug-10" cx="573.75" cy="126.75" r="0.25" fill="red"/>
+        <circle id="doug-11" cx="463.0" cy="134.0" r="0.25" fill="red"/>
+    </g>
+</svg>

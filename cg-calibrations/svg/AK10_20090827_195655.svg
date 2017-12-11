@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="724.0px" height="486.0px" viewBox="0 0 724.0 486.0" enable-background="new 0 0 724.0 486.0">
+    <g id="image">
+        <image overflow="visible" width="2896.0" height="1944.0" xlink:href="AK10_20090827_195655.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="orb" cx="187.75" cy="57.8125" r="0.25" fill="red"/>
+        <circle id="slant" cx="650.375" cy="91.3125" r="0.25" fill="red"/>
+        <circle id="beetle" cx="660.5625" cy="110.75" r="0.25" fill="red"/>
+        <circle id="T20090827-05" cx="657.625" cy="118.0" r="0.25" fill="red"/>
+        <circle id="T20090827-06" cx="304.0" cy="104.5" r="0.25" fill="red"/>
+        <circle id="T20090827-07" cx="714.3125" cy="63.5" r="0.25" fill="red"/>
+        <circle id="T20090827-08" cx="160.125" cy="30.375" r="0.25" fill="red"/>
+        <circle id="T20090827-09" cx="172.75" cy="38.1875" r="0.25" fill="red"/>
+        <circle id="T20090827-10" cx="130.25" cy="26.25" r="0.25" fill="red"/>
+        <circle id="T20090827-11" cx="639.5" cy="425.5" r="0.25" fill="red"/>
+    </g>
+</svg>

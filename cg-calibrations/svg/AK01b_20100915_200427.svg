@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="724.0px" height="486.0px" viewBox="0 0 724.0 486.0" enable-background="new 0 0 724.0 486.0">
+    <g id="image">
+        <image overflow="visible" width="2896.0" height="1944.0" xlink:href="AK01b_20100915_200427.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="topshelf" cx="15.0625" cy="203.375" r="0.25" fill="red"/>
+        <circle id="nostril" cx="83.875" cy="208.4375" r="0.25" fill="red"/>
+        <circle id="P5330" cx="179.9375" cy="151.0625" r="0.25" fill="red"/>
+        <circle id="P7910" cx="232.875" cy="159.0" r="0.25" fill="red"/>
+        <circle id="P8249" cx="262.0" cy="158.6875" r="0.25" fill="red"/>
+        <circle id="P8510" cx="288.125" cy="153.9375" r="0.25" fill="red"/>
+        <circle id="P6940" cx="323.5" cy="161.1875" r="0.25" fill="red"/>
+        <circle id="P6330" cx="416.9375" cy="157.1875" r="0.25" fill="red"/>
+        <circle id="P5360" cx="474.0625" cy="155.4375" r="0.25" fill="red"/>
+        <circle id="P5090" cx="546.8125" cy="149.625" r="0.25" fill="red"/>
+        <circle id="P5170" cx="583.1875" cy="147.375" r="0.25" fill="red"/>
+    </g>
+</svg>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="968.0px" height="648.0px" viewBox="0 0 968.0 648.0" enable-background="new 0 0 968.0 648.0">
+    <g id="image">
+        <image overflow="visible" width="3872.0" height="2592.0" xlink:href="AK09_20090516_200409.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
+        </image>
+    </g>
+    <g id="gcp">
+        <circle id="JNCSLDR" cx="54.0" cy="104.25" r="0.25" fill="red"/>
+        <circle id="JUNCTURE-old" cx="324.25" cy="22.75" r="0.25" fill="red"/>
+        <circle id="P5830" cx="820.25" cy="23.25" r="0.25" fill="red"/>
+        <circle id="pinch" cx="198.0" cy="73.25" r="0.25" fill="red"/>
+        <circle id="jawlip" cx="325.25" cy="93.5" r="0.25" fill="red"/>
+        <circle id="alcove" cx="393.25" cy="91.75" r="0.25" fill="red"/>
+        <circle id="butt" cx="519.75" cy="108.25" r="0.25" fill="red"/>
+        <circle id="portaledge" cx="612.5" cy="95.5" r="0.25" fill="red"/>
+        <circle id="kissers" cx="900.0" cy="120.75" r="0.25" fill="red"/>
+    </g>
+</svg>

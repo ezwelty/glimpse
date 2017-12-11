@@ -920,9 +920,16 @@ def test_cameras(model):
     Arguments:
         model (`Cameras`): Cameras object
     """
-    # Error: No controls reference the cameras (after pruning)
+    # Error: No controls reference the cameras
     if not model.controls:
         raise ValueError("No controls reference the cameras")
+    # Error: 'f' or 'c' in `group_params` but image sizes not equal
+    if model.group_params.has_key('f') or model.group_params.has_key('c'):
+        sizes = np.unique([cam.imgsz for cam in model.cams], axis=0)
+        if len(sizes) > 1:
+            raise ValueError("'f' or 'c' in `group_params` but image sizes not equal: " +
+                str(sizes.tolist()))
+    # Precompute for remaining tests
     control_cams = [(isinstance(control, Matches) and control.cams) or [control.cam] for control in model.controls]
     is_directions_control = [isinstance(control, (Points, Lines)) and control.directions for control in model.controls]
     is_xyz_cam = ['xyz' in params for params in model.cam_params]

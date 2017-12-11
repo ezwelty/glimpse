@@ -250,21 +250,24 @@ class Camera(object):
         Arguments:
             old_size (array-like): Initial image size [nx, ny]
             new_size (array-like): Target image size [nx, ny]
+
+        Returns:
+            float: Scale factor, or `None` if target size cannot be achieved
         """
         old_size = np.floor(np.array(old_size) + 0.5)
         new_size = np.floor(np.array(new_size) + 0.5)
         if all(new_size == old_size):
-            return 1
+            return 1.0
         scale_bounds = new_size / old_size
         if scale_bounds[0] == scale_bounds[1]:
             return scale_bounds[0]
         def err(scale):
             return np.sum(np.abs(np.floor(scale * old_size + 0.5) - new_size))
         fit = scipy.optimize.minimize(err, x0=scale_bounds.mean(), bounds=[scale_bounds])
-        if err(fit['x']) > 0:
-            raise ValueError("No scale can achieve the target size")
-        else:
+        if err(fit['x']) == 0:
             return fit['x']
+        else:
+            return None
 
     # ---- Methods (public) ----
 
@@ -315,7 +318,7 @@ class Camera(object):
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
 
-    def resize(self, size):
+    def resize(self, size, force=False):
         """
         Resize the camera.
 
@@ -323,13 +326,22 @@ class Camera(object):
 
         Arguments:
             size: Either scale factor (scalar) or target image size (length-2)
+            force: Whether to use the target image size even if it cannot be achieved
+                by a scalar scale factor
         """
         scale1d = np.atleast_1d(size)
-        if len(scale1d) > 1:
-            scale1d = Camera.get_scale_from_size(self.imgsz, scale1d)
-        new_size = np.floor(scale1d * self.imgsz + 0.5)
+        if len(scale1d) > 1 and force:
+            # Use target size without checking for scalar scale factor
+            new_size = scale1d
+        else:
+            if len(scale1d) > 1:
+                # Compute scalar scale factor (if one exists)
+                scale1d = Camera.get_scale_from_size(self.imgsz, scale1d)
+                if scale1d is None:
+                    raise ValueError("Target size cannot be achieved with scalar scale factor")
+            new_size = np.floor(scale1d * self.imgsz + 0.5)
         scale2d = new_size / self.imgsz
-        self.imgsz *= scale2d
+        self.imgsz = np.round(self.imgsz * scale2d) # ensure whole numbers
         self.f *= scale2d
         self.c *= scale2d
 

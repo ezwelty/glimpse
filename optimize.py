@@ -917,15 +917,12 @@ def test_cameras(model):
     """
     Test Cameras model for errors.
 
-    The following checks are performed:
-
-        - Error: Not all cameras appear in controls.
-        - Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
-        - Error: 'xyz' cannot be in `cam_params` if `control.directions` is True for control involving that camera
-
     Arguments:
         model (`Cameras`): Cameras object
     """
+    # Error: No controls reference the cameras (after pruning)
+    if not model.controls:
+        raise ValueError("No controls reference the cameras")
     control_cams = [(isinstance(control, Matches) and control.cams) or [control.cam] for control in model.controls]
     is_directions_control = [isinstance(control, (Points, Lines)) and control.directions for control in model.controls]
     is_xyz_cam = ['xyz' in params for params in model.cam_params]

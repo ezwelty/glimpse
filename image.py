@@ -939,7 +939,7 @@ class Image(object):
         """
         return Image(path=self.path, cam=self.cam.copy())
 
-    def read(self):
+    def read(self, gray=False):
         """
         Read image data from file.
 
@@ -961,7 +961,10 @@ class Image(object):
                 # Resize to match camera model
                 im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
             self.I = np.array(im)
-        return self.I
+        if gray and self.I.ndim > 2:
+            return 0.2126 * self.I[:, :, 0] + 0.7152 * self.I[:, :, 1] + 0.0722 * self.I[:, :, 2]
+        else:
+            return self.I
 
     def write(self, path, I=None, **params):
         """

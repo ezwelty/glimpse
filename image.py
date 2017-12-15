@@ -766,10 +766,23 @@ class Exif(object):
             if not thumbnail:
                 self.tags.pop('thumbnail', None)
                 self.tags.pop('1st', None)
-            self.size = np.array(PIL.Image.open(path).size, dtype=float)
+            if self.size is None:
+                # NOTE: Is this still necessary?
+                size = np.array(PIL.Image.open(path).size, dtype=float)
+                self.set_tag('PixelXDimension', size[0])
+                self.set_tag('PixelYDimension', size[1])
         else:
             self.tags = {}
             self.size = None
+
+    @property
+    def size(self):
+        width = self.get_tag('PixelXDimension')
+        height = self.get_tag('PixelYDimension')
+        if width and height:
+            return np.array((width, height), dtype=float)
+        else:
+            return None
 
     @property
     def datetime(self):

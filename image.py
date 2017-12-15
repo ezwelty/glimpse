@@ -791,7 +791,7 @@ class Exif(object):
         if datetime_str and not subsec_str:
             return datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
         elif datetime_str and subsec_str:
-            return datetime.strptime(datetime_str + "." + subsec_str.zfill(6), "%Y:%m:%d %H:%M:%S.%f")
+            return datetime.strptime(datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f")
         else:
             return None
 

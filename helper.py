@@ -6,6 +6,7 @@ import collections
 import copy
 import dem
 import pandas
+import scipy
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -545,3 +546,23 @@ def bresenham_circle(center, radius):
         # 8th octant
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
     return xy
+
+def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
+    # http://pysal.readthedocs.io/en/latest/library/weights/Distance.html#pysal.weights.Distance.Kernel
+    nd = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(data))
+    if bandwidth is None:
+        bandwidth = np.max(nd)
+    nd /= bandwidth
+    included = nd <= 1
+    if function == 'triangular':
+        temp = np.where(included, 1 - nd, 0)
+    elif function == 'uniform':
+        temp = np.where(included, 0.5, 0)
+    elif function == 'quadratic':
+        temp = np.where(included, (3./4) * (1 - nd**2), 0)
+    elif function == 'quartic':
+        temp = np.where(included, (15./16) * (1 - nd**2)**2, 0)
+    elif function == 'gaussian':
+        temp = np.where(included, (2 * np.pi)**(-0.5) * np.exp((-nd**2) / 2), 0)
+    # Compute weights as inverse sum of kernel distances
+    return 1 / np.sum(temp, axis=1)

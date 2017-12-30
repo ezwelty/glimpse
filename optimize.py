@@ -477,7 +477,7 @@ class Cameras(object):
         options (dict): Additional arguments passed to `lmfit.Minimizer`
     """
 
-    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), nan_policy="omit", **options):
+    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None, nan_policy="omit", **options):
         self.cams = cams if isinstance(cams, list) else [cams]
         self.vectors = [cam.vector.copy() for cam in self.cams]
         controls = controls if isinstance(controls, list) else [controls]
@@ -491,6 +491,7 @@ class Cameras(object):
         self.group_mask, self.group_bounds = parse_params(self.group_params)
         # TODO: Avoid computing masks and bounds twice
         self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, group_params)
+        self.weights = weights
         self.options = options
         self.options['nan_policy'] = nan_policy
         if not self.options.has_key('diag'):
@@ -500,6 +501,18 @@ class Cameras(object):
             group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
             cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
             self.options['diag'] = np.hstack((group_scale, cam_scales))
+
+    @property
+    def weights(self):
+        return self._weights
+
+    @weights.setter
+    def weights(self, value):
+        if value is None:
+            self._weights = value
+        else:
+            value = np.atleast_2d(value).reshape(-1, 1)
+            self._weights = value * len(value) / sum(value)
 
     def set_cameras(self, params):
         """
@@ -595,7 +608,13 @@ class Cameras(object):
             params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
             index (array_like or slice): Indices of points to include, or all if `None`
         """
-        return self.predicted(params=params, index=index) - self.observed(index=index)
+        d = self.predicted(params=params, index=index) - self.observed(index=index)
+        if self.weights is None:
+            return d
+        else:
+            if index is None:
+                index = slice(None)
+            return d * self.weights[index]
 
     def errors(self, params=None, index=None):
         """
@@ -703,6 +722,15 @@ class Cameras(object):
                 control.plot(cam=cam, index=index, scale=scale, selected=selected, unselected=unselected, **quiver_args)
         if params is not None:
             self.reset_cameras(vectors)
+
+    def plot_weights(self, index=None, scale=1, cmap=None):
+        if index is None:
+            index = slice(None)
+        weights = np.ones(self.data_size()) if self.weights is None else self.weights
+        uv = self.observed(index=index)
+        matplotlib.pyplot.scatter(uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap)
+        matplotlib.pyplot.colorbar()
+        matplotlib.pyplot.gca().invert_yaxis()
 
 # ---- RANSAC ----
 

@@ -5,6 +5,8 @@ import lmfit
 import matplotlib
 import helper
 import sys
+sys.path.append('./cg-calibrations')
+import cgcalib
 
 # ---- Controls ----
 
@@ -731,6 +733,65 @@ class Cameras(object):
         matplotlib.pyplot.scatter(uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap)
         matplotlib.pyplot.colorbar()
         matplotlib.pyplot.gca().invert_yaxis()
+
+class OrthoImage(object):
+    def __init__(self, img, dem, ortho, params):
+        self.img = img
+        self.vector = img.cam.vector.copy()
+        self.I = img.read(gray=True)
+        self.dem = dem
+        self.ortho = ortho
+        self.params, self.set_camera = build_lmfit_params([img.cam], [params])
+        self.visible = dem.visible(img.cam.xyz)
+        self.options = dict(nan_policy='omit')
+        self.options['diag'] = camera_scale_factors(img.cam)[parse_params(params)[0]]
+
+    def reset_camera(self):
+        self.img.cam.vector = self.vector.copy()
+
+    def correlation_coefficient(self, patch1, patch2):
+        product = np.mean((patch1 - patch1.mean()) * (patch2 - patch2.mean()))
+        stds = patch1.std() * patch2.std()
+        if stds == 0:
+            return 0
+        else:
+            return product / stds
+
+    def observed(self):
+        return self.I
+
+    def predicted(self, params=None):
+        if params is not None:
+            self.set_camera(params)
+        return cgcalib.dem_to_image(self.img.cam, self.dem, self.ortho.Z, mask=self.visible)
+
+    def correlations(self, params=None, radius=2, step=10):
+        I_obs = self.observed()
+        I_sim = self.predicted(params)
+        nrows, ncols = I_obs.shape
+        correl = np.zeros_like(I_obs, dtype=float)
+        for i in range(radius, nrows - (radius + 1), step):
+            for j in range(radius, ncols - (radius + 1), step):
+                correl[i, j] = self.correlation_coefficient(
+                    I_sim[i - radius: i + radius + 1, j - radius: j + radius + 1],
+                    I_obs[i - radius: i + radius + 1, j - radius: j + radius + 1])
+        correl[correl == 0] = np.nan
+        return correl
+
+    def residuals(self, params=None, **kwargs):
+        return 1 - self.correlations(params=params, **kwargs)
+
+    def fit(self):
+        def callback(params, iter, resid, *args, **kwargs):
+            err = resid.mean()
+            sys.stdout.write("\r" + str(err))
+            sys.stdout.flush()
+        minimizer = lmfit.Minimizer(self.residuals, self.params, iter_cb=callback, **self.options)
+        result = minimizer.leastsq()
+        sys.stdout.write("\n")
+        if not result.success:
+            print result.message
+        return result
 
 # ---- RANSAC ----
 

@@ -340,7 +340,7 @@ class DEM(object):
             self.ylim = new_ylim
         # Apply zlim
         if zlim is not None:
-            self.Z[(self.Z < min(zlim)) & (self.Z > max(zlim))] = np.nan
+            self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
 
     def resize(self, scale):
         """

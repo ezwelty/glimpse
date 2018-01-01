@@ -12,13 +12,16 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Calibrate station ---- #
 
-STATION = 'AK10b'
-STATION = 'AK01b'
+# STATION = 'AK10b'
+# STATION = 'AK01b'
+STATION = 'CG04'
+CAMERA = 'nikon-e8700'
+SUFFIX = ''
 
 # Gather svg control
 images, controls, cam_params = cgcalib.station_svg_controls(
     STATION, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
-    station_calib=False, camera_calib=True)
+    station_calib=False, camera_calib=CAMERA + SUFFIX)
 
 # Calibrate station
 station_model = optimize.Cameras(
@@ -32,7 +35,7 @@ print np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.ca
 
 # ---- Verify with image plot ---- #
 
-i = 0
+i = 1
 images[i].plot()
 station_model.plot(station_fit.params, cam=i)
 images[i].set_plot_limits()
@@ -47,11 +50,11 @@ viewdir_keys = station_fit.params.keys()[3:]
 cam.xyz = [station_fit.params[key].value for key in xyz_keys]
 viewdir = [station_fit.params[key].value for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION + ".json",
+cam.write(path="stations/" + STATION + SUFFIX + ".json",
     attributes=['xyz', 'viewdir'])
 # (standard errors)
 cam.xyz = [station_fit.params[key].stderr for key in xyz_keys]
 viewdir = [station_fit.params[key].stderr for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION + "_stderr.json",
+cam.write(path="stations/" + STATION + SUFFIX + "_stderr.json",
     attributes=['xyz', 'viewdir'])

@@ -1,22 +1,29 @@
 import cgcalib
+import sys
+sys.path.append('../')
 import dem as DEM
 import helper
 import geojson
+import image
+import glob
+import matplotlib
 
 # ---- Constants ---- #
 
-# IfSAR DEM much better looking south (AK10). ArcticDEM has nasty artifacts.
-# ArcticDEM may have the edge looking north (AK01) – very similar to IfSar but more detail.
+# AK04: IfSar (ArcticDEM as one artifact)
+# AK10: IfSAR (ArcticDEM has nasty artifacts)
+# AK01: ArcticDEM (very similar to IfSar but more detail)
 
-STATION = 'AK01b'
-DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
-DEM_DZ = 0
-# DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"
-# DEM_DZ = 17
+STATION = 'CG04'
+# DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
+# DEM_DZ = 0
+DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"
+DEM_DZ = 17
 DEM_ZLIM = [1, np.inf]
 DDEG = 0.05
 
 # --- Load DEM ---- #
+
 dem = DEM.DEM.read(DEM_PATH)
 dem.crop(zlim=DEM_ZLIM)
 dem.Z += DEM_DZ
@@ -37,17 +44,17 @@ geo = geojson.FeatureCollection(
     [geojson.Feature(geometry=geojson.LineString(xyz.tolist())) for xyz in hxyz])
 geo = helper.ordered_geojson(geo)
 helper.write_geojson(geo,
-    "geojson/horizons/" + STATION + "-arcticdem.geojson",
+    "geojson/horizons/" + STATION + "-ifsar.geojson",
     crs=32606, decimals=[5, 5, 0])
 
 # --- Check result ---- #
 
 eop = cgcalib.station_eop(STATION)
-img = image.Image(glob.glob("svg/" + STATION + "*.JPG")[0], cam=eop)
-geo = helper.read_geojson("geojson/horizons/" + STATION + "-arcticdem.geojson", crs=32606)
+img = image.Image(glob.glob("svg/" + STATION + "*.JPG")[0], cam={'xyz': eop['xyz'], 'viewdir': eop['viewdir']})
+geo = helper.read_geojson("geojson/horizons/" + STATION + "-ifsar.geojson", crs=32606)
 lxyz = [coords for coords in helper.geojson_itercoords(geo)]
 luv = [img.cam.project(xyz) for xyz in lxyz]
-# img.plot()
+img.plot()
 for uv in luv:
     matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], color="red")
 

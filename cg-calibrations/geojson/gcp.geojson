@@ -1045,79 +1045,12 @@
 			"type": "Point",
 			"coordinates": [-147.2437516, 61.1121168, 909.0]
 		}
-	},
-	{
-		"type": "Feature",
-		"properties": {
-			"id": "T20040625-01",
-			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.0963327, 61.1118587, 69.3]
-		}
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040625-02",
+			"id": "T20040707-01",
 			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.1205735, 61.1165885, 231.0]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "T20040625-03",
-			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.1219185, 61.1145646, 254.5]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "T20040625-04",
-			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.1194634, 61.1209068, 223.5]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "T20040625-05",
-			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.1155263, 61.1253336, 165.1]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "T20040625-06",
-			"valid": true,
-			"notes": "CG04_20040625_200016"
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.1317164, 61.1159748, 703.8]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "T20040709-01",
-			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1126,9 +1059,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-02",
+			"id": "T20040707-02",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1137,9 +1070,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-03",
+			"id": "T20040707-03",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1148,9 +1081,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-04",
+			"id": "T20040707-04",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1159,9 +1092,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-05",
+			"id": "T20040707-05",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1170,9 +1103,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-06",
+			"id": "T20040707-06",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1181,9 +1114,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-07",
+			"id": "T20040707-07",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1192,9 +1125,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-08",
+			"id": "T20040707-08",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1203,9 +1136,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-09",
+			"id": "T20040707-09",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1214,9 +1147,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-10",
+			"id": "T20040707-10",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1225,9 +1158,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-11",
+			"id": "T20040707-11",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",
@@ -1236,9 +1169,9 @@
 	}, {
 		"type": "Feature",
 		"properties": {
-			"id": "T20040709-12",
+			"id": "T20040707-12",
 			"valid": true,
-			"notes": "CG04_20040709_160053"
+			"notes": "CG04_20040707_200049"
 		},
 		"geometry": {
 			"type": "Point",

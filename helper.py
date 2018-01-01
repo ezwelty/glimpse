@@ -308,7 +308,7 @@ def ordered_geojson(obj, properties=None,
     obj = copy.deepcopy(obj)
     return order_item(obj)
 
-def boolean_split(x, mask, axis=0, circular=False):
+def boolean_split(x, mask, axis=0, circular=False, include='all'):
     """
     Split array by boolean mask.
 
@@ -321,7 +321,16 @@ def boolean_split(x, mask, axis=0, circular=False):
     if circular and len(splits) > 1 and mask[0] is mask[-1]:
         splits[0] = np.concatenate((splits[-1], splits[0]), axis=axis)
         splits.pop(-1)
-    return splits
+    if include == 'all':
+        return splits
+    elif include == 'true':
+        index = slice(0, None, 2) if mask[0] else slice(1, None, 2)
+        return splits[index]
+    elif include == 'false':
+        index = slice(1, None, 2) if mask[0] else slice(0, None, 2)
+        return splits[index]
+    else:
+        return list()
 
 def rasterize_points(rows, cols, values, shape, fun=np.mean):
     """
@@ -371,7 +380,63 @@ def intersect_rays_plane(origin, directions, plane):
     t[t < 0] = np.nan
     return origin + t[:, None] * directions
 
-def intersect_rays_box(origin, directions, box):
+def in_box(points, box):
+    """
+    Tests whether each point is in (or on) the box.
+
+    Works in any dimension.
+
+    Arguments:
+        points (array): Point coordinates (npts, ndim)
+        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+    """
+    box = box.reshape(2, -1)
+    return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
+
+def clip_polyline_box(line, box):
+    """
+    Returns segments of line within the box.
+
+    Vertices are inserted as needed on the box boundary.
+    For speed, does not check for segments within the box
+    entirely between two adjacent line vertices.
+
+    Arguments:
+        line (array): 2 or 3D point coordinates (npts, ndim)
+        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+    """
+    mask = in_box(line, box)
+    segments = boolean_split(line, mask)
+    trues = slice(int(~mask[0]), None, 2)
+    nsegments = len(segments)
+    for i in range(*trues.indices(nsegments)):
+        if i > 0:
+            xi = intersect_edge_box(segments[i - 1][-1, :], segments[i][0, :], box)
+            if xi is not None:
+                segments[i] = np.insert(segments[i], 0, xi, axis=0)
+        if i < nsegments - 1:
+            xi = intersect_edge_box(segments[i][-1, :], segments[i + 1][0, :], box)
+            if xi is not None:
+                segments[i] = np.insert(segments[i], len(segments[i]), xi, axis=0)
+    return segments[trues]
+
+def intersect_edge_box(origin, end, box):
+    """
+    Returns intersection of edge with box.
+
+    Arguments:
+        origin (array): Coordinates of 2 or 3D point (ndim, )
+        end (array): Coordinates of 2 or 3D point (ndim, )
+        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+    """
+    direction = end - origin
+    t = np.nanmin(intersect_rays_box(origin, direction[None, :], box, t=True))
+    if t > 0 and t < 1:
+        return origin + t * direction
+    else:
+        return None
+
+def intersect_rays_box(origin, directions, box, t=False):
     """
     Return intersections of rays with a(n axis-aligned) box.
 
@@ -429,7 +494,10 @@ def intersect_rays_box(origin, directions, box):
     # Discard intersections behind ray (t < 0)
     tmin[tmin < 0] = np.nan
     tmax[tmax < 0] = np.nan
-    return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
+    if t:
+        return tmin[:, None], tmax[:, None]
+    else:
+        return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
 
 def bresenham_line(start, end):
     """

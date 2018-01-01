@@ -168,23 +168,30 @@ class Lines(object):
         """
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
+        xy_step = 1 / self.cam.f.mean()
+        uv_edges = self.cam.edges(step = self.cam.imgsz / 2)
+        xy_edges = self.cam._image2camera(uv_edges)
+        xy_box = np.hstack((np.min(xy_edges, axis=0), np.max(xy_edges, axis=0)))
         puvs = []
         for xyz in self.xyzs:
+            # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
             xy = self.cam._world2camera(xyz, directions=self.directions)
             # Discard nan values (behind camera)
-            xy = xy[~np.any(np.isnan(xy), axis=1), :]
-            # Interpolate to ~1 pixel density over image (and unchanged elsewhere)
-            if len(xy):
-                inview = self.cam.inview(xy)
-                segments = helper.boolean_split(xy, inview)
-                is_in = slice(0, None, 2) if inview[0] else slice(1, None, 2)
-                segments[is_in] = [interpolate_line(segment, step=1/self.cam.f.mean(), normalized=False)
-                    for segment in segments[is_in]]
-                puvs.append(self.cam._camera2image(np.vstack(segments)))
-        if len(puvs) is 0:
-            raise ValueError("All line vertices are behind camera")
-        return puvs
+            lines = helper.boolean_split(xy, np.isnan(xy[:, 0]), include='false')
+            for line in lines:
+                # Clip lines in view
+                # Resolves coordinate wrap around with large distortion
+                for cline in helper.clip_polyline_box(line, xy_box):
+                    # Interpolate clipped lines to ~1 pixel density
+                    puvs.append(self.cam._camera2image(
+                        interpolate_line(np.array(cline), step=xy_step, normalized=False)))
+        if puvs:
+            return puvs
+        else:
+            # FIXME: Fails if lines slip out of camera view
+            # TODO: Return center of image instead of error?
+            raise ValueError("All line vertices are outside camera view")
 
     def predicted(self, index=None):
         """

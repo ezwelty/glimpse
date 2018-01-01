@@ -784,7 +784,6 @@ class Exif(object):
                 self.set_tag('PixelYDimension', size[1])
         else:
             self.tags = {}
-            self.size = None
 
     @property
     def size(self):
@@ -890,7 +889,6 @@ class Exif(object):
         """
         exif = Exif()
         exif.tags = self.tags
-        exif.size = self.size
         return exif
 
 class Image(object):

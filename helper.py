@@ -566,3 +566,9 @@ def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
         temp = np.where(included, (2 * np.pi)**(-0.5) * np.exp((-nd**2) / 2), 0)
     # Compute weights as inverse sum of kernel distances
     return 1 / np.sum(temp, axis=1)
+
+def dms_to_degrees(degrees, minutes, seconds):
+    """
+    Convert degree-minute-second to decimal degrees.
+    """
+    return degrees + minutes / 60.0 + seconds / 3600.0

@@ -971,7 +971,7 @@ class Image(object):
                 im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
             self.I = np.array(im)
         if gray and self.I.ndim > 2:
-            return 0.2126 * self.I[:, :, 0] + 0.7152 * self.I[:, :, 1] + 0.0722 * self.I[:, :, 2]
+            return (0.2126 * self.I[:, :, 0] + 0.7152 * self.I[:, :, 1] + 0.0722 * self.I[:, :, 2]).astype(np.uint8)
         else:
             return self.I
 

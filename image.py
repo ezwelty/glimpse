@@ -90,6 +90,17 @@ class Camera(object):
         args = helper.merge_dicts(json_args, kwargs)
         return cls(**args)
 
+    @classmethod
+    def from_matlab(cls, imgsz, sensorsz, fc, cc, kc):
+        # http://www.vision.caltech.edu/bouguetj/calib_doc/htmls/parameters.html
+        args = dict(
+            f=scale * helper.format_list(fc),
+            c=scale * helper.format_list(cc) + 0.5 - helper.format_list(imgsz) / 2,
+            k=kc[0:2] + [kc[4]],
+            p=kc[2:4]
+        )
+        return cls(imgsz=imgsz, sensorsz=sensorsz, **args)
+
     # ---- Properties (dependent) ----
 
     @property

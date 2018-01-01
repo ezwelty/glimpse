@@ -479,6 +479,34 @@ class Camera(object):
         return helper.rasterize_points(uv[is_in, 1].astype(int), uv[is_in, 0].astype(int),
             values[is_in], shape, fun=fun)
 
+    def from_spherical(self, angles):
+        """
+        Convert relative world spherical coordinates to euclidean.
+
+        Arguments:
+            angles (array): Spherical coordinates [azimuth, altitude(, distance)]
+
+                - azimuth: degrees clockwise from north
+                - altitude: degrees above horizon
+                - distance: distance from camera
+
+        Returns:
+            array: World coordinates, either absolute (if distances were provided)
+                or relative (if distances were not)
+        """
+        # https://en.wikipedia.org/wiki/Spherical_coordinate_system
+        azimuth_iso = (np.pi / 2 - angles[:, 0] * np.pi / 180) % (2 * np.pi)
+        altitude_iso = (np.pi / 2 - angles[:, 1] * np.pi / 180) % (2 * np.pi)
+        xyz = np.column_stack((
+            np.sin(altitude_iso) * np.cos(azimuth_iso),
+            np.cos(altitude_iso) * np.sin(azimuth_iso),
+            np.cos(altitude_iso)))
+        directions = angles.shape[1] < 3
+        if not directions:
+            xyz *= angles[:, 2:3]
+            xyz += self.xyz
+        return xyz
+
     # ---- Methods (private) ----
 
     def _radial_distortion(self, r2):

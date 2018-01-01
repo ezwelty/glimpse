@@ -443,6 +443,28 @@ class Camera(object):
             return U, V
         return np.column_stack((U.flatten(), V.flatten()))
 
+    def edges(self, step=(1, 1)):
+        """
+        Return coordinates of image edges.
+
+        Vertices are ordered clockwise from the origin (0, 0).
+
+        Arguments:
+            step (tuple): Pixel spacing of the vertices in x and y.
+        """
+        if np.isscalar(step):
+            step = (step, step)
+        nu = (self.imgsz[0] / step[0] if step[0] else 1) + 1
+        nv = (self.imgsz[1] / step[1] if step[1] else 1) + 1
+        u = np.linspace(0, self.imgsz[0], int(nu))
+        v = np.linspace(0, self.imgsz[1], int(nv))
+        return np.vstack((
+            np.column_stack((u, np.repeat(0, len(u)))),
+            np.column_stack((np.repeat(u[-1], len(v) - 2), v[1:-1])),
+            np.column_stack((u[::-1], np.repeat(v[-1], len(u)))),
+            np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1]))
+        ))
+
     def rasterize(self, uv, values, fun=np.mean):
         """
         Convert points to a raster image.

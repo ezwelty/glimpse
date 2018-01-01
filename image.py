@@ -993,7 +993,7 @@ class Image(object):
             path = os.path.join(path, os.path.basename(self.path))
         old_ext = os.path.splitext(self.path)[1].lower()
         ext = os.path.splitext(path)[1].lower()
-        if ext is old_ext and I is None:
+        if ext == old_ext and I is None:
             # Copy original file
             shutil.copyfile(self.path, path)
         else:
@@ -1002,7 +1002,7 @@ class Image(object):
             else:
                 im = PIL.Image.fromarray(I)
             # For JPEG file extensions, see https://stackoverflow.com/a/23424597/8161503
-            if ext.lower() in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
+            if ext in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
                 exif = self.exif.copy()
                 exif.set_tag('PixelXDimension', im.size[0])
                 exif.set_tag('PixelYDimension', im.size[1])

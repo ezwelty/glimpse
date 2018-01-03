@@ -10,11 +10,12 @@ import matplotlib
 
 # ---- Constants ---- #
 
-# AK04: IfSar (ArcticDEM as one artifact)
+# CG04: IfSar (ArcticDEM as one artifact)
+# CG05: IfSar (ArcticDEM not tried)
 # AK10: IfSAR (ArcticDEM has nasty artifacts)
 # AK01: ArcticDEM (very similar to IfSar but more detail)
 
-STATION = 'CG04'
+STATION = 'CG06'
 # DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
 # DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"
@@ -44,14 +45,14 @@ geo = geojson.FeatureCollection(
     [geojson.Feature(geometry=geojson.LineString(xyz.tolist())) for xyz in hxyz])
 geo = helper.ordered_geojson(geo)
 helper.write_geojson(geo,
-    "geojson/horizons/" + STATION + "-ifsar.geojson",
+    "geojson/horizons/" + STATION + ".geojson",
     crs=32606, decimals=[5, 5, 0])
 
 # --- Check result ---- #
 
 eop = cgcalib.station_eop(STATION)
 img = image.Image(glob.glob("svg/" + STATION + "*.JPG")[0], cam={'xyz': eop['xyz'], 'viewdir': eop['viewdir']})
-geo = helper.read_geojson("geojson/horizons/" + STATION + "-ifsar.geojson", crs=32606)
+geo = helper.read_geojson("geojson/horizons/" + STATION + ".geojson", crs=32606)
 lxyz = [coords for coords in helper.geojson_itercoords(geo)]
 luv = [img.cam.project(xyz) for xyz in lxyz]
 img.plot()

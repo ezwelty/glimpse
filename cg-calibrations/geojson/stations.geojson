@@ -344,12 +344,12 @@
 			"id": "CG05",
 			"name": "Columbia 2005",
 			"fixed": true,
-			"viewdir": [-65.0, 0, 0.0],
-			"notes": "Position assumed same as CG06. 2011: Position not allowed to drift from the CG06 position, which appears to be in the correct datum. Not good comparison with aerial because missing asynchronous image, and large calving occurs between oblique and aerial. Suspect calibration."
+			"viewdir": [-86, -2, 2],
+			"notes": "Survey GPS. Position from 'coords.csv' and '2005_gps_coords.xls'."
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.05585, 61.1186521, 152.039]
+			"coordinates": [-147.0554461, 61.1185563, 154.508]
 		}
 	}, {
 		"type": "Feature",
@@ -358,11 +358,11 @@
 			"name": "Columbia 2006",
 			"fixed": false,
 			"viewdir": [-78.0, 0, 0.0],
-			"notes": "Survey GPS. Double-check original GPS files. 2011: P, fpx, k bundle adjusted very tightly. Excellent agreement with aerial terminus. Either reported surveyed CG06 or BBCFG position under question. P=[497010.531, 6775998.065, 156.640] UTM, fpx=2487.4, k=[-0.2837, 0.5934]. File CG06.jpg P=[497128.2, 6775848.0, 150.2] UTM"
+			"notes": "Position from file CG06.jpg, which is precisely the CG05 surveyed position in NAD27 UTM."
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.05585, 61.1186521, 152.039]
+			"coordinates": [-147.0554461, 61.1185563, 154.508]
 		}
 	}, {
 		"type": "Feature",

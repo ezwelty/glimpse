@@ -24,7 +24,7 @@ def parse_image_path(path):
     csv.first_time_utc = csv.first_time_utc.apply(datetime.datetime.replace, microsecond=0)
     rows = csv[(csv.station == station) & (csv.first_time_utc <= capture_time) & (csv.last_time_utc >= capture_time)]
     if len(rows) != 1:
-        raise ValueError("Image path has zero or multiple sequence matches")
+        raise ValueError("Image path has zero or multiple sequence matches: " + path)
     return dict(station=station, service=rows.service.iloc[0], camera=rows.camera.iloc[0],
         basename=station + "_" + date_str + "_" + time_str)
 

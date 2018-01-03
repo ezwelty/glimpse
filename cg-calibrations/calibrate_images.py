@@ -10,12 +10,12 @@ import optimize
 import dem as DEM
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
-IMG_SIZE = 0.25
+IMG_SIZE = 0.5
 SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
-STATION = 'CG04'
+STATION = 'CG06'
 
 svg_paths = glob.glob("svg/" + STATION + "*.svg")
 for path in svg_paths:

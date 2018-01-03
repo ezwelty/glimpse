@@ -23,12 +23,17 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 
 # CAMERA = 'nikon-d200-18-20' # AK10b
 # CAMERA = 'nikon-d200-08-24' # AK01b
-CAMERA = 'nikon-e8700' # CG04
+# CAMERA = 'nikon-e8700' # CG04
+# IMG_SIZE = 0.5
+# GROUP_PARAMS[2]['k'] = (0, -0.25, 0.25)
+# GROUP_PARAMS[3]['k'] = ([0, 1], -0.25, 0.25)
+# GROUP_PARAMS[4]['k'] = ([0, 1], -0.25, 0.25)
+# GROUP_PARAMS[5]['k'] = ([0, 1], -0.25, 0.25)
+# CAMERA = 'nikon-d2x' # CG05
+# IMG_SIZE = 0.5
+CAMERA = 'canon-20d' # CG06
 IMG_SIZE = 0.5
-GROUP_PARAMS[2]['k'] = (0, -0.25, 0.25)
-GROUP_PARAMS[3]['k'] = ([0, 1], -0.25, 0.25)
-GROUP_PARAMS[4]['k'] = ([0, 1], -0.25, 0.25)
-GROUP_PARAMS[5]['k'] = ([0, 1], -0.25, 0.25)
+GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
@@ -46,9 +51,10 @@ camera_model = optimize.Cameras(
     cams=[img.cam for img in motion_images + svg_images],
     controls=motion_controls + svg_controls,
     cam_params=motion_cam_params + svg_cam_params,
-    group_params=GROUP_PARAMS[5])
+    group_params=GROUP_PARAMS[-1])
 # Fit parameters to model
-camera_fit = camera_model.fit(group_params=GROUP_PARAMS[:5], full=True)
+camera_fit = camera_model.fit(group_params=GROUP_PARAMS[:-1], full=True)
+print np.array(camera_fit.params.valuesdict().values()[0:3]) - camera_model.cams[0].xyz
 # camera_model.set_cameras(camera_fit.params)
 
 # Mean error for SVG images
@@ -68,7 +74,7 @@ motion_images[i].set_plot_limits()
 
 # ---- Verify with image plot (svg) ---- #
 
-i = 1
+i = 0
 svg_images[i].plot()
 camera_model.plot(camera_fit.params, cam=len(motion_images) + i)
 svg_images[i].set_plot_limits()
@@ -127,7 +133,7 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/CG04_20040707_200052.svg"
+svg_path = "svg/CG05_20050827_190000.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])

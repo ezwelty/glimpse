@@ -7,21 +7,21 @@ import cgcalib
 import dem as DEM
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
-IMG_SIZE = 0.25
+IMG_SIZE = 0.5
 SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Calibrate station ---- #
 
 # STATION = 'AK10b'
 # STATION = 'AK01b'
-STATION = 'CG04'
-CAMERA = 'nikon-e8700'
-SUFFIX = ''
+# STATION = 'CG04'
+# STATION = 'CG05'
+STATION = 'CG06'
 
 # Gather svg control
 images, controls, cam_params = cgcalib.station_svg_controls(
     STATION, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
-    station_calib=False, camera_calib=CAMERA + SUFFIX)
+    station_calib=False, camera_calib=True)
 
 # Calibrate station
 station_model = optimize.Cameras(
@@ -35,7 +35,7 @@ print np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.ca
 
 # ---- Verify with image plot ---- #
 
-i = 1
+i = 2
 images[i].plot()
 station_model.plot(station_fit.params, cam=i)
 images[i].set_plot_limits()

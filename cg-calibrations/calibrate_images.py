@@ -15,9 +15,9 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
-STATION = 'CG06'
+STATION = 'AK03*'
 
-svg_paths = glob.glob("svg/" + STATION + "*.svg")
+svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:
     for suffix in ['']:
         ids = cgcalib.parse_image_path(path)

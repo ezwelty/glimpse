@@ -58,7 +58,7 @@
 			"id": "AK03",
 			"name": "Cliff",
 			"fixed": true,
-			"viewdir": [-45.0, -10, -2.0],
+			"viewdir": [-60, -3.5, 0.5],
 			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Good agreement with aerial."
 		},
 		"geometry": {
@@ -71,7 +71,7 @@
 			"id": "AK03b",
 			"name": "Cliff",
 			"fixed": true,
-			"viewdir": [-22.5, -5, 3.0],
+			"viewdir": [-30.5, -11, 0],
 			"notes": "Survey GPS"
 		},
 		"geometry": {

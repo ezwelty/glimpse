@@ -17,7 +17,7 @@ import matplotlib
 # AK10: IfSAR (ArcticDEM has nasty artifacts)
 # AK01: ArcticDEM (very similar to IfSar but more detail)
 
-STATION = 'AK03'
+STATION = 'AK09'
 # DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
 # DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"

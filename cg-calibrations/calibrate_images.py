@@ -15,7 +15,7 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
-STATION = 'AK03*'
+STATION = 'AK09'
 
 svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:

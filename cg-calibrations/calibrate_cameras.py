@@ -31,7 +31,14 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # GROUP_PARAMS[5]['k'] = ([0, 1], -0.25, 0.25)
 # CAMERA = 'nikon-d2x' # CG05
 # IMG_SIZE = 0.5
-CAMERA = 'nikon-d200-03-20' # AK03(b)
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# CAMERA = 'canon-20d' # CG06
+# IMG_SIZE = 0.5
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# CAMERA = 'nikon-d200-03-20' # AK03(b)
+# IMG_SIZE = 0.5
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+CAMERA = 'nikon-d200-13-20' # AK09
 IMG_SIZE = 0.5
 GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 

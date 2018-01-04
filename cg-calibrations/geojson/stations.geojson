@@ -97,7 +97,7 @@
 			"id": "AK09",
 			"name": "Camp",
 			"fixed": false,
-			"viewdir": [-5.0, -15, 0.0],
+			"viewdir": [-12.3, -14, -1.5],
 			"notes": "Position estimated from AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini."
 		},
 		"geometry": {
@@ -181,19 +181,6 @@
 		"geometry": {
 			"type": "Point",
 			"coordinates": [-147.0989788, 61.162396, 502.0]
-		}
-	}, {
-		"type": "Feature",
-		"properties": {
-			"id": "AKH09",
-			"name": "High Speed Camp",
-			"fixed": false,
-			"viewdir": [-10.0, -10, 0.0],
-			"notes": "Position estimated from AK09."
-		},
-		"geometry": {
-			"type": "Point",
-			"coordinates": [-147.0495883, 61.1220741, 236.259]
 		}
 	}, {
 		"type": "Feature",

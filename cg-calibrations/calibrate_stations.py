@@ -17,8 +17,10 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 # STATION = 'CG04'
 # STATION = 'CG05'
 # STATION = 'CG06'
-STATION = 'AK03'
-STATION2 = 'AK03b'
+# STATION = 'AK03'; STATION2 = 'AK03b'
+STATION = 'AK09'
+station_fit = camera_fit # use better calibrate_camera solution
+viewdir_keys = station_fit.params.keys()[-len(images) * 3:]
 
 # Gather svg control
 images, controls, cam_params = cgcalib.station_svg_controls(
@@ -27,9 +29,9 @@ images, controls, cam_params = cgcalib.station_svg_controls(
 
 # Optional second station
 images2, controls2, cam_params2 = [], [], []
-images2, controls2, cam_params2 = cgcalib.station_svg_controls(
-    STATION2, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
-    station_calib=False, camera_calib=True)
+# images2, controls2, cam_params2 = cgcalib.station_svg_controls(
+#     STATION2, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
+#     station_calib=False, camera_calib=True)
 
 # Calibrate station
 station_model = optimize.Cameras(

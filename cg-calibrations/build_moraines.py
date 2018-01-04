@@ -3,7 +3,7 @@ import os
 
 DEM_DIR = "/volumes/science-b/data/columbia/dem/"
 
-paths = glob.glob("geojson/moraines/20080811*.geojson")
+paths = glob.glob("geojson/moraines/2009*.geojson")
 for path in paths:
     basename = os.path.basename(path)
     date_str = os.path.splitext(basename)[0]

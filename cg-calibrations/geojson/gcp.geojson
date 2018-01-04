@@ -157,7 +157,7 @@
 { "type": "Feature", "properties": { "id": "T20080811-05", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.093621325759784, 61.168023038825091, 564.8 ] } },
 { "type": "Feature", "properties": { "id": "T20080811-06", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.142262436349398, 61.170947614602504, 620.7 ] } },
 { "type": "Feature", "properties": { "id": "T20080811-07", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.138231018036578, 61.172749144472931, 512.7 ] } },
-{ "type": "Feature", "properties": { "id": "T20080811-08", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.068729402505113, 61.19258392235453, 965.0] } },
+{ "type": "Feature", "properties": { "id": "T20080811-08", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.068729402505113, 61.19258392235453, 965.0 ] } },
 { "type": "Feature", "properties": { "id": "T20080811-09", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.078971950174719, 61.178949555820239, 771.1 ] } },
 { "type": "Feature", "properties": { "id": "T20090827-12", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.073786311948709, 61.19104877412483, 1011.4 ] } },
 { "type": "Feature", "properties": { "id": "T20090827-13", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.059256544971618, 61.19490782053736, 942.8 ] } },
@@ -167,6 +167,16 @@
 { "type": "Feature", "properties": { "id": "T20090803-16", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.064183084987519, 61.190484710837637, 688.9 ] } },
 { "type": "Feature", "properties": { "id": "T20090803-17", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.065791425382088, 61.191907396467649, 795.2 ] } },
 { "type": "Feature", "properties": { "id": "T20090803-18", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.073837737998076, 61.191039912172343, 1011.0 ] } },
-{ "type": "Feature", "properties": { "id": "T20090803-19", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.059317175256609, 61.194876994635585, 941.2 ] } }
+{ "type": "Feature", "properties": { "id": "T20090803-19", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.059317175256609, 61.194876994635585, 941.2 ] } },
+{ "type": "Feature", "properties": { "id": "T20090827-16", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.06640039092099, 61.195060028445219, 1041.5 ] } },
+{ "type": "Feature", "properties": { "id": "ledgedot", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.044738603090991, 61.182873903430639, 573.4 ] } },
+{ "type": "Feature", "properties": { "id": "jawlip2", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.052038186305793, 61.180405168208146, 390.4 ] } },
+{ "type": "Feature", "properties": { "id": "wedge", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -147.042416889086752, 61.182013790672201, 266.7 ] } },
+{ "type": "Feature", "properties": { "id": "T20090827-17", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.873960833640609, 61.235609121931731, 787.6 ] } },
+{ "type": "Feature", "properties": { "id": "T20090827-18", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.844373764068024, 61.250329357239252, 1365.2 ] } },
+{ "type": "Feature", "properties": { "id": "T20090827-19", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.866481004609938, 61.255525398063561, 1034.4 ] } },
+{ "type": "Feature", "properties": { "id": "rustcut", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.995125756106205, 61.194250730833026, 455.5 ] } },
+{ "type": "Feature", "properties": { "id": "brokens", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.996689653059434, 61.194154963388179, 466.9 ] } },
+{ "type": "Feature", "properties": { "id": "dragonduct", "valid": true, "notes": null }, "geometry": { "type": "Point", "coordinates": [ -146.959448581221579, 61.204538188332464, 443.6 ] } }
 ]
 }

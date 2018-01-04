@@ -15,7 +15,7 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
-STATION = 'AK09'
+STATION = 'AK09b'
 
 svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:
@@ -72,6 +72,8 @@ for i, date in enumerate(img_dates):
             smdem = dem.copy()
             smdem.resize(smdem.d[0] / DEM_GRID_SIZE)
             smdem.crop(zlim=[1, np.inf])
+            # FIXME: DEM.visible() not working from inside NAN
+            smdem.fill_circle(center=img.cam.xyz, radius=100, value=0)
             # Prepare ortho
             ortho = DEM.DEM.read(ortho_paths[-1])
             smortho = ortho.copy()

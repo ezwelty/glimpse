@@ -110,7 +110,7 @@
 			"id": "AK09b",
 			"name": "Camp",
 			"fixed": false,
-			"viewdir": [30.0, -10, 0.0],
+			"viewdir": [22.5, -13, 0],
 			"notes": "Position estimated using SfM"
 		},
 		"geometry": {

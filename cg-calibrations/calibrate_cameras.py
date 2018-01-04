@@ -38,8 +38,11 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # CAMERA = 'nikon-d200-03-20' # AK03(b)
 # IMG_SIZE = 0.5
 # GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
-CAMERA = 'nikon-d200-13-20' # AK09
-IMG_SIZE = 0.5
+# CAMERA = 'nikon-d200-13-20' # AK09
+# IMG_SIZE = 0.5
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+CAMERA = 'nikon-d200-14-20' # AK09b
+IMG_SIZE = np.array([968, 648]) * 1.5
 GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 
 # Gather motion control
@@ -140,15 +143,15 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/CG05_20050827_190000.svg"
+svg_path = "svg/AK09b_20100602_200818.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])
 img = image.Image(img_path, cam=dict(xyz=eop['xyz'], viewdir=eop['viewdir']))
 controls = cgcalib.svg_controls(img, svg_path, keys=SVG_KEYS)
 svg_model = optimize.Cameras(img.cam, controls,
-    cam_params=dict(viewdir=True, xyz=True), group_params=GROUP_PARAMS[5])
-svg_fit = svg_model.fit(full=True, group_params=GROUP_PARAMS[:5])
+    cam_params=dict(viewdir=True), group_params=GROUP_PARAMS[-1])
+svg_fit = svg_model.fit(full=True, group_params=GROUP_PARAMS[:-1])
 img.plot()
 svg_model.plot(svg_fit.params)
 img.set_plot_limits()

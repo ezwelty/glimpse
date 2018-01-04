@@ -8,9 +8,9 @@
 		<image overflow="visible" enable-background="new    " width="3872" height="2592" xlink:href="AK09_20090803_200320.JPG"  transform="matrix(0.25 0 0 0.25 0 0)">
 	</image>
 </g>
-<g id="image-contrast">
+<g id="image-contrast" display="none">
 	
-		<image overflow="visible" width="3872" height="2592" xlink:href="AK09_20090803_200320-b.JPG"  transform="matrix(0.25 0 0 0.25 0 0)">
+		<image display="inline" overflow="visible" width="3872" height="2592" xlink:href="AK09_20090803_200320-b.JPG"  transform="matrix(0.25 0 0 0.25 0 0)">
 	</image>
 </g>
 <g id="gcp-unused">

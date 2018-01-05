@@ -41,9 +41,13 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # CAMERA = 'nikon-d200-13-20' # AK09
 # IMG_SIZE = 0.5
 # GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
-CAMERA = 'nikon-d200-14-20' # AK09b
-IMG_SIZE = np.array([968, 648]) * 1.5
-GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# CAMERA = 'nikon-d200-14-20' # AK09b
+# IMG_SIZE = np.array([968, 648]) * 1.5
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+CAMERA = 'nikon-d300s' # AK12-1
+IMG_SIZE = 0.25
+svg_images[2].cam.viewdir = [5.5, -9, 0]
+svg_images[3].cam.viewdir = [5.5, -9, 0]
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
@@ -64,7 +68,7 @@ camera_model = optimize.Cameras(
     group_params=GROUP_PARAMS[-1])
 # Fit parameters to model
 camera_fit = camera_model.fit(group_params=GROUP_PARAMS[:-1], full=True)
-print np.array(camera_fit.params.valuesdict().values()[0:3]) - camera_model.cams[0].xyz
+print np.array(camera_fit.params.valuesdict().values()[0:3]) - svg_images[0].cam.xyz
 # camera_model.set_cameras(camera_fit.params)
 
 # Mean error for SVG images
@@ -143,7 +147,7 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/AK09b_20100602_200818.svg"
+svg_path = "svg/AK12_20100924_204619.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])

@@ -21,9 +21,12 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 # STATION = 'AK09'
 # station_fit = camera_fit # use better calibrate_camera solution
 # viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
-STATION = 'AK09b'
-station_fit = camera_fit # use better calibrate_camera solution
-viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
+# STATION = 'AK09b'
+# station_fit = camera_fit # use better calibrate_camera solution
+# viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
+STATION = 'AK12'
+images[2].cam.viewdir = [5.5, -9, 0]
+images[3].cam.viewdir = [5.5, -9, 0]
 
 # Gather svg control
 images, controls, cam_params = cgcalib.station_svg_controls(

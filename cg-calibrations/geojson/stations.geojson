@@ -162,12 +162,12 @@
 			"id": "AK12",
 			"name": "Tower",
 			"fixed": false,
-			"viewdir": [35.0, -10, 0.0],
-			"notes": "Position estimated from AK09b."
+			"viewdir": [29, -8, 0],
+			"notes": "Position estimated with Google Earth."
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.0495265, 61.1218314, 235.437]
+			"coordinates": [-147.043261, 61.1198529, 403]
 		}
 	}, {
 		"type": "Feature",

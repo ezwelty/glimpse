@@ -5,115 +5,32 @@ import gdal
 import matplotlib
 import helper
 
-class DEM(object):
-    """
-    A `DEM` describes elevations on a regular 2-dimensional grid.
+class Grid(object):
 
-    Attributes:
-        Z (array): Grid of values on a regular xy grid
-        zlim (array): Limits of `Z` [min, max]
-        xlim,ylim (array): Outer bounds of the grid [left, right], [top, bottom]
-        x,y (array): Cell center coordinates as row vectors [left to right], [top to bottom]
-        X,Y (array): Cell center coordinates as grids equivalent to `Z`
-        min (array): Minimum bounding box coordinates [x, y, z]
-        max (array): Maximum bounding box coordinates [x, y, z]
-        n (array): Dimensions of `Z` [nx|cols, ny|rows]
-        d (array): Grid cell size [dx, dy]
-        datetime (datetime): Capture date and time
-    """
+    def __init__(self, n, xlim=None, ylim=None):
+        self.n = np.atleast_1d(n).astype(int)
+        if len(self.n) < 2:
+            self.n = np.repeat(self.n, 2)
+        if xlim is None:
+            xlim = (0, self.n[0])
+        self.xlim = np.atleast_1d(xlim).astype(float)
+        if ylim is None:
+            ylim = (0, self.n[1])
+        self.ylim = np.atleast_1d(ylim).astype(float)
 
-    def __init__(self, Z, x=None, y=None, datetime=None):
-        """
-        Create a `DEM`.
-
-        Arguments:
-            Z (array): Grid of values on a regular xy grid
-            x (object): Either `xlim`, `x`, or `X`
-            y (object): Either `ylim`, `y`, or `Y`
-            datetime (datetime): Capture date and time
-        """
-        self.Z = Z
-        self._Zf = None
-        self.xlim, self._x, self._X = self._parse_x(x)
-        self.ylim, self._y, self._Y = self._parse_y(y)
-        self.datetime = datetime
-
-    @classmethod
-    def read(cls, path, band=1, x=None, y=None, datetime=None):
-        """
-        Read DEM from raster file.
-
-        See `gdal.Open()` for details.
-        If raster is float and has a defined no-data value,
-        no-data values are replaced with NaN.
-        Otherwise, the raster data is unchanged.
-
-        Arguments:
-            path (str): Path to file
-            band (int): Raster band to read (1 = first band)
-            x (object): Either `xlim`, `x`, or `X`.
-                If `None` (default), read from file.
-            y (object): Either `ylim`, `y`, or `Y`.
-                If `None` (default), read from file.
-            datetime (datetime): Capture date and time
-        """
-        raster = gdal.Open(path, gdal.GA_ReadOnly)
-        band = raster.GetRasterBand(band)
-        Z = band.ReadAsArray()
-        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
-        # HACK: Use < -9998 since most common are -9999 and -3.4e38
-        nan_value = band.GetNoDataValue()
-        if np.issubdtype(Z.dtype, float) and nan_value:
-            Z[Z == nan_value] = np.nan
-        transform = raster.GetGeoTransform()
-        if x is None:
-            x = transform[0] + transform[1] * np.array([0, raster.RasterXSize])
-        if y is None:
-            y = transform[3] + transform[5] * np.array([0, raster.RasterYSize])
-        return cls(Z, x=x, y=y, datetime=datetime)
-
-    @property
-    def Z(self):
-        return self._Z
-
-    @Z.setter
-    def Z(self, value):
-        if hasattr(self, '_Z'):
-            original_shape = self._Z.shape
-            self._Z = np.asarray(value, float)
-            self._clear_cache(['Zf'])
-            if self._Z.shape != original_shape:
-                self._clear_cache(['x', 'X', 'y', 'Y'])
-        else:
-            self._Z = np.asarray(value, float)
-
-    # ---- Properties (dependent) ----
-
-    @property
-    def zlim(self):
-        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
-        return np.array(value)
-
-    @property
-    def min(self):
-        value = [min(self.xlim), min(self.ylim), min(self.zlim)]
-        return np.array(value)
-
-    @property
-    def max(self):
-        value = [max(self.xlim), max(self.ylim), max(self.zlim)]
-        return np.array(value)
-
-    @property
-    def n(self):
-        value = [self.Z.shape[1], self.Z.shape[0]]
-        return np.array(value, dtype=int)
+    # ---- Properties (dependent) ---- #
 
     @property
     def d(self):
-        return np.append(np.diff(self.xlim), np.diff(self.ylim)) / self.n
+        return np.hstack((np.diff(self.xlim), np.diff(self.ylim))) / self.n
 
-    # ---- Properties (cached) ----
+    @property
+    def min(self):
+        return np.array((min(self.xlim), min(self.ylim)))
+
+    @property
+    def max(self):
+        return np.array((max(self.xlim), max(self.ylim)))
 
     @property
     def x(self):
@@ -147,23 +64,87 @@ class DEM(object):
             self._Y = np.tile(self.y, [self.n[0], 1]).transpose()
         return self._Y
 
-    @property
-    def Zf(self):
-        if self._Zf is None:
-            sign = np.sign(self.d).astype(int)
-            self._Zf = scipy.interpolate.RegularGridInterpolator(
-                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]],
-                method="linear", bounds_error=False)
-        return self._Zf
+    # ---- Methods (private) ----
 
-    # ---- Methods (public) ----
+    def _clear_cache(self, attributes=['x', 'X', 'y', 'Y']):
+        for attr in attributes:
+            setattr(self, '_' + attr, None)
 
-    def copy(self):
-        return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
+    def _parse_x(self, obj):
+        """
+        Parse object into xlim, x, and X attributes.
+
+        Arguments:
+            obj (object): Either xlim, x, or X
+        """
+        if obj is None:
+            obj = [0, self.n[0]]
+        if not isinstance(obj, np.ndarray):
+            obj = np.asarray(obj, float)
+        is_X = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
+        if is_X:
+            # TODO: Check if all rows equal
+            X = obj
+            obj = obj[0, :]
+        else:
+            X = None
+        is_x = any(n > 2 for n in obj.shape[0:2])
+        if is_x:
+            x = obj
+            # TODO: Check if equally spaced monotonic
+            dx = abs(np.diff(obj[0:2]))
+            xlim = np.append(obj[0] - dx / 2, obj[-1] + dx / 2)
+        else:
+            x = None
+            xlim = obj
+        return [xlim, x, X]
+
+    def _parse_y(self, obj):
+        """
+        Parse object into ylim, y, and Y attributes.
+
+        Arguments:
+            obj (object): Either ylim, y, or Y
+        """
+        if obj is None:
+            obj = [0, self.n[1]]
+        if not isinstance(obj, np.ndarray):
+            obj = np.asarray(obj, float)
+        is_Y = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
+        if is_Y:
+            # TODO: Check if all rows equal
+            Y = obj
+            obj = obj[:, 0]
+        else:
+            Y = None
+        is_y = any(n > 2 for n in obj.shape[0:2])
+        if is_y:
+            y = obj
+            # TODO: Check if equally spaced monotonic
+            dy = abs(np.diff(obj[0:2]))
+            ylim = np.append(obj[0] + dy / 2, obj[-1] - dy / 2)
+        else:
+            y = None
+            ylim = obj
+        return [ylim, y, Y]
+
+    # ---- Methods ---- #
+
+    def resize(self, scale):
+        """
+        Resize grid.
+
+        Grid cell aspect ratio may not be preserved due to integer rounding
+        of grid dimensions.
+
+        Arguments:
+            scale (float): Fraction of current size
+        """
+        self.n = np.floor(self.n * scale + 0.5).astype(int)
 
     def inbounds(self, xy):
         """
-        Test whether points are within (or on) the xy bounds of the `DEM`.
+        Test whether points are in (or on) bounds.
 
         Arguments:
             xy (array): Point coordinates (Nx2)
@@ -173,11 +154,23 @@ class DEM(object):
         """
         return np.logical_and(xy >= self.min[0:2], xy <= self.max[0:2]).all(axis = 1)
 
+    def rowcol_to_xy(self, rowcol):
+        """
+        Return x,y coordinates of row,col indices.
+
+        Places integer indices at the centers of each cell.
+        Therefore, the upper left corner is [-0.5, -0.5]
+        and the center of that cell is [0, 0].
+
+        Arguments:
+            rowcol (array): Array indices (Nx2)
+        """
+        xy_origin = np.array((self.xlim[0], self.ylim[0]))
+        return (rowcol + 0.5)[:, ::-1] * self.d + xy_origin
+
     def xy_to_rowcol(self, xy, snap=False):
         """
         Return row,col indices of x,y coordinates.
-
-        See `.rowcol_to_xy()` for the inverse.
 
         Arguments:
             xy (array): Spatial coordinates (Nx2)
@@ -197,23 +190,165 @@ class DEM(object):
             return colrow[:, ::-1]
 
     def rowcol_to_idx(self, rowcol):
-        return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.Z.shape)
+        return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.n[::-1])
 
-    def rowcol_to_xy(self, rowcol):
+    def crop_extent(self, xlim=None, ylim=None):
+        # Calculate x,y limits
+        if xlim is None:
+            xlim = self.xlim
+        if ylim is None:
+            ylim = self.ylim
+        box = helper.intersect_boxes(np.vstack((
+            np.hstack((min(xlim), min(ylim), max(xlim), max(ylim))),
+            np.hstack((self.min[0:2], self.max[0:2]))
+        )))
+        xlim = box[0::2]
+        if self.xlim[0] > self.xlim[1]:
+             xlim = xlim[::-1]
+        ylim = box[1::2]
+        if self.ylim[0] > self.ylim[1]:
+             ylim = ylim[::-1]
+        # Convert xy limits to grid indices
+        xy = np.column_stack((xlim, ylim))
+        rowcol = self.xy_to_rowcol(xy, snap=True)
+        # Snap down bottom-right, non-outer edges
+        # see .xy_to_rowcol()
+        bottom_right = np.append(self.xlim[1], self.ylim[1])
+        is_edge = (bottom_right - xy[1, :]) % self.d == 0
+        is_outer_edge = xy[1, :] == bottom_right
+        snap_down = (is_edge & ~is_outer_edge)
+        rowcol[1, snap_down[::-1]] -= 1
+        new_xy = self.rowcol_to_xy(rowcol)
+        new_xlim = new_xy[:, 0] + np.array([-0.5, 0.5]) * self.d[0]
+        new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[1]
+        return new_xlim, new_ylim, rowcol[:, 0], rowcol[:, 1]
+
+    def set_plot_limits(self):
+        matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
+        matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
+
+class DEM(Grid):
+    """
+    A `DEM` describes elevations on a regular 2-dimensional grid.
+
+    Attributes:
+        Z (array): Grid of values on a regular xy grid
+        zlim (array): Limits of `Z` [min, max]
+        xlim,ylim (array): Outer bounds of the grid [left, right], [top, bottom]
+        x,y (array): Cell center coordinates as row vectors [left to right], [top to bottom]
+        X,Y (array): Cell center coordinates as grids equivalent to `Z`
+        min (array): Minimum bounding box coordinates [x, y, z]
+        max (array): Maximum bounding box coordinates [x, y, z]
+        n (array): Dimensions of `Z` [nx|cols, ny|rows]
+        d (array): Grid cell size [dx, dy]
+        datetime (datetime): Capture date and time
+    """
+
+    def __init__(self, Z, x=None, y=None, datetime=None):
         """
-        Return x,y coordinates of row,col indices.
-
-        Places integer indices at the centers of each cell.
-        Therefore, the upper left corner is [-0.5, -0.5]
-        and the center of that cell is [0, 0].
-
-        See `.xy_to_rowcol()` for the inverse.
+        Create a `DEM`.
 
         Arguments:
-            rowcol (array): Array indices (Nx2)
+            Z (array): Grid of values on a regular xy grid
+            x (object): Either `xlim`, `x`, or `X`
+            y (object): Either `ylim`, `y`, or `Y`
+            datetime (datetime): Capture date and time
         """
-        origin = np.append(self.xlim[0], self.ylim[0])
-        return (rowcol + 0.5)[:, ::-1] * self.d + origin
+        self.Z = Z
+        self._Zf = None
+        self.xlim, self._x, self._X = self._parse_x(x)
+        self.ylim, self._y, self._Y = self._parse_y(y)
+        self.datetime = datetime
+
+    @classmethod
+    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
+        """
+        Read DEM from raster file.
+
+        See `gdal.Open()` for details.
+        If raster is float and has a defined no-data value,
+        no-data values are replaced with NaN.
+        Otherwise, the raster data is unchanged.
+
+        Arguments:
+            path (str): Path to file
+            band (int): Raster band to read (1 = first band)
+            d (float): Target grid cell size
+            xlim (array-like): Crop bounds in x.
+                If `None` (default), read from file.
+            ylim (array-like): Crop bounds in y.
+                If `None` (default), read from file.
+            datetime (datetime): Capture date and time
+        """
+        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        transform = raster.GetGeoTransform()
+        grid = Grid(
+            n=(raster.RasterXSize, raster.RasterYSize),
+            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+        xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
+        win_xsize = (cols[1] - cols[0]) + 1
+        win_ysize = (rows[1] - rows[0]) + 1
+        if d:
+            buf_xsize = int(np.ceil(abs(win_xsize * grid.d[0] / d)))
+            buf_ysize = int(np.ceil(abs(win_ysize * grid.d[1] / d)))
+        else:
+            buf_xsize = win_xsize
+            buf_ysize = win_ysize
+        band = raster.GetRasterBand(band)
+        Z = band.ReadAsArray(
+            xoff=cols[0], yoff=rows[0],
+            win_xsize=win_xsize, win_ysize=win_ysize,
+            buf_xsize=buf_xsize, buf_ysize=buf_ysize
+        )
+        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
+        # HACK: Use < -9998 since most common are -9999 and -3.4e38
+        nan_value = band.GetNoDataValue()
+        if np.issubdtype(Z.dtype, float) and nan_value:
+            Z[Z == nan_value] = np.nan
+        return cls(Z, x=xlim, y=ylim, datetime=datetime)
+
+    @property
+    def Z(self):
+        return self._Z
+
+    @Z.setter
+    def Z(self, value):
+        if hasattr(self, '_Z'):
+            original_shape = self._Z.shape
+            self._Z = np.asarray(value, float)
+            self._clear_cache(['Zf'])
+            if self._Z.shape != original_shape:
+                self._clear_cache(['x', 'X', 'y', 'Y'])
+        else:
+            self._Z = np.asarray(value, float)
+
+    # ---- Properties (dependent) ----
+
+    @property
+    def zlim(self):
+        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
+        return np.array(value)
+
+    @property
+    def n(self):
+        return np.array(self.Z.shape[0:2][::-1])
+
+    # ---- Properties (cached) ----
+
+    @property
+    def Zf(self):
+        if self._Zf is None:
+            sign = np.sign(self.d).astype(int)
+            self._Zf = scipy.interpolate.RegularGridInterpolator(
+                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]],
+                method="linear", bounds_error=False)
+        return self._Zf
+
+    # ---- Methods (public) ----
+
+    def copy(self):
+        return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
 
     def sample(self, xy, indices=False, method="linear"):
         """
@@ -249,10 +384,6 @@ class DEM(object):
         matplotlib.pyplot.imshow(array,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
             cmap=cmap, **kwargs)
-
-    def set_plot_limits(self):
-        matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
-        matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
 
     def hillshade(self, azimuth=315, altitude=45, **kwargs):
         """
@@ -292,53 +423,12 @@ class DEM(object):
             zlim (array_like): Cropping bounds in z.
                 Values outside range are set to `nan`.
         """
-        # Intersect xlim
-        if xlim is None:
-            xlim = self.xlim
-        else:
-            xlim = np.asarray([
-                max(min(self.xlim), min(xlim)),
-                min(max(self.xlim), max(xlim))
-                ], float)
-            dx = np.diff(xlim)
-            if dx <= 0:
-                raise ValueError("Crop bounds (xlim) do not intersect DEM.")
-            if np.diff(self.xlim) < 0:
-                xlim = xlim[::-1]
-        # Intersect ylim
-        if ylim is None:
-            ylim = self.ylim
-        else:
-            ylim = np.asarray([
-                max(min(self.ylim), min(ylim)),
-                min(max(self.ylim), max(ylim))
-                ], float)
-            dy = np.diff(ylim)
-            if dy <= 0:
-                raise ValueError("Crop bounds (ylim) do not intersect DEM.")
-            if np.diff(self.ylim) < 0:
-                ylim = ylim[::-1]
-        # Apply new x,y limits
-        if any(xlim != self.xlim) or any(ylim != self.ylim):
-            # Convert xy limits to grid indices
-            xy = np.column_stack((xlim, ylim))
-            rc = self.xy_to_rowcol(xy, snap=True)
-            # Snap down bottom-right, non-outer edges
-            # see .xy_to_rowcol()
-            bottom_right = np.append(self.xlim[1], self.ylim[1])
-            is_edge = (bottom_right - xy[1, :]) % self.d == 0
-            is_outer_edge = xy[1, :] == bottom_right
-            snap_down = (is_edge & ~is_outer_edge)
-            rc[1, snap_down[::-1]] -= 1
-            # Crop DEM
-            Z = self.Z[rc[0, 0]:rc[1, 0] + 1, rc[0, 1]:rc[1, 1] + 1]
-            new_xy = self.rowcol_to_xy(rc)
-            new_xlim = new_xy[:, 0] + np.array([-0.5, 0.5]) * self.d[0]
-            new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[0]
+        if xlim is not None or ylim is not None:
+            xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
+            Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
             self.Z = Z
-            self.xlim = new_xlim
-            self.ylim = new_ylim
-        # Apply zlim
+            self.xlim = xlim
+            self.ylim = ylim
         if zlim is not None:
             self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
 
@@ -472,20 +562,7 @@ class DEM(object):
                 is_visible = np.ones(relev.shape, dtype=bool)
             vis[rix] = is_visible
             max_elevations = np.fmax(max_elevations, np.interp(headings, rheading, relev, period=period)) # ignores nan
-            # Horizon
-            rhix = headings_f(rheading[is_visible]).astype(int)
-            max_elevation_ix[rhix] = rix[is_visible]
-        # Compute xyz of horizon
-        is_not_nan = ~np.isnan(max_elevation_ix)
-        # TODO: Insert NaN where value missing?
-        # TODO: Set edges to nan (edge never horizon)
-        hix = max_elevation_ix[is_not_nan].astype(int)
-        hxyz = np.column_stack((self.X.flat[hix], self.Y.flat[hix], self.Z.flat[hix]))
-        # thetas = headings[is_not_nan] * 2 * np.pi - np.pi
-        # hdxy = dxy_cell[hix] * self.d[0]
-        # hdz = max_elevations[is_not_nan] * hdxy
-        # hxyz2 = xyz + np.column_stack((hdxy[:, None] * np.column_stack((np.cos(thetas), np.sin(thetas))), hdz[:, None]))
-        return vis.reshape(self.Z.shape), hxyz#, hxyz2
+        return vis.reshape(self.Z.shape)
 
     def horizon(self, origin, headings=np.arange(360), corrected=True):
         # TODO: Radius min, max (by slicing bresenham line)
@@ -552,71 +629,8 @@ class DEM(object):
         for yi in y[yin]:
             xb = xyi[xyi[:, 1] == yi, 0]
             xi = range(max(xb.min(), 0), min(xb.max(), self.n[0] - 1) + 1)
-            rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
-            ind.extend(self.rowcol_to_idx(rowcols))
+            if xi:
+                rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
+                ind.extend(self.rowcol_to_idx(rowcols))
         # Apply
         self.Z.flat[ind] = value
-
-    # ---- Methods (private) ----
-
-    def _clear_cache(self, attributes=['x', 'X', 'y', 'Y', 'Zf']):
-        for attr in attributes:
-            setattr(self, '_' + attr, None)
-
-    def _parse_x(self, obj):
-        """
-        Parse object into xlim, x, and X attributes.
-
-        Arguments:
-            obj (object): Either xlim, x, or X
-        """
-        if obj is None:
-            obj = [0, self.n[0]]
-        if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, float)
-        is_X = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
-        if is_X:
-            # TODO: Check if all rows equal
-            X = obj
-            obj = obj[0, :]
-        else:
-            X = None
-        is_x = any(n > 2 for n in obj.shape[0:2])
-        if is_x:
-            x = obj
-            # TODO: Check if equally spaced monotonic
-            dx = abs(np.diff(obj[0:2]))
-            xlim = np.append(obj[0] - dx / 2, obj[-1] + dx / 2)
-        else:
-            x = None
-            xlim = obj
-        return [xlim, x, X]
-
-    def _parse_y(self, obj):
-        """
-        Parse object into ylim, y, and Y attributes.
-
-        Arguments:
-            obj (object): Either ylim, y, or Y
-        """
-        if obj is None:
-            obj = [self.n[1], 0]
-        if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, float)
-        is_Y = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
-        if is_Y:
-            # TODO: Check if all rows equal
-            Y = obj
-            obj = obj[:, 0]
-        else:
-            Y = None
-        is_y = any(n > 2 for n in obj.shape[0:2])
-        if is_y:
-            y = obj
-            # TODO: Check if equally spaced monotonic
-            dy = abs(np.diff(obj[0:2]))
-            ylim = np.append(obj[0] + dy / 2, obj[-1] - dy / 2)
-        else:
-            y = None
-            ylim = obj
-        return [ylim, y, Y]

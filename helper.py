@@ -640,3 +640,27 @@ def dms_to_degrees(degrees, minutes, seconds):
     Convert degree-minute-second to decimal degrees.
     """
     return degrees + minutes / 60.0 + seconds / 3600.0
+
+def intersect_ranges(ranges):
+    # ranges: ((min, max), ...) or 2-d array
+    if not isinstance(ranges, np.ndarray):
+        ranges = np.array(ranges)
+    ranges.sort(axis=1)
+    rmin = np.nanmax(ranges[:, 0])
+    rmax = np.nanmin(ranges[:, 1])
+    if rmax - rmin <= 0:
+        raise ValueError("Ranges do not intersect")
+    else:
+        return np.hstack((rmin, rmax))
+
+def intersect_boxes(boxes):
+    # boxes: ((minx, ..., maxx, ...), ...) or 2-d array
+    if not isinstance(boxes, np.ndarray):
+        boxes = np.array(boxes)
+    ndim = boxes.shape[1] / 2
+    boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
+    boxmax = np.nanmin(boxes[:, ndim:], axis=0)
+    if any(boxmax - boxmin <= 0):
+        raise ValueError("Boxes do not intersect")
+    else:
+        return np.hstack((boxmin, boxmax))

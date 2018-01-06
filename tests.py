@@ -129,16 +129,16 @@ def test_dem_defaults():
     Z = np.zeros([3, 3])
     dem = DEM.DEM(Z)
     assert np.array_equal(dem.xlim, np.array([0., 3.]))
-    assert np.array_equal(dem.ylim, np.array([3., 0.]))
+    assert np.array_equal(dem.ylim, np.array([0., 3.]))
     assert np.array_equal(dem.x, np.array([0.5,  1.5,  2.5]))
-    assert np.array_equal(dem.y, np.array([2.5,  1.5,  0.5]))
+    assert np.array_equal(dem.y, np.array([0.5,  1.5,  2.5]))
     assert np.array_equal(dem.X, np.array([dem.x, dem.x, dem.x]))
     assert np.array_equal(dem.Y, np.array([dem.y, dem.y, dem.y]).transpose())
     assert np.array_equal(dem.zlim, np.array([0., 0.]))
     assert np.array_equal(dem.n, np.array([3, 3]))
-    assert np.array_equal(dem.d, np.array([1., -1.]))
-    assert np.array_equal(dem.min, np.array([0., 0., 0.]))
-    assert np.array_equal(dem.max, np.array([3., 3., 0.]))
+    assert np.array_equal(dem.d, np.array([1., 1.]))
+    assert np.array_equal(dem.min, np.array([0., 0.]))
+    assert np.array_equal(dem.max, np.array([3., 3.]))
 
 def test_dem_xy():
     xlim = [0, 3]

@@ -123,7 +123,7 @@
 			"id": "AK10",
 			"name": "Juncture",
 			"fixed": true,
-			"viewdir": [-165.0, -10, -4.0],
+			"viewdir": [-163.5, -14, -2],
 			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle)."
 		},
 		"geometry": {

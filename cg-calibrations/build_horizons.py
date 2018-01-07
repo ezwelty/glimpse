@@ -13,12 +13,13 @@ import matplotlib
 # CG04: IfSar (ArcticDEM as one artifact)
 # CG05: IfSar (ArcticDEM not tried)
 # CG06: IfSar (ArcticDEM not tried)
+# AK01: ArcticDEM (very similar to IfSar but more detail)
 # AK03(b): IfSar (ArcticDEM not tried)
 # AK09(b): IfSar (ArcticDEM not tried)
 # AK10: IfSAR (ArcticDEM has nasty artifacts)
-# AK01: ArcticDEM (very similar to IfSar but more detail)
+# AK12: IfSar (ArcticDEM not tried)
 
-STATION = 'AK12'
+# STATION = 'AKJNC'
 # DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
 # DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"

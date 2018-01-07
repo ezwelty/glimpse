@@ -94,8 +94,8 @@ class Camera(object):
     def from_matlab(cls, imgsz, sensorsz, fc, cc, kc):
         # http://www.vision.caltech.edu/bouguetj/calib_doc/htmls/parameters.html
         args = dict(
-            f=scale * helper.format_list(fc),
-            c=scale * helper.format_list(cc) + 0.5 - helper.format_list(imgsz) / 2,
+            f=fc,
+            c=np.array(cc) + 0.5 - np.array(imgsz) / 2,
             k=kc[0:2] + [kc[4]],
             p=kc[2:4]
         )
@@ -464,6 +464,17 @@ class Camera(object):
             np.column_stack((u[::-1], np.repeat(v[-1], len(u)))),
             np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1]))
         ))
+
+    def viewbox(self, radius=1, directions=False):
+        uv = self.edges(step=self.imgsz / 2)
+        dxyz = self.invproject(uv)
+        dxyz *= radius / np.linalg.norm(dxyz, axis=1)[:, None]
+        vertices = np.vstack(([[0, 0, 0]], dxyz))
+        if not directions:
+            vertices += self.xyz
+        return np.hstack((
+            np.min(vertices, axis=0),
+            np.max(vertices, axis=0)))
 
     def rasterize(self, uv, values, fun=np.mean):
         """

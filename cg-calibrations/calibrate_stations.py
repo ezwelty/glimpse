@@ -7,7 +7,7 @@ import cgcalib
 import dem as DEM
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
-IMG_SIZE = 0.5
+IMG_SIZE = 1
 SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Calibrate station ---- #
@@ -24,9 +24,11 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 # STATION = 'AK09b'
 # station_fit = camera_fit # use better calibrate_camera solution
 # viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
-STATION = 'AK12'
-images[2].cam.viewdir = [5.5, -9, 0]
-images[3].cam.viewdir = [5.5, -9, 0]
+# STATION = 'AK12'
+# images[2].cam.viewdir = [5.5, -9, 0]
+# images[3].cam.viewdir = [5.5, -9, 0]
+STATION = 'AKJNC'
+SVG_KEYS = ['gcp', 'horizon', 'coast', 'moraines']
 
 # Gather svg control
 images, controls, cam_params = cgcalib.station_svg_controls(

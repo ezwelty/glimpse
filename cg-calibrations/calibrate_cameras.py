@@ -44,14 +44,18 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # CAMERA = 'nikon-d200-14-20' # AK09b
 # IMG_SIZE = np.array([968, 648]) * 1.5
 # GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
-CAMERA = 'nikon-d300s' # AK12-1
-IMG_SIZE = 0.25
-svg_images[2].cam.viewdir = [5.5, -9, 0]
-svg_images[3].cam.viewdir = [5.5, -9, 0]
+# CAMERA = 'nikon-d300s' # AK12
+# IMG_SIZE = 0.25
+# svg_images[2].cam.viewdir = [5.5, -9, 0]
+# svg_images[3].cam.viewdir = [5.5, -9, 0]
+CAMERA = 'canon-40d-01' # AKJNC
+IMG_SIZE = 0.5
+SVG_KEYS = ['moraines', 'gcp', 'horizon']
+GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
-    CAMERA, root=IMG_DIR, size=IMG_SIZE, force_size=True, ratio=0.3,
+    CAMERA, root=IMG_DIR, size=IMG_SIZE, force_size=True, ratio=0.2,
     station_calib=False, camera_calib=False)
 
 # Gather svg control
@@ -88,7 +92,7 @@ motion_images[i].set_plot_limits()
 
 # ---- Verify with image plot (svg) ---- #
 
-i = 0
+i = 1
 svg_images[i].plot()
 camera_model.plot(camera_fit.params, cam=len(motion_images) + i)
 svg_images[i].set_plot_limits()
@@ -112,7 +116,7 @@ dem = DEM.DEM.read(dem_path)
 smdem = dem.copy()
 smdem.resize(smdem.d[0] / DEM_GRID_SIZE)
 smdem.crop(zlim=[1, np.inf])
-mask = smdem.visible(svg_images[i].cam.xyz)
+mask = smdem.visible(svg_images[i].cam.xyz) & ~np.isnan(smortho.Z)
 # Prepare ortho
 ortho = DEM.DEM.read(ortho_path)
 smortho = ortho.copy()
@@ -147,7 +151,8 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/AK12_20100924_204619.svg"
+SVG_KEYS = ['gcp', 'horizon', 'moraines']
+svg_path = "svg/AKJNC_20121001_155719.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])
@@ -156,6 +161,17 @@ controls = cgcalib.svg_controls(img, svg_path, keys=SVG_KEYS)
 svg_model = optimize.Cameras(img.cam, controls,
     cam_params=dict(viewdir=True), group_params=GROUP_PARAMS[-1])
 svg_fit = svg_model.fit(full=True, group_params=GROUP_PARAMS[:-1])
+matplotlib.pyplot.figure()
 img.plot()
 svg_model.plot(svg_fit.params)
 img.set_plot_limits()
+
+# ---- Check undistorted image ---- #
+
+img = image.Image(
+    cgcalib.find_image("AKJNC_20120508_191103C", root=IMG_DIR),
+    cam="cameras/canon-40d-01b.json")
+ideal_cam = img.cam.copy()
+ideal_cam.idealize()
+I = img.project(ideal_cam)
+img.write(path="test.jpg", I=I)

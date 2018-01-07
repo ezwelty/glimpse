@@ -172,10 +172,23 @@
 	}, {
 		"type": "Feature",
 		"properties": {
+			"id": "AK12b",
+			"name": "Tower",
+			"fixed": false,
+			"viewdir": [29, -8, 0],
+			"notes": "Position estimated from AK12, but clearly not in the same place."
+		},
+		"geometry": {
+			"type": "Point",
+			"coordinates": [-147.043261, 61.1198529, 403]
+		}
+	}, {
+		"type": "Feature",
+		"properties": {
 			"id": "AKJNC",
 			"name": "Juncture",
 			"fixed": false,
-			"viewdir": [95.0, -10, 0.0],
+			"viewdir": [90.5, -8, 0],
 			"notes": "Source of position unknown."
 		},
 		"geometry": {

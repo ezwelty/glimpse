@@ -8,6 +8,7 @@ sys.path.append('../')
 import image
 import optimize
 import dem as DEM
+import numpy as np
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
 IMG_SIZE = 0.5
@@ -15,7 +16,8 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
-STATION = 'AK12'
+STATION = 'AKJNC'
+SVG_KEYS = ['gcp', 'horizon', 'coast', 'moraines']
 
 svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:
@@ -57,7 +59,7 @@ ORTHO_DIR = "/volumes/science-b/data/columbia/ortho/"
 DEM_GRID_SIZE = 5
 IMG_SIZE = 0.25
 
-img_paths = glob.glob("images/" + STATION + "*.json")
+img_paths = glob.glob("images/" + STATION + "*[0-9].json")
 img_dates = [re.findall("_([0-9]{8})_", path)[0] for path in img_paths]
 previous_date = None
 for i, date in enumerate(img_dates):
@@ -66,26 +68,23 @@ for i, date in enumerate(img_dates):
     if dem_paths and ortho_paths:
         img = image.Image(cgcalib.find_image(img_paths[i], root=IMG_DIR), cam=img_paths[i])
         img.cam.resize(IMG_SIZE)
+        viewbox = img.cam.viewbox(radius=30e3)
         if date != previous_date:
             # Prepare dem
-            dem = DEM.DEM.read(dem_paths[-1])
-            smdem = dem.copy()
-            smdem.resize(smdem.d[0] / DEM_GRID_SIZE)
-            smdem.crop(zlim=[1, np.inf])
+            dem = DEM.DEM.read(dem_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
+            dem.crop(zlim=[1, np.inf])
             # FIXME: DEM.visible() not working from inside NAN
-            smdem.fill_circle(center=img.cam.xyz, radius=100, value=0)
+            dem.fill_circle(center=img.cam.xyz, radius=500, value=0)
             # Prepare ortho
-            ortho = DEM.DEM.read(ortho_paths[-1])
-            smortho = ortho.copy()
-            smortho.resize(smortho.d[0] / DEM_GRID_SIZE)
-            smortho.resample(smdem, method="linear")
+            ortho = DEM.DEM.read(ortho_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
+            ortho.resample(dem, method="linear")
         # Save results as images
         basename = os.path.splitext(img_paths[i])[0]
         # (original)
         img.write(basename + "-original.jpg", I=img.read())
         # (projected into distorted camera)
-        mask = smdem.visible(img.cam.xyz)
-        I = cgcalib.dem_to_image(img.cam, smdem, smortho.Z, mask=mask)
+        mask = dem.visible2(img.cam.xyz)
+        I = cgcalib.dem_to_image(img.cam, dem, ortho.Z, mask=mask)
         I[np.isnan(I)] = np.nanmax(I) / 2 # fill holes with grey
         I = (255 * (I / I.max() - I.min() / I.max()))
         img.write(basename + "-distorted.jpg", I.astype(np.uint8))
@@ -95,7 +94,7 @@ for i, date in enumerate(img_dates):
         controls = cgcalib.svg_controls(img, "svg/" + cgcalib.parse_image_path(basename)['basename'] + ".svg", keys=SVG_KEYS)
         ideal_model = optimize.Cameras(img.cam, controls)
         img.cam.viewdir = ideal_model.fit()
-        I = cgcalib.dem_to_image(img.cam, smdem, smortho.Z, mask=mask)
+        I = cgcalib.dem_to_image(img.cam, dem, ortho.Z, mask=mask)
         I[np.isnan(I)] = np.nanmax(I) / 2 # fill holes with grey
         I = (255 * (I / I.max() - I.min() / I.max()))
         img.write(basename + "-oriented.jpg", I.astype(np.uint8))

@@ -1,26 +1,55 @@
+import re
 import sys
 sys.path.append('../')
 import image
+import cgcalib
+
+def parse_matlab_calibration(path):
+    with open(path, mode='r') as fp:
+        txt = fp.read()
+    def parse_parameter(param, length):
+        if length == 1:
+            pattern = '^' + param + ' = (.*)' + ';'
+        else:
+            pattern = '^' + param + ' = \[ ' + ' ; '.join(['(.*)'] * length) + ' \];'
+        values = re.findall(pattern, txt, flags=re.MULTILINE)[0]
+        if length == 1:
+            return float(values)
+        else:
+            return [float(value) for value in values]
+    lengths = dict(
+        fc=2, fc_error=2,
+        cc=2, cc_error=2,
+        kc=5, kc_error=5,
+        nx=1, ny=1)
+    return dict((param, parse_parameter(param, length)) for param, length in lengths.iteritems())
+
+def import_matlab_calibration(path, camera, suffix='-calib'):
+    calib = parse_matlab_calibration(path)
+    imgsz = [calib['nx'], calib['ny']]
+    sensorsz = cgcalib.load_calibration(camera=camera)['sensorsz']
+    # mean values
+    cam = image.Camera.from_matlab(
+        imgsz=imgsz, sensorsz=sensorsz,
+        fc=calib['fc'], cc=calib['cc'], kc=calib['kc'])
+    cam.write(
+        path="cameras/" + camera + suffix + ".json",
+        attributes=["fmm", "cmm", "k", "p", "sensorsz"])
+    # standard errors
+    cam = image.Camera.from_matlab(
+        imgsz=imgsz, sensorsz=sensorsz,
+        fc=calib['fc_error'], cc=calib['cc_error'], kc=calib['kc_error'])
+    cam.vector /= 3 # "errors are approximately three times the standard deviations"
+    cam.write(
+        path="cameras/" + camera + suffix + "_stderr.json",
+        attributes=["fmm", "cmm", "k", "p"])
+
+# ---- #
 
 CAMERA = 'nikon-e8700'
+CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/results/matlab-cct/Calib_Results.m'
+calib = import_matlab_calibration(CALIB_PATH, CAMERA)
 
-cam = image.Camera.from_matlab(
-    imgsz=[3264, 2448],
-    sensorsz=cgcalib.load_calibration(camera=CAMERA)['sensorsz'],
-    fc=[3345.760828684510670, 3343.007845322197227],
-    cc=[1626.529826546877302, 1228.053303013219875],
-    kc=[-0.206256762062722, 0.206074941129924, 0.000795687419603, -0.000762555784047, 0.000000000000000])
-cam.write(
-    path="cameras/" + CAMERA + "-calib.json",
-    attributes=["fmm", "cmm", "k", "p", "sensorsz"])
-
-cam = image.Camera.from_matlab(
-    imgsz=[3264, 2448],
-    sensorsz=cgcalib.load_calibration(camera=CAMERA)['sensorsz'],
-    fc=[1.535806253664732, 1.612127581079067],
-    cc=[2.265762525976454, 1.727752135185034],
-    kc=[0.001735351838634, 0.005240486256317, 0.000112783687547, 0.000136815030323, 0.000000000000000])
-cam.vector /= 3 # "errors are approximately three times the standard deviations"
-cam.write(
-    path="cameras/" + CAMERA + "-calib_stderr.json",
-    attributes=["fmm", "cmm", "k", "p"])
+CAMERA = 'canon-40d-01'
+CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/results/matlab-cct/Calib_Results.m'
+calib = import_matlab_calibration(CALIB_PATH, CAMERA)

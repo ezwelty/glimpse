@@ -84,12 +84,12 @@ def test_exif_test_image():
     assert exif.iso == 200
     assert exif.shutter == 0.0125
     assert exif.aperture == 8
-    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
+    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 280000)
 
 def test_exif_subsecond():
     path = "tests/AK10b_20141013_020336.JPG"
     exif = image.Exif(path)
-    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 28)
+    assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36, 280000)
     exif.set_tag('SubSecTimeOriginal', None)
     assert exif.datetime == datetime.datetime(2014, 10, 13, 2, 3, 36)
 

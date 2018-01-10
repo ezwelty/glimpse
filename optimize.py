@@ -28,15 +28,17 @@ class Points(object):
         xyz (array): World coordinates (Nx3)
         directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
         original_cam_xyz (array): Original camera position (`cam.xyz`)
+        correction (dict or bool): See `cam.project()`
     """
 
-    def __init__(self, cam, uv, xyz, directions=False):
+    def __init__(self, cam, uv, xyz, directions=False, correction=False):
         if len(uv) != len(xyz):
             raise ValueError("`uv` and `xyz` have different number of rows")
         self.cam = cam
         self.uv = uv
         self.xyz = xyz
         self.directions = directions
+        self.correction = correction
         self.original_cam_xyz = cam.xyz.copy()
 
     def size(self):
@@ -70,7 +72,7 @@ class Points(object):
             index = slice(None)
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position ('xyz') and `directions=True`")
-        return self.cam.project(self.xyz[index], directions=self.directions)
+        return self.cam.project(self.xyz[index], directions=self.directions, correction=self.correction)
 
     def is_static(self):
         """
@@ -122,11 +124,12 @@ class Lines(object):
         uvi (array): Image coordinates interpolated from `uvs` by `step`
         xyzs (array or list): Arrays of world line vertices (Nx3)
         directions (bool): Whether `xyzs` are absolute coordinates (False) or ray directions (True)
+        correction (dict or bool): See `cam.project()`
         step (float): Along-line distance between image points interpolated from lines `uvs`
         original_cam_xyz (array): Original camera position (`cam.xyz`)
     """
 
-    def __init__(self, cam, uvs, xyzs, directions=False, step=None):
+    def __init__(self, cam, uvs, xyzs, directions=False, correction=False, step=None):
         self.cam = cam
         # Retain image lines for plotting
         self.uvs = uvs if isinstance(uvs, list) else [uvs]
@@ -137,6 +140,7 @@ class Lines(object):
             self.uvi = np.vstack(self.uvs)
         self.xyzs = xyzs if isinstance(xyzs, list) else [xyzs]
         self.directions = directions
+        self.correction = correction
         self.original_cam_xyz = cam.xyz.copy()
 
     def size(self):
@@ -176,7 +180,7 @@ class Lines(object):
         for xyz in self.xyzs:
             # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
-            xy = self.cam._world2camera(xyz, directions=self.directions)
+            xy = self.cam._world2camera(xyz, directions=self.directions, correction=self.correction)
             # Discard nan values (behind camera)
             lines = helper.boolean_split(xy, np.isnan(xy[:, 0]), include='false')
             for line in lines:

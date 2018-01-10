@@ -188,7 +188,7 @@ def camera_motion_matches(camera, root=".", size=1, force_size=False, method="si
     return images, matches, cam_params
 
 def camera_svg_controls(camera, root=".", size=1, force_size=False, fixed=True, keys=None,
-    station_calib=False, camera_calib=False):
+    correction=True, station_calib=False, camera_calib=False):
     svg_paths = glob.glob(os.path.join(DIR, "svg", "*.svg"))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
@@ -199,7 +199,7 @@ def camera_svg_controls(camera, root=".", size=1, force_size=False, fixed=True, 
             img_path = find_image(svg_path, root=root)
             images.append(image.Image(img_path, cam=calibration))
             images[-1].cam.resize(size, force=force_size)
-            controls.extend(svg_controls(images[-1], svg_path, keys=keys))
+            controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
             params = dict(viewdir=True)
             if fixed is False:
                 params['xyz'] = True
@@ -207,7 +207,7 @@ def camera_svg_controls(camera, root=".", size=1, force_size=False, fixed=True, 
     return images, controls, cam_params
 
 def station_svg_controls(station, root=".", size=1, force_size=False, keys=None,
-    station_calib=False, camera_calib=True):
+    correction=True, station_calib=False, camera_calib=True):
     svg_paths = glob.glob(os.path.join(DIR, "svg", station + "*.svg"))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
@@ -216,7 +216,7 @@ def station_svg_controls(station, root=".", size=1, force_size=False, keys=None,
         img_path = find_image(svg_path, root=root)
         images.append(image.Image(img_path, cam=calibration))
         images[-1].cam.resize(size, force=force_size)
-        controls.extend(svg_controls(images[-1], svg_path, keys=keys))
+        controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
         cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 

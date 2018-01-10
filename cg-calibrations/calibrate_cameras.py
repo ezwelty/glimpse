@@ -52,9 +52,11 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # IMG_SIZE = 0.5
 # SVG_KEYS = ['moraines', 'gcp', 'horizon']
 # GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
-CAMERA = 'nikon-d200-10-24' # AK10
-IMG_SIZE = [1936, 1296]
-GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# CAMERA = 'nikon-d200-10-24' # AK10
+# IMG_SIZE = [1936, 1296]
+# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+CAMERA = 'nikon-d200-04-24' # AK01-2
+IMG_SIZE = 1
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
@@ -64,7 +66,7 @@ motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matche
 # Gather svg control
 svg_images, svg_controls, svg_cam_params = cgcalib.camera_svg_controls(
     CAMERA, root=IMG_DIR, size=IMG_SIZE, force_size=True, fixed=True, keys=SVG_KEYS,
-    station_calib=False, camera_calib=False)
+    correction=True, station_calib=False, camera_calib=False)
 
 # Calibrate camera
 # NOTE: Doesn't account for stations with non-fixed xyz
@@ -154,7 +156,7 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/AK10_20090827_202655.svg"
+svg_path = "svg/AK01_20070922_200210.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])

@@ -16,11 +16,12 @@ import matplotlib
 # AK01: ArcticDEM (very similar to IfSar but more detail)
 # AK03(b): IfSar (ArcticDEM not tried)
 # AK09(b): IfSar (ArcticDEM not tried)
-# AK10: IfSAR (ArcticDEM has nasty artifacts)
+# AK10(b): IfSAR (ArcticDEM has nasty artifacts)
 # AK12: IfSar (ArcticDEM not tried)
 # AKJNC: IfSar (very similar to ArcticDEM, but without a couple small artifacts)
+# AK01: IfSar (ActicDEM very similar, perhaps more detailed, but some artifacts)
 
-STATION = 'AK10'
+STATION = 'AK01'
 # DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
 # DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"

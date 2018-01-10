@@ -4,7 +4,7 @@ import re
 import dem as DEM
 
 DEM_DIR = "/volumes/science-b/data/columbia/dem/"
-DATE_STR = '20121001'
+DATE_STR = '20070922'
 
 # ---- Read DEM ----
 
@@ -33,7 +33,7 @@ GCP_DEM_PATH = "/volumes/science-b/data/columbia/_new/ArcticDEM/v2.0/tiles/merge
 dem_ref = DEM.DEM.read(GCP_DEM_PATH)
 
 geo = helper.read_geojson("geojson/gcp.geojson", crs=32606, key="id")
-keys = [key for key in geo['features'].iterkeys() if re.findall("T" + DATE_STR, key)]
+keys = [key for key in geo['features'].iterkeys() if re.findall("T" + DATE_STR + '-08', key)]
 keys.sort()
 for key in keys:
     coords = geo['features'][key]['geometry']['coordinates']

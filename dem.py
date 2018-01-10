@@ -564,7 +564,7 @@ class DEM(Grid):
             max_elevations = np.fmax(max_elevations, np.interp(headings, rheading, relev, period=period)) # ignores nan
         return vis.reshape(self.Z.shape)
 
-    def horizon(self, origin, headings=np.arange(360), corrected=True):
+    def horizon(self, origin, headings=np.arange(360)):
         # TODO: Radius min, max (by slicing bresenham line)
         n = len(headings)
         # Compute ray directions (2d)
@@ -602,11 +602,6 @@ class DEM(Grid):
                 hxyz[i, 0:2] = xy[maxi, :]
                 hxyz[i, 2] = dz[maxi]
         hxyz[:, 2] += origin[2]
-        if corrected:
-            # Correct for earth curvature and refraction
-            # e.g. http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
-            # z_actual = z_surface - 0.87 * distance^2 / diameter_earth
-            hxyz[:, 2] -= 0.87 * np.sum((origin[0:2] - hxyz[:, 0:2])**2, axis=1) / 12.74e6
         # Split at NaN
         mask = np.isnan(hxyz[:, 0])
         splits = helper.boolean_split(hxyz, mask, axis=0, circular=True)

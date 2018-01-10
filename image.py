@@ -356,19 +356,21 @@ class Camera(object):
         self.f *= scale2d
         self.c *= scale2d
 
-    def project(self, xyz, directions=False):
+    def project(self, xyz, directions=False, correction=False):
         """
         Project world coordinates to image coordinates.
 
         Arguments:
             xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
             directions (bool): Whether absolute coordinates (False) or ray directions (True)
-
+            correction (dict or bool): Either arguments to `self.elevation_corrections`,
+                `True` for default arguments, or `None` (default) or `False` to skip.
+                Only applies if `directions` is `False`.
         Returns:
             array: Image coordinates (Nx2)
         """
         if xyz.shape[1] == 3:
-            xy = self._world2camera(xyz, directions=directions)
+            xy = self._world2camera(xyz, directions=directions, correction=correction)
         else:
             xy = xyz
         uv = self._camera2image(xy)
@@ -490,7 +492,7 @@ class Camera(object):
         return helper.rasterize_points(uv[is_in, 1].astype(int), uv[is_in, 0].astype(int),
             values[is_in], shape, fun=fun)
 
-    def from_spherical(self, angles):
+    def spherical_to_xyz(self, angles):
         """
         Convert relative world spherical coordinates to euclidean.
 
@@ -517,6 +519,23 @@ class Camera(object):
             xyz *= angles[:, 2:3]
             xyz += self.xyz
         return xyz
+
+    def elevation_corrections(self, xyz, earth_radius=6.3781e6, refraction=0.13):
+        """
+        Return elevation corrections for earth curvature and refraction.
+
+        Arguments:
+            xyz (array): World coordinates (Nx2+)
+            earth_radius (float): Radius of the earth in the same units as `xyz`.
+                Default is the equatorial radius in meters.
+            refraction (float): Coefficient of refraction of light.
+                Default is an average for standard atmospheric conditions.
+        """
+        # http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
+        # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
+        # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
+        square_distance = np.sum((xyz[:, 0:2] - self.xyz[0:2])**2, axis=1)
+        return (refraction - 1) * square_distance / (2 * earth_radius)
 
     # ---- Methods (private) ----
 
@@ -756,17 +775,25 @@ class Camera(object):
         continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
         return continuous_row and continuous_col
 
-    def _world2camera(self, xyz, directions=False):
+    def _world2camera(self, xyz, directions=False, correction=False):
         """
         Project world coordinates to camera coordinates.
 
         Arguments:
             xyz (array): World coordinates (Nx3)
             directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
+            correction (dict or bool): Either arguments to `self.elevation_corrections`,
+                `True` for default arguments, or `None` (default) or `False` to skip.
+                Only applies if `directions` is `False`.
         """
         if directions:
             dxyz = xyz
         else:
+            if correction or correction == dict():
+                # Apply elevation correction
+                if correction is True:
+                    correction = dict()
+                xyz[:, 2] += self.elevation_corrections(xyz, **correction)
             # Convert coordinates to ray directions
             dxyz = xyz - self.xyz
         xyz_c = np.dot(dxyz, self.R.T)

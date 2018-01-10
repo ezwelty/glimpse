@@ -47,7 +47,7 @@ def station_eop(station):
         viewdir=geo['features'][station]['properties']['viewdir'],
         fixed=geo['features'][station]['properties']['fixed'])
 
-def svg_controls(img, svg_markup, keys=None):
+def svg_controls(img, svg_markup, keys=None, correction=True):
     controls = []
     if isinstance(svg_markup, str):
         svg_markup = svg.parse_svg(svg_markup, imgsz=img.cam.imgsz)
@@ -56,54 +56,54 @@ def svg_controls(img, svg_markup, keys=None):
     for key, markup in svg_markup.iteritems():
         if key in keys:
             if key == 'gcp':
-                controls.append(gcp_points(img, markup))
+                controls.append(gcp_points(img, markup, correction=correction))
             elif key == 'coast':
-                controls.append(coast_lines(img, markup))
+                controls.append(coast_lines(img, markup, correction=correction))
             elif key == 'terminus':
-                controls.append(terminus_lines(img, markup))
+                controls.append(terminus_lines(img, markup, correction=correction))
             elif key == 'moraines':
-                controls.extend(moraines_mlines(img, markup))
+                controls.extend(moraines_mlines(img, markup, correction=correction))
             elif key == 'horizon':
-                controls.append(horizon_lines(img, markup))
+                controls.append(horizon_lines(img, markup, correction=correction))
     return controls
 
-def gcp_points(img, markup):
+def gcp_points(img, markup, correction=True):
     uv = np.vstack(markup.values())
     geo = helper.read_geojson(os.path.join(DIR, "geojson", "gcp.geojson"), key="id", crs=32606)
     xyz = np.vstack((geo['features'][key]['geometry']['coordinates']
         for key in markup.iterkeys()))
-    return optimize.Points(img.cam, uv, xyz)
+    return optimize.Points(img.cam, uv, xyz, correction=correction)
 
-def coast_lines(img, markup):
+def coast_lines(img, markup, correction=True):
     luv = markup.values()
     geo = helper.read_geojson(os.path.join(DIR, "geojson", "coast.geojson"), crs=32606)
     lxy = [feature['geometry']['coordinates'] for feature in geo['features']]
     lxyz = [np.hstack((xy, sea_height(xy, t=img.datetime))) for xy in lxy]
-    return optimize.Lines(img.cam, luv, lxyz)
+    return optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
-def terminus_lines(img, markup):
+def terminus_lines(img, markup, correction=True):
     luv = markup.values()
     geo = helper.read_geojson(os.path.join(DIR, "geojson", "termini.geojson"), key="date", crs=32606)
     date_str = img.datetime.strftime("%Y-%m-%d")
     xy = geo['features'][date_str]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))
-    return optimize.Lines(img.cam, luv, [xyz])
+    return optimize.Lines(img.cam, luv, [xyz], correction=correction)
 
-def horizon_lines(img, markup):
+def horizon_lines(img, markup, correction=True):
     luv = markup.values()
     station = parse_image_path(img.path)['station']
     geo = helper.read_geojson(os.path.join(DIR, "geojson", "horizons", station + ".geojson"), crs=32606)
     lxyz = [coords for coords in helper.geojson_itercoords(geo)]
-    return optimize.Lines(img.cam, luv, lxyz)
+    return optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
-def moraines_mlines(img, markup):
+def moraines_mlines(img, markup, correction=True):
     date_str = img.datetime.strftime("%Y%m%d")
     geo = helper.read_geojson(os.path.join(DIR, "geojson", "moraines", date_str + ".geojson"), key="id", crs=32606)
     mlines = []
     for key, moraine in markup.iteritems():
         luv = moraine.values()
         xyz = geo['features'][key]['geometry']['coordinates']
-        mlines.append(optimize.Lines(img.cam, luv, [xyz]))
+        mlines.append(optimize.Lines(img.cam, luv, [xyz], correction=correction))
     return mlines
 
 def sea_height(xy, t=None):
@@ -220,11 +220,11 @@ def station_svg_controls(station, root=".", size=1, force_size=False, keys=None,
         cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
-def dem_to_image(cam, dem, array=None, mask=None):
+def dem_to_image(cam, dem, array=None, mask=None, correction=True):
     if mask is None:
         mask = ~np.isnan(dem.Z)
     xyz = np.column_stack((dem.X[mask], dem.Y[mask], dem.Z[mask]))
-    uv = cam.project(xyz)
+    uv = cam.project(xyz, correction=correction)
     if array is None:
         array = dem.Z
     return cam.rasterize(uv, array[mask])

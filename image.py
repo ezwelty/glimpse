@@ -789,13 +789,13 @@ class Camera(object):
         if directions:
             dxyz = xyz
         else:
-            if correction or correction == dict():
-                # Apply elevation correction
-                if correction is True:
-                    correction = dict()
-                xyz[:, 2] += self.elevation_corrections(xyz, **correction)
-            # Convert coordinates to ray directions
             dxyz = xyz - self.xyz
+        if correction or correction == dict():
+            # Apply elevation correction
+            if correction is True:
+                correction = dict()
+            dxyz[:, 2] += self.elevation_corrections(xyz, **correction)
+        # Convert coordinates to ray directions
         xyz_c = np.dot(dxyz, self.R.T)
         # Normalize by perspective division
         xy = xyz_c[:, 0:2] / xyz_c[:, 2][:, None]

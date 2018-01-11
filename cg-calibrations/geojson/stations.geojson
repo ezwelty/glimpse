@@ -305,7 +305,7 @@
 			"id": "AKST03A",
 			"name": "Stereo 2010 A",
 			"fixed": true,
-			"viewdir": [0.0, -5, 0.0],
+			"viewdir": [2.5, -6.5, 1],
 			"notes": "Survey GPS"
 		},
 		"geometry": {

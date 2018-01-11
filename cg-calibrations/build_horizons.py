@@ -21,7 +21,7 @@ import matplotlib
 # AKJNC: IfSar (very similar to ArcticDEM, but without a couple small artifacts)
 # AK01: IfSar (ActicDEM very similar, perhaps more detailed, but some artifacts)
 
-STATION = 'AK01'
+STATION = 'AKST03A'
 # DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
 # DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"

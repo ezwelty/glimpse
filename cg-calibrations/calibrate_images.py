@@ -18,7 +18,7 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # STATION = 'AKJNC'
 # SVG_KEYS = ['gcp', 'horizon', 'coast', 'moraines']
-STATION = 'AK01'
+STATION = 'AKST03A'
 
 svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:

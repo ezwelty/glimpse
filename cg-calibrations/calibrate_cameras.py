@@ -55,8 +55,10 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # CAMERA = 'nikon-d200-10-24' # AK10
 # IMG_SIZE = [1936, 1296]
 # GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
-CAMERA = 'nikon-d200-04-24' # AK01-2
-IMG_SIZE = 1
+# CAMERA = 'nikon-d200-04-24' # AK01-2
+# IMG_SIZE = 1
+CAMERA = 'nikon-d200-11-28' # AKST0XA
+IMG_SIZE = 0.5
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
@@ -156,7 +158,7 @@ cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/AK01_20070922_200210.svg"
+svg_path = "svg/AKST03A_20100525_224800.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])

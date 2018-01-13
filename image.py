@@ -512,7 +512,7 @@ class Camera(object):
         altitude_iso = (np.pi / 2 - angles[:, 1] * np.pi / 180) % (2 * np.pi)
         xyz = np.column_stack((
             np.sin(altitude_iso) * np.cos(azimuth_iso),
-            np.cos(altitude_iso) * np.sin(azimuth_iso),
+            np.sin(altitude_iso) * np.sin(azimuth_iso),
             np.cos(altitude_iso)))
         directions = angles.shape[1] < 3
         if not directions:

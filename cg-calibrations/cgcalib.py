@@ -13,7 +13,7 @@ import dem as DEM
 import glob
 import requests
 
-DIR = os.path.dirname(__file__)
+DIR = os.path.dirname(os.path.abspath(__file__))
 
 def parse_image_path(path):
     basename = os.path.basename(path)

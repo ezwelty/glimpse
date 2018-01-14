@@ -59,8 +59,10 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # IMG_SIZE = 1
 # CAMERA = 'nikon-d200-11-28' # AKST0XA
 # IMG_SIZE = 0.5
-CAMERA = 'nikon-d200-12-28' # AKST0XB
-IMG_SIZE = 0.5
+# CAMERA = 'nikon-d200-12-28' # AKST0XB
+# IMG_SIZE = 0.5
+CAMERA = 'nikon-d200-04-35' # AK04
+IMG_SIZE = 1
 
 # Gather motion control
 motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(

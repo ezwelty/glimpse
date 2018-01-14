@@ -84,7 +84,7 @@
 			"id": "AK04",
 			"name": "Waterline (tight)",
 			"fixed": false,
-			"viewdir": [-45.0, -5, 0.0],
+			"viewdir": [-41, -2, 2],
 			"notes": "Position estimated from AK02. 2011: Poorly constrained by ground control. Position allowed to wander from AK02 initial guess. Results appear good, but no asynchronous aerial."
 		},
 		"geometry": {

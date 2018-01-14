@@ -18,9 +18,9 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # STATION = 'AKJNC'
 # SVG_KEYS = ['gcp', 'horizon', 'coast', 'moraines']
-STATION = 'CG06'
+STATION = 'AK04'
 
-svg_paths = glob.glob("svg/" + STATION + "_20060913_215944.svg")
+svg_paths = glob.glob("svg/" + STATION + "_*.svg")
 for path in svg_paths:
     for suffix in ['']:
         ids = cgcalib.parse_image_path(path)

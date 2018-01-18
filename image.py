@@ -520,6 +520,19 @@ class Camera(object):
             xyz += self.xyz
         return xyz
 
+    def xyz_to_spherical(self, xyz, directions=False):
+        if not directions:
+            xyz = xyz - self.cam.xyz
+        r = np.sqrt(np.sum(xyz ** 2, axis=1))
+        azimuth_iso = np.arctan2(xyz[:, 1], xyz[:, 0])
+        altitude_iso = np.arccos(xyz[:, 2] / r)
+        angles = np.column_stack((
+            (90 - (azimuth_iso * 180 / np.pi)) % 360,
+            90 - (altitude_iso * 180 / np.pi)))
+        if not directions:
+            angles = np.column_stack((angles, r))
+        return angles
+
     def elevation_corrections(self, xyz, earth_radius=6.3781e6, refraction=0.13):
         """
         Return elevation corrections for earth curvature and refraction.

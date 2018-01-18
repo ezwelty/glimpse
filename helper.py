@@ -7,6 +7,7 @@ import copy
 import dem
 import pandas
 import scipy
+import gzip
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -393,7 +394,7 @@ def in_box(points, box):
     box = box.reshape(2, -1)
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
 
-def clip_polyline_box(line, box):
+def clip_polyline_box(line, box, t=False):
     """
     Returns segments of line within the box.
 
@@ -404,35 +405,43 @@ def clip_polyline_box(line, box):
     Arguments:
         line (array): 2 or 3D point coordinates (npts, ndim)
         box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        t (bool): Last column of `line` are distances along line, linearly interpolated at splits
     """
-    mask = in_box(line, box)
+    if t:
+        cols = slice(None, -1)
+    else:
+        cols = slice(None)
+    mask = in_box(line[:, cols], box)
     segments = boolean_split(line, mask)
     trues = slice(int(~mask[0]), None, 2)
     nsegments = len(segments)
     for i in range(*trues.indices(nsegments)):
         if i > 0:
-            xi = intersect_edge_box(segments[i - 1][-1, :], segments[i][0, :], box)
-            if xi is not None:
-                segments[i] = np.insert(segments[i], 0, xi, axis=0)
+            origin = segments[i - 1][-1, :]
+            distance = segments[i][0, :] - origin
+            ti = intersect_edge_box(origin[cols], distance[cols], box)
+            if ti is not None:
+                segments[i] = np.insert(segments[i], 0, origin + ti * distance, axis=0)
         if i < nsegments - 1:
-            xi = intersect_edge_box(segments[i][-1, :], segments[i + 1][0, :], box)
-            if xi is not None:
-                segments[i] = np.insert(segments[i], len(segments[i]), xi, axis=0)
+            origin = segments[i][-1, :]
+            distance = segments[i + 1][0, :] - origin
+            ti = intersect_edge_box(origin[cols], distance[cols], box)
+            if ti is not None:
+                segments[i] = np.insert(segments[i], len(segments[i]), origin + ti * distance, axis=0)
     return segments[trues]
 
-def intersect_edge_box(origin, end, box):
+def intersect_edge_box(origin, distance, box):
     """
     Returns intersection of edge with box.
 
     Arguments:
         origin (array): Coordinates of 2 or 3D point (ndim, )
-        end (array): Coordinates of 2 or 3D point (ndim, )
+        distance (array): Distance to end point (ndim, )
         box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
-    direction = end - origin
-    t = np.nanmin(intersect_rays_box(origin, direction[None, :], box, t=True))
+    t = np.nanmin(intersect_rays_box(origin, distance[None, :], box, t=True))
     if t > 0 and t < 1:
-        return origin + t * direction
+        return t
     else:
         return None
 

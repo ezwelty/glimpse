@@ -331,7 +331,7 @@
 			"id": "CG04",
 			"name": "Columbia 2004",
 			"fixed": true,
-			"viewdir": [-85.0, -5, -3.0],
+			"viewdir": [-86, -4, -3],
 			"notes": "Survey GPS. 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]"
 		},
 		"geometry": {

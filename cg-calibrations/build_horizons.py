@@ -13,19 +13,21 @@ import matplotlib
 # CG04: IfSar (ArcticDEM as one artifact)
 # CG05: IfSar (ArcticDEM not tried)
 # CG06: IfSar (ArcticDEM not tried)
-# AK01: ArcticDEM (very similar to IfSar but more detail)
+# AK01: IfSar (ArcticDEM as one artifact)
+# AK01b: IfSar (ArcticDEM better detail on far left, but couple large errors)
 # AK03(b): IfSar (ArcticDEM not tried)
+# AK04: IfSar (ArcticDEM not tried)
 # AK09(b): IfSar (ArcticDEM not tried)
 # AK10(b): IfSAR (ArcticDEM has nasty artifacts)
 # AK12: IfSar (ArcticDEM not tried)
 # AKJNC: IfSar (very similar to ArcticDEM, but without a couple small artifacts)
-# AK01: IfSar (ActicDEM very similar, perhaps more detailed, but some artifacts)
-# STATION = 'AKST03A': IfSar (ArcticDEM not tried)
+# AKST03A: IfSar (ArcticDEM not tried)
+# AKST03B: IfSar (ArcticDEM not tried)
 
-STATION = 'AK04'
+STATION = 'AK01'
 
-# DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
-# DEM_DZ = 0
+DEM_PATH = "/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif"
+DEM_DZ = 0
 DEM_PATH = "/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif"
 DEM_DZ = 17
 DEM_ZLIM = [1, np.inf]
@@ -53,16 +55,17 @@ geo = geojson.FeatureCollection(
     [geojson.Feature(geometry=geojson.LineString(xyz.tolist())) for xyz in hxyz])
 geo = helper.ordered_geojson(geo)
 helper.write_geojson(geo,
-    "geojson/horizons/" + STATION + ".geojson",
+    "geojson/horizons/" + STATION + "-arcticdem.geojson",
     crs=32606, decimals=[5, 5, 0])
 
 # --- Check result ---- #
 
 eop = cgcalib.station_eop(STATION)
-img = image.Image(glob.glob("svg/" + STATION + "_*.JPG")[0], cam={'xyz': eop['xyz'], 'viewdir': eop['viewdir']})
+img_path = glob.glob("svg/" + STATION + "_*.JPG")[0]
+img = image.Image(img_path, cam=cgcalib.load_calibration(img_path))
 geo = helper.read_geojson("geojson/horizons/" + STATION + ".geojson", crs=32606)
 lxyz = [coords for coords in helper.geojson_itercoords(geo)]
-luv = [img.cam.project(xyz) for xyz in lxyz]
+luv = [img.cam.project(xyz, correction=True) for xyz in lxyz]
 img.plot()
 for uv in luv:
     matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], color="red")

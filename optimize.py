@@ -80,7 +80,7 @@ class Points(object):
         """
         return (self.cam.xyz == self.original_cam_xyz).all()
 
-    def plot(self, index=None, scale=1, selected="red", unselected=None, **quiver_args):
+    def plot(self, index=None, scale=1, width=5, selected='red', unselected=None):
         """
         Plot reprojection errors as quivers.
 
@@ -89,9 +89,9 @@ class Points(object):
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
-            selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points, or `None` to hide
-            **quiver_args: Further arguments to matplotlib.pyplot.quiver
+            width (float): Width of quivers
+            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
         """
         if index is None:
             index = slice(None)
@@ -101,14 +101,19 @@ class Points(object):
         uv = self.observed()
         puv = self.predicted()
         duv = scale * (puv - uv)
+        defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
         if selected is not None:
+            if not isinstance(selected, dict):
+                selected=dict(color=selected)
+            selected = helper.merge_dicts(defaults, dict())
             matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
-                color=selected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
         if unselected is not None:
+            if not isinstance(unselected, dict):
+                unselected=dict(color=unselected)
+            unselected = helper.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
-                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1],
-                color=unselected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
 
 class Lines(object):
     """
@@ -218,8 +223,8 @@ class Lines(object):
         """
         return (self.cam.xyz == self.original_cam_xyz).all()
 
-    def plot(self, index=None, scale=1, selected="red", unselected=None,
-        observed="green", predicted="yellow", **quiver_args):
+    def plot(self, index=None, scale=1, width=5, selected='red', unselected=None,
+        observed='green', predicted='yellow'):
         """
         Plot the reprojection errors as quivers.
 
@@ -228,23 +233,29 @@ class Lines(object):
         Arguments:
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
-            selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points, or `None` to hide
-            observed (color): Matplotlib color for image lines, or `None` to hide
-            predicted (color): Matplotlib color for world lines, or `None` to hide
-            **quiver_args: Further arguments to matplotlib.pyplot.quiver
+            width (float): Width of quivers
+            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            observed: For image lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
+            predicted: For world lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
         """
         # Plot image lines
-        if observed:
+        if observed is not None:
+            if not isinstance(observed, dict):
+                observed=dict(color=observed)
+            observed = helper.merge_dicts(dict(color='green'), observed)
             for uv in self.uvs:
-                matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], color=observed)
+                matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
         # Plot world lines
-        if predicted:
+        if predicted is not None:
+            if not isinstance(predicted, dict):
+                predicted=dict(color=predicted)
+            predicted = helper.merge_dicts(dict(color='yellow'), predicted)
             puvs = self.project()
             for puv in puvs:
-                matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], color=predicted)
+                matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
         # Plot errors
-        if selected or unselected:
+        if selected is not None or unselected is not None:
             if index is None:
                 index = slice(None)
                 other_index = slice(0)
@@ -256,14 +267,19 @@ class Lines(object):
             puv = np.row_stack(puvs)
             min_index = find_nearest_neighbors(uv, puv)
             duv = scale * (puv[min_index, :] - uv)
+            defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
             if selected is not None:
+                if not isinstance(selected, dict):
+                    selected=dict(color=selected)
+                selected = helper.merge_dicts(defaults, selected)
                 matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
-                    color=selected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
             if unselected is not None:
+                if not isinstance(unselected, dict):
+                    unselected=dict(color=unselected)
+                unselected = helper.merge_dicts(defaults, unselected)
                 matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
-                    color=unselected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **unselected)
 
 class Matches(object):
     """
@@ -346,7 +362,7 @@ class Matches(object):
         else:
             return self.cams.index(cam)
 
-    def plot(self, index=None, cam=0, scale=1, selected="red", unselected=None, **quiver_args):
+    def plot(self, index=None, cam=0, scale=1, width=5, selected='red', unselected=None):
         """
         Plot the reprojection errors as quivers.
 
@@ -356,9 +372,9 @@ class Matches(object):
             index (array_like or slice): Indices of points to select, or all if `None`
             cam (Camera or int): Camera to plot
             scale (float): Scale of quivers
-            selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points, or `None` to hide
-            **quiver_args: Further arguments to matplotlib.pyplot.quiver
+            width (float): Width of quivers
+            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
         """
         if index is None:
             index = slice(None)
@@ -368,14 +384,19 @@ class Matches(object):
         uv = self.observed(cam=cam)
         puv = self.predicted(cam=cam)
         duv = scale * (puv - uv)
+        defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
         if selected is not None:
+            if not isinstance(selected, dict):
+                selected=dict(color=selected)
+            selected = helper.merge_dicts(defaults, selected)
             matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1],
-                color=selected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
         if unselected is not None:
+            if not isinstance(unselected, dict):
+                unselected=dict(color=unselected)
+            unselected = helper.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
-                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1],
-                color=unselected, scale=1, scale_units='xy', angles='xy', **quiver_args)
+                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
 
 # ---- Models ----
 
@@ -697,8 +718,8 @@ class Cameras(object):
         elif result.success:
             return np.array(result.params.valuesdict().values())
 
-    def plot(self, params=None, cam=0, index=None, scale=1, selected="red", unselected=None,
-        lines_observed="green", lines_predicted="yellow", **quiver_args):
+    def plot(self, params=None, cam=0, index=None, scale=1, width=5, selected='red', unselected=None,
+        lines_observed='green', lines_predicted='yellow'):
         """
         Plot reprojection errors.
 
@@ -711,11 +732,11 @@ class Cameras(object):
             index (array or slice): Indices of points to plot. If `None` (default), all points are plotted.
                 Other values require `self.test_ransac()` to be True.
             scale (float): Scale of quivers
-            selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points, or `None` to hide
-            lines_observed (color): Matplotlib color for image lines, or `None` to hide
-            lines_predicted (color): Matplotlib color for world lines, or `None` to hide
-            **quiver_args: Further arguments to matplotlib.pyplot.quiver
+            width (float): Width of quivers
+            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            lines_observed: For image lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
+            lines_predicted: For world lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
         """
         if params is not None:
             vectors = [camera.vector.copy() for camera in self.cams]
@@ -727,12 +748,12 @@ class Cameras(object):
             raise ValueError("Plotting with `index` not yet supported with multiple controls")
         for control in cam_controls:
             if isinstance(control, Lines):
-                control.plot(index=index, scale=scale, selected=selected, unselected=unselected,
-                    observed=lines_observed, predicted=lines_predicted, **quiver_args)
+                control.plot(index=index, scale=scale, width=width, selected=selected, unselected=unselected,
+                    observed=lines_observed, predicted=lines_predicted)
             elif isinstance(control, Points):
-                control.plot(index=index, scale=scale, selected=selected, unselected=unselected, **quiver_args)
+                control.plot(index=index, scale=scale, width=width, selected=selected, unselected=unselected)
             elif isinstance(control, Matches):
-                control.plot(cam=cam, index=index, scale=scale, selected=selected, unselected=unselected, **quiver_args)
+                control.plot(cam=cam, index=index, scale=scale, width=width, selected=selected, unselected=unselected)
         if params is not None:
             self.reset_cameras(vectors)
 

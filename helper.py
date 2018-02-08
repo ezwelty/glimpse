@@ -473,9 +473,9 @@ def intersect_rays_box(origin, directions, box, t=False):
     # Initialize intersections on x-axis
     idx = np.ravel_multi_index((all_rays, sign[:, 0] * ndims), bounds.shape)
     tmin = (fbounds[idx] - origin[0]) * invdir[:, 0]
-    # Apply y-axis intersections
     idx = np.ravel_multi_index((all_rays, (1 - sign[:, 0]) * ndims), bounds.shape)
     tmax = (fbounds[idx] - origin[0]) * invdir[:, 0]
+    # Apply y-axis intersections
     idx = np.ravel_multi_index((all_rays, 1 + sign[:, 1] * ndims), bounds.shape)
     tymin = (fbounds[idx] - origin[1]) * invdir[:, 1]
     idx = np.ravel_multi_index((all_rays, 1 + (1 - sign[:, 1]) * ndims), bounds.shape)
@@ -489,9 +489,9 @@ def intersect_rays_box(origin, directions, box, t=False):
     tmax[ymax_intersects] = tymax[ymax_intersects]
     if ndims > 2:
         # Apply z-axis intersections
-        idx = np.ravel_multi_index((all_rays, sign[:, 2] * ndims), bounds.shape)
+        idx = np.ravel_multi_index((all_rays, 2 + sign[:, 2] * ndims), bounds.shape)
         tzmin = (fbounds[idx] - origin[2]) * invdir[:, 2]
-        idx = np.ravel_multi_index((all_rays, (1 - sign[:, 2]) * ndims), bounds.shape)
+        idx = np.ravel_multi_index((all_rays, 2 + (1 - sign[:, 2]) * ndims), bounds.shape)
         tzmax = (fbounds[idx] - origin[2]) * invdir[:, 2]
         misses = (tmin > tzmax) | (tzmin > tmax)
         tmin[misses] = np.nan

@@ -5,7 +5,8 @@ import lmfit
 import matplotlib
 import helper
 import sys
-sys.path.append('./cg-calibrations')
+import os
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cg-calibrations'))
 import cgcalib
 import scipy.ndimage.filters as filts
 import sklearn.decomposition as sde

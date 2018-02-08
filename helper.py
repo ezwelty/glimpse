@@ -8,6 +8,10 @@ import dem
 import pandas
 import scipy
 import gzip
+import gdal
+import os
+import datetime
+import time
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -60,6 +64,52 @@ def hist_match(source, template):
     interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
 
     return interp_t_values[bin_idx].reshape(oldshape)
+
+def get_cropped_dem(path,xmin,xmax,ymin,ymax):
+    dem = gdal.Open(path)
+    Z = dem.ReadAsArray()
+    Z[Z<-10000] = np.nan
+    geotransform = dem.GetGeoTransform()
+
+    # Define map coordinates
+    originX = geotransform[0]
+    originY = geotransform[3]
+    pixelX = geotransform[1]
+    pixelY = geotransform[5]
+
+    x = originX + pixelX*np.array(range(Z.shape[1]))
+    y = originY + pixelY*np.array(range(Z.shape[0]))
+
+    # Downsample DEM with rate n_skip
+    n_skip = 1
+
+    x = x[::n_skip]
+    y = y[::n_skip]
+    Z = Z[::n_skip,::n_skip]
+    x_index = (x>xmin)*(x<xmax)
+    y_index = (y>ymin)*(y<ymax)
+    x = x[x_index]
+    y = y[y_index]
+    Z = Z[y_index,:][:,x_index]
+
+    return x,y,Z
+
+def nearest_neighbours(x, lst):
+    if x <= lst[0]:
+        return 0
+    elif x >= lst[-1]:
+        return len(lst)-1
+    else:
+        for i,y in enumerate(lst[:-1]):
+            if y <= x <= lst[i+1]:
+                return i,i+1
+
+def get_image_names_and_times(img_dir,extension='.json'):
+    img_names = np.sort([s.rstrip(extension) for s in os.listdir(img_dir)])
+    img_names.sort()
+    datetimes = [datetime.datetime(int(n[6:10]),int(n[10:12]),int(n[12:14]),int(n[15:17]),int(n[17:19]),int(n[19:21])) for n in img_names]
+    times = np.array([time.mktime(dd.timetuple()) for dd in datetimes])#/(60**2*24)
+    return img_names,times
 
 def merge_dicts(*args):
     """
@@ -673,3 +723,22 @@ def intersect_boxes(boxes):
         raise ValueError("Boxes do not intersect")
     else:
         return np.hstack((boxmin, boxmax))
+
+def compute_mask_array_from_svg(path_to_svg,array_shape,skip=[]):
+    from svgpathtools import svg2paths
+    from matplotlib import path
+    paths,attributes = svg2paths(path_to_svg)
+    q = [np.array([(l.point(0).real,l.point(0).imag) for l in p] + [(p[0].point(0).real,p[0].point(0).imag)]) for p in paths]
+    paths = [path.Path(qq) for qq in q]
+
+    mask = np.zeros(array_shape).astype(bool)
+    cols,rows = np.meshgrid(range(mask.shape[1]),range(mask.shape[0]))
+    cols_f = cols.ravel()
+    rows_f = rows.ravel()
+    for i,p in enumerate(paths):
+        if i not in skip:
+    
+            inside = p.contains_points(zip(cols.ravel(),rows.ravel()))
+            mask+=inside.reshape(mask.shape)
+    return mask.astype('uint8')
+

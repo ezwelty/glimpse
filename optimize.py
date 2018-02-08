@@ -7,6 +7,10 @@ import helper
 import sys
 sys.path.append('./cg-calibrations')
 import cgcalib
+import scipy.ndimage.filters as filts
+import sklearn.decomposition as sde
+import scipy.interpolate as si
+import scipy.optimize as so
 
 # ---- Controls ----
 
@@ -899,7 +903,7 @@ def ransac_sample(sample_size, data_size):
 
 # ---- Build matches ----
 
-def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
+def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, d_tol=10,**params):
     """
     Return `Matches` constructed from SIFT matches between sequential images.
 
@@ -923,7 +927,13 @@ def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
         masks = (masks, ) * len(images)
     sift = cv2.SIFT(nfeatures=nfeatures, **params)
     # Extract keypoints (keypoints, descriptors)
-    keypoints = [(sift.detectAndCompute(img.read(), mask=mask)) for img, mask in zip(images, masks)]
+    keypoints = []
+    for img,mask in zip(images,masks):
+        kp,des = sift.detectAndCompute(img.read(), mask=mask)
+        eps = 1e-7
+        des /= des.sum(axis=1,keepdims=True) + eps
+        des = np.sqrt(des)
+        keypoints.append((kp,des))
     # Match keypoints
     # TODO: Find algorithm definitions for FlannBasedMatcher index parameters
     index_params = dict(algorithm=1, trees=5)
@@ -935,10 +945,12 @@ def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, **params):
         is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
         A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
         B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
-        controls.append(Matches((images[i].cam, images[i + 1].cam), (A, B)))
+        d = np.sqrt(np.sum((A-B)**2,axis=1))
+        valid_dist = d<d_tol  
+        controls.append(Matches((images[i].cam, images[i + 1].cam), (A[valid_dist], B[valid_dist])))
     return controls
 
-def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
+def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3,d_tol=10, **params):
     """
     Return `Matches` constructed from SURF matches between sequential images.
 
@@ -973,8 +985,66 @@ def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, **params):
         is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
         A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
         B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
-        controls.append(Matches((images[i].cam, images[i + 1].cam), (A, B)))
+        d = np.sqrt(np.sum((A-B)**2,axis=1))
+        valid_dist = d<d_tol        
+        controls.append(Matches((images[i].cam, images[i + 1].cam), (A[valid_dist], B[valid_dist])))
     return controls
+
+def corr_matches(images, masks=None, hw=25, sd=35, do_hist_match=True, do_highpass=True, n_points=100):
+    if masks is None or isinstance(masks, np.ndarray):
+        masks = (masks, ) * len(images)
+    
+    image_0 = images[0].read()
+    image_1 = images[1].read()
+    gray = cv2.cvtColor(image_0,cv2.COLOR_RGB2GRAY)
+    corners = cv2.goodFeaturesToTrack(gray, n_points, 0.01, 10,mask=masks[0])
+    corners = np.int0(corners).squeeze()
+    corners = corners[corners[:,0]>sd]
+    corners = corners[corners[:,0]<image_0.shape[1]-sd]
+    corners = corners[corners[:,1]>sd]
+    corners = corners[corners[:,1]<image_0.shape[0]-sd]
+
+    def get_chip(image,row,col,hw,ref_template,median_filter_size=(5,5)):
+        chip = image[row-hw:1+row+hw,col-hw:1+col+hw].copy()
+        if do_hist_match:
+            chip[:,:,0] = helper.hist_match(chip[:,:,0],ref_template[:,:,0])
+            chip[:,:,1] = helper.hist_match(chip[:,:,1],ref_template[:,:,1])
+            chip[:,:,2] = helper.hist_match(chip[:,:,2],ref_template[:,:,2])
+        pca = sde.PCA(n_components=1,svd_solver='arpack',whiten=True)
+        m,n,q = chip.shape
+        Q = chip.reshape((m*n,q))
+        pca.fit(Q)
+        pca.components_ = np.sign(pca.components_[0])*pca.components_
+        Qp = pca.transform(Q)
+        chip = Qp.reshape((m,n))
+        if do_highpass:
+            chip_lowpass = filts.median_filter(chip,(median_filter_size[0],median_filter_size[1]))
+            chip -= chip_lowpass
+        return chip
+
+    A = []
+    B = []
+
+    for col,row in corners:
+        ref_template = image_0[row-sd:1+row+sd,col-sd:1+col+sd,:]
+        ref_chip = get_chip(image_0,row,col,hw,ref_template)
+        test_chip = get_chip(image_1,row,col,sd,ref_template)
+        rhos = cv2.matchTemplate(test_chip.astype('float32'),ref_chip.astype('float32'),method=cv2.TM_SQDIFF)
+        rhos/=(ref_chip.shape[0]*ref_chip.shape[1])
+        row_n0,col_n0 = np.unravel_index(rhos.argmin(),rhos.shape)
+
+        local_interp = si.RectBivariateSpline(range(rhos.shape[0]),range(rhos.shape[1]),rhos,kx=3,ky=3)
+        
+        xopt = so.fmin_cg(lambda x:local_interp(x[0],x[1])[0][0],(row_n0,col_n0),fprime=lambda x:np.array([local_interp(x[0],x[1],dx=1)[0][0],local_interp(x[0],x[1],dy=1)[0][0]]),disp=0)
+        rho_opt = max(local_interp(xopt[0],xopt[1])[0][0],1e-3)
+        col_m = col - (sd-hw) + xopt[0]
+        row_m = row - (sd-hw) + xopt[1]
+        B.append([col,row])
+        A.append([col_m,row_m])
+
+    controls = [Matches((images[0].cam, images[1].cam), (np.array(A), np.array(B)))]
+    return controls
+
 
 # ---- Helpers ----
 

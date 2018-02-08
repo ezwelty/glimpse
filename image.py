@@ -9,6 +9,7 @@ import os.path
 import matplotlib.pyplot
 import helper
 import copy
+import sharedmem
 
 class Camera(object):
     """
@@ -1070,7 +1071,9 @@ class Image(object):
             if has_cam_size and not np.array_equal(self.cam.imgsz, self.exif.size):
                 # Resize to match camera model
                 im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
-            self.I = np.array(im)
+            I_hat = np.array(im)
+            self.I = sharedmem.copy(I_hat)
+            del I_hat
         if gray and self.I.ndim > 2:
             return (0.2126 * self.I[:, :, 0] + 0.7152 * self.I[:, :, 1] + 0.0722 * self.I[:, :, 2]).astype(np.uint8)
         else:

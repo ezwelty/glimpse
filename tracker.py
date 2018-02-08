@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Tracker(object):
     """
@@ -17,7 +18,7 @@ class Tracker(object):
         means (1x5 array): mean of particle values
         covs (5x5 array): covariance of particle values
     """
-    def __init__(self,N,x0,y0,dem,times,observers=[],dem_crop_distance=100):
+    def __init__(self,N,x0,y0,dem,times,observers=[]):
         """
         Create a tracker instance
 
@@ -34,14 +35,9 @@ class Tracker(object):
         self.N = N
         self.x0 = x0
         self.y0 = y0
- 
-        # If dem_crop_distance is defined, return a more parsimonious DEM
-        if dem_crop_distance is not None:
-            x_bounds = np.array([x0-dem_crop_dist,x0+dem_crop_dist])
-            y_bounds = np.array([y0-dem_crop_dist,y0+dem_crop_dist])
-            self.dem = dem.crop(xlim=x_bounds,ylim=y_bounds)
-        else:
-            self.dem = dem
+
+        self.dem=dem
+
         self.times = times
         self.dt = np.hstack((0,np.diff(self.times)))
         self.observers = observers
@@ -69,11 +65,16 @@ class Tracker(object):
         self.particles[:,4] = self.dem.sample(self.particles[:,[0,1]])
         self.particles_are_initialized=True
 
+    def initialize_observers(self):
+        mean,cov = self._estimate()
+        for o in self.observers:
+            o.link_tracker(self)
+
     def _estimate(self):
         """
         Return the mean and covariance matrices of the current particle state
         """
-        mean = np.average(self.particles,weights=self.weights,axis=0)
+        mean = np.average(self.particles,weights=self.weights,axis=0).reshape((1,5))
         cov = np.cov(self.particles.T,aweights=self.weights)
         return mean,cov
 
@@ -87,11 +88,11 @@ class Tracker(object):
         """
         ax = wx*np.random.randn(self.N)
         ay = wy*np.random.randn(self.N)
-        particles[:,0] += dt*particles[:,2] + 0.5*ax*dt**2
-        particles[:,1] += dt*particles[:,3] + 0.5*ay*dt**2
-        particles[:,2] += dt*ax*np.random.randn(N)
-        particles[:,3] += dt*ay*np.random.randn(N)
-        particles[:,4] = self.dem.sample(particles[:,[0,1]])
+        self.particles[:,0] += dt*self.particles[:,2] + 0.5*ax*dt**2
+        self.particles[:,1] += dt*self.particles[:,3] + 0.5*ay*dt**2
+        self.particles[:,2] += dt*ax
+        self.particles[:,3] += dt*ay
+        self.particles[:,4] = self.dem.sample(self.particles[:,[0,1]])
 
     def _update(self,log_likelihoods):
         """
@@ -142,11 +143,9 @@ class Tracker(object):
 
         mean,cov = self._estimate()
         self.means = [mean]
-        self.cov = [cov]
+        self.covs = [cov]
         if do_plot:
-            print "Plotting not yet implemented"
-            return
-            #self.initialize_plot()
+            self.initialize_plot()
  
         for t,dt in zip(self.times[1:],self.dt[1:]):
             self._predict(dt,wx,wy)
@@ -155,9 +154,59 @@ class Tracker(object):
             self._update(log_likelihoods)
             self._systematic_resample()
             mean,cov = self._estimate()
-            self.means.append(new_mean)
-            self.covs.append(new_cov)
-            #if do_plot:
-            #    self.update_plot()
+            self.means.append(mean)
+            self.covs.append(cov)
+            if do_plot:
+                self.update_plot(t)
 
-              
+    def initialize_plot(self):
+        # Perform plotting animation.  Don't use this with multiprocessing!
+
+        plt.ion()
+        number_of_plots = 1 + len(self.observers)
+
+        self.fig,self.ax = plt.subplots(nrows=1,ncols=number_of_plots,figsize=(10*number_of_plots,10))
+        self.fig.tight_layout()
+        #self.ax[0].contourf(self.dem.X,self.dem.Y,self.dem.hillshade(),31,cmap=plt.cm.gray)
+
+        self.meplot = self.ax[0].scatter(self.means[0][0,0],self.means[0][0,1],c='red',s=50,label='Mean Position')
+        vx = self.particles[:,2]
+        vy = self.particles[:,3]
+        V = np.hypot(vx,vy)
+        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],vx/V,vy/V,V,cmap=plt.cm.gnuplot2,clim=[0,15],alpha=0.2,linewidths=0)
+        self.ax[0].legend()
+
+        self.cb = plt.colorbar(self.pa_plot,ax=self.ax[0],orientation='horizontal',aspect=30,pad=0.07)
+        self.cb.set_label('Speed (m d$^{-1}$')
+        self.cb.solids.set_edgecolor("face")
+        self.cb.solids.set_alpha(1)
+
+        self.ax[0].set_xlabel('Easting')
+        self.ax[0].set_ylabel('Northing')
+
+        self.ax[0].axis('equal')
+        self.ax[0].set_xlim(self.means[0][0,0]-50,self.means[0][0,0]+50)
+        self.ax[0].set_ylim(self.means[0][0,1]-50,self.means[0][0,1]+50)
+
+        for a,o in zip(self.ax[1:],self.observers):
+            o.initialize_plot(a)
+
+        plt.pause(2.0)
+
+    def update_plot(self,t):
+        self.meplot.remove()
+        self.pa_plot.remove()
+
+        self.meplot = self.ax[0].scatter([m.squeeze()[0] for m in self.means],[m.squeeze()[1] for m in self.means],s=50,c='red')
+        V = np.hypot(self.particles[:,2],self.particles[:,3])
+        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],self.particles[:,2]/V,self.particles[:,3]/V,V,scale=50,cmap=plt.cm.gnuplot2,clim=[0,15],alpha=0.2)
+        xmed = np.median(self.particles[:,0])
+        ymed = np.median(self.particles[:,1])
+        self.ax[0].set_xlim(xmed-50,xmed+50)
+        self.ax[0].set_ylim(ymed-50,ymed+50)
+    
+        for o in self.observers:
+            o.update_plot(t)
+
+        #self.fig.savefig('./particle_tracker_imgs/images_{0:03d}.jpg'.format(self.counter),bbox_inches='tight',dpi=300)
+        plt.pause(0.00001)

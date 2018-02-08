@@ -1,6 +1,11 @@
 import numpy as np
 import sklearn.decomposition as sde
+import scipy.ndimage.filters as filts
+import scipy.interpolate as si
 import cv2
+import helper
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 class Observer(object):
     """
@@ -20,7 +25,7 @@ class Observer(object):
         
     """
 
-    def __init__(self,times,images,sigma_pixel=0.3,reference_halfwidth=15,search_halfwidth=20): 
+    def __init__(self,images,times,sigma_pixel=0.3,reference_halfwidth=15,search_halfwidth=20): 
         """
         Construct the observer
 
@@ -42,24 +47,23 @@ class Observer(object):
         self.sd_row = search_halfwidth
         self.sd_col = search_halfwidth
 
-    def initialize_point(self,xyz):
+    def link_tracker(self,tracker):
         """
         Sets some initial variables associated with the initial point
      
         Arguments:
             xyz (array): initial spatial coordinates to track
         """
-        row_0,col_0 = self.images[0].cam.project(xyz)
+        pmean,pcov = tracker._estimate()
+  
+        col_0,row_0 =  self.images[0].cam.project(pmean[:,[0,1,4]]).squeeze()
+        self.rc = self.images[0].cam.project(tracker.particles[:,[0,1,4]])[:,::-1]
+        self.log_like = np.zeros((tracker.N))
         
-        row_nearest = int(np.rint(row_0))
-        col_nearest = int(np.rint(col_0))
-        self.row_diff_0 = row_nearest-row_0
-        self.col_diff_0 = col_nearest-col_0
+        self.ref_hist_template = self.get_subimage(row_0,col_0,self.sd_row,self.sd_col,0,get_ref_template=True)
+        self.ref_subimage = self.get_subimage(row_0,col_0,self.hw_row,self.hw_col,0)
 
-        self.ref_hist_template = self.get_subimage(row_nearest,col_nearest,self.sd_row,self.sd_col,0,pca=False,median_filter_size=None)
-        self.ref_subimage = self.get_subimage(row_nearest,col_nearest,self.hw_row,self.hw_col,0)
-
-    def get_subimage(self,row,col,hw_row,hw_col,image_index,pca=True,median_filter_size=(5,5)):
+    def get_subimage(self,row,col,hw_row,hw_col,image_index,do_histogram_matching=True,do_pca=True,do_median_filtering=True,median_filter_size=(5,5),get_ref_template=False):
         """
         Extract a subimage given a row and column, and apply some image processing
         Arguments:
@@ -71,23 +75,43 @@ class Observer(object):
         Returns: 
             chip: extracted subimage
         """
-        chip = self.images[image_index].read()[row-hw_row:1+row+hw_row,col-hw_col:1+col+hw_col].copy()
-        if self.ref_hist_template is not None:
-            chip[:,:,0] = hist_match(chip[:,:,0],self.ref_template[:,:,0])
-            chip[:,:,1] = hist_match(chip[:,:,1],self.ref_template[:,:,1])
-            chip[:,:,2] = hist_match(chip[:,:,2],self.ref_template[:,:,2])
-        if pca:
+
+        row_nearest = int(round(row))
+        col_nearest = int(round(col))
+        
+        row_hw = np.linspace(row-hw_row,row+hw_row,2*hw_row+1,endpoint=True)
+        col_hw = np.linspace(col-hw_col,col+hw_col,2*hw_col+1,endpoint=True)
+
+        chip = self.images[image_index].read()[row_nearest-hw_row-1:2+row_nearest+hw_row,col_nearest-hw_col-1:2+col_nearest+hw_col,:].copy()
+
+        if get_ref_template:
+            return chip
+
+        rows = range(row_nearest-hw_row-1,row_nearest+hw_row+2)
+        cols = range(col_nearest-hw_col-1,col_nearest+hw_col+2)
+        if do_histogram_matching:
+            # If a reference template has been defined, perform histogram matching.  This is 
+            # very helpful for ameliorating the effects of illumination changes.
+            chip[:,:,0] = helper.hist_match(chip[:,:,0],self.ref_hist_template[:,:,0])
+            chip[:,:,1] = helper.hist_match(chip[:,:,1],self.ref_hist_template[:,:,1])
+            chip[:,:,2] = helper.hist_match(chip[:,:,2],self.ref_hist_template[:,:,2])
+        if do_pca:
+            # If a pca has been defined, compute an intensity image using it.
             m,n,q = chip.shape
             Q = chip.reshape((m*n,q))
             self.pca.fit(Q)
             self.pca.components_ = np.sign(self.pca.components_[0])*self.pca.components_
             Qp = self.pca.transform(Q)
             chip = Qp.reshape((m,n))
-        if median_filter_size is not None:
+        Ri = si.RectBivariateSpline(rows,cols,chip,kx=3,ky=3)
+        chip = Ri(row_hw,col_hw,grid=True)
+
+        if do_median_filtering:
             # Do median highpass filtering
             chip_lowpass = filts.median_filter(chip,(median_filter_size[0],median_filter_size[1]))
             chip -= chip_lowpass
         return chip
+
     
     def compute_likelihood(self,pmean,particles,t):
         """
@@ -109,34 +133,23 @@ class Observer(object):
 
         # Extract a subimage around predicted coordinates
         current_image = self.images[image_index]
-        rcmean = current_image.cam.project(pmean[[0,1,4]]) 
-        row_1 = rcmean[0][0]
-        col_1 = rcmean[0][1] 
-        row_nearest = int(np.rint(row_1))
-        col_nearest = int(np.rint(col_1))
-        row_diff_1 = row_nearest-row_1
-        col_diff_1 = col_nearest-col_1
-        test_subimage = self.get_subimage(row_nearest,col_nearest,self.sd_row,self.sd_col,image_index)                  
-
-        rc_cam0 = self.images[0].cam.project(pmean[[0,1,4]])
-        self.rows_predicted.append(rc_cam0[0][0])
-        self.cols_predicted.append(rc_cam0[0][1])
-        
+        col_1,row_1 = current_image.cam.project(pmean[:,[0,1,4]]).squeeze()
+        self.test_subimage = self.get_subimage(row_1,col_1,self.sd_row,self.sd_col,image_index)                  
         # Try generating a likelihood interpolant and evaluate for each particle
 
-        try:
-            like_interpolant = self.get_likelihood_interpolant(self.ref_subimage,test_subimage,row_nearest,col_nearest,row_diff_1,col_diff_1,self.row_diff_0,self.col_diff_0)
+        #try:
+        like_interpolant = self.get_likelihood_interpolant(self.ref_subimage,self.test_subimage,row_1,col_1)
 
-            rc = current_image.project(particles[:,[0,1,4]])
+        self.rc = current_image.cam.project(particles[:,[0,1,4]])[:,::-1]
 
-            log_like = like_interpolant(rc[:,0],rc[:,1],grid=False)/self.sigma_pixel**2
+        self.log_like = like_interpolant(self.rc[:,0],self.rc[:,1],grid=False)/self.sigma_pixel**2
         # If too close to the image boundary, return a constant log_likelihood
-        except IndexError:
-            log_like = 1.
+        #except IndexError:
+        #    log_like = 1.
 
-        return log_like
+        return self.log_like
         
-    def get_likelihood_interpolant(self,ref_subimage,test_subimage,row_nearest,col_nearest,row_diff_1,col_diff_1,row_diff_0,col_diff_0):
+    def get_likelihood_interpolant(self,ref_subimage,test_subimage,row,col):
         """
         Produce an object for evaluating the log likelihood of particles
  
@@ -150,22 +163,61 @@ class Observer(object):
         """ 
         # Compute normalized correlation coefficients
         rhos = cv2.matchTemplate(test_subimage.astype('float32'),ref_subimage.astype('float32'),method=cv2.TM_SQDIFF)
-        rhos/=(ref_chip.shape[0]*ref_chip.shape[1])
+        rhos/=(ref_subimage.shape[0]*ref_subimage.shape[1])
 
-        rcoords = row_nearest - (self.sd_row-self.hw_row) + np.array(range(rhos.shape[0])) + row_diff_1 - row_diff_0
-        ccoords = col_nearest - (self.sd_col-self.hw_col) + np.array(range(rhos.shape[1])) + col_diff_1 - col_diff_0
+        rcoords = row - (self.sd_row-self.hw_row) + np.array(range(rhos.shape[0]))
+        ccoords = col - (self.sd_col-self.hw_col) + np.array(range(rhos.shape[1]))
 
         # Get subpixel accuracy by fitting the correlation surface with a cubic spline and maximizing
         local_interp = si.RectBivariateSpline(rcoords,ccoords,rhos,kx=3,ky=3)
 
         return local_interp
 
-    def solve_orientations(self):
-        """
-        Solves for the relative orientation between images
-'       """
-        # NEED TO WRITE ME!
-        pass
+    # Real time plotting utilities
+    def initialize_plot(self,ax):
+        self.ax = ax
+        self.im_plot = ax.imshow(self.images[0].I,interpolation='none')
+        self.le0,self.re0,self.be0,self.te0 = self.im_plot.get_extent()
+
+        #self.spprd = ax.scatter(self.cols_predicted,self.rows_predicted,s=50,c='green',label='Prior Prediction')
+        self.sppnts = self.ax.scatter(self.rc[:,1],self.rc[:,0],s=25,c=-self.log_like,cmap=plt.cm.gnuplot2,linewidths=0,alpha=0.2,vmin=-3.,vmax=-1,label='Particle Position/Log-Likelihood')
+        self.ax.legend()
+
+        self.cb = plt.colorbar(self.sppnts,ax=self.ax,orientation='horizontal',aspect=30,pad=0.07)
+        self.cb.set_label('Log-likelihood')
+        self.cb.solids.set_edgecolor("face")
+        self.cb.solids.set_alpha(1)
+
+        self.row_0 = np.mean(self.rc[:,0])
+        self.col_0 = np.mean(self.rc[:,1])
+
+        self.re = ax.add_patch(patches.Rectangle((self.col_0-self.hw_col,self.row_0-self.hw_row),self.hw_col*2+1,self.hw_row*2+1,fill=False))
+        ax.set_xlim(self.col_0-50,self.col_0+50)
+        ax.set_ylim(self.row_0+50,self.row_0-50)
+
+    def update_plot(self,t):
+        tdist = np.abs(t-self.times)
+        closest_time = np.argmin(tdist)
+        time_mismatch = np.min(tdist)
+        if time_mismatch<0.01:
+
+            self.sppnts.remove()
+
+            self.sppnts = self.ax.scatter(self.rc[:,1],self.rc[:,0],s=25,c=-self.log_like,cmap=plt.cm.gnuplot2,linewidths=0,alpha=0.2,vmin=-3.,vmax=-1)
+
+            self.row_1 = np.mean(self.rc[:,0])
+            self.col_1 = np.mean(self.rc[:,1])
+        
+        
+            self.re.set_bounds(self.col_1-self.hw_col,self.row_1-self.hw_row,2*self.hw_col+1,2*self.hw_row+1)
+            col_offset = self.col_1-self.col_0
+            row_offset = self.row_1-self.row_0
+            self.im_plot.set_data(self.images[closest_time].I)
+            self.ax.set_xlim(self.col_1-50,self.col_1+50)
+            self.ax.set_ylim(self.row_1+50,self.row_1-50)
+            #self.im_plot.set_extent((self.le0+col_offset,self.re0+col_offset,self.be0+row_offset,self.te0+row_offset))
+
+
 
     
             

@@ -107,18 +107,18 @@ class Points(object):
         puv = self.predicted()
         duv = scale * (puv - uv)
         defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
-        if selected is not None:
-            if not isinstance(selected, dict):
-                selected=dict(color=selected)
-            selected = helper.merge_dicts(defaults, dict())
-            matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected=dict(color=unselected)
             unselected = helper.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
                 uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
+        if selected is not None:
+            if not isinstance(selected, dict):
+                selected=dict(color=selected)
+            selected = helper.merge_dicts(defaults, selected)
+            matplotlib.pyplot.quiver(
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
 class Lines(object):
     """
@@ -273,18 +273,18 @@ class Lines(object):
             min_index = find_nearest_neighbors(uv, puv)
             duv = scale * (puv[min_index, :] - uv)
             defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
-            if selected is not None:
-                if not isinstance(selected, dict):
-                    selected=dict(color=selected)
-                selected = helper.merge_dicts(defaults, selected)
-                matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
             if unselected is not None:
                 if not isinstance(unselected, dict):
                     unselected=dict(color=unselected)
                 unselected = helper.merge_dicts(defaults, unselected)
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **unselected)
+            if selected is not None:
+                if not isinstance(selected, dict):
+                    selected=dict(color=selected)
+                selected = helper.merge_dicts(defaults, selected)
+                matplotlib.pyplot.quiver(
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
 class Matches(object):
     """
@@ -390,18 +390,18 @@ class Matches(object):
         puv = self.predicted(cam=cam)
         duv = scale * (puv - uv)
         defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
-        if selected is not None:
-            if not isinstance(selected, dict):
-                selected=dict(color=selected)
-            selected = helper.merge_dicts(defaults, selected)
-            matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected=dict(color=unselected)
             unselected = helper.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
                 uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
+        if selected is not None:
+            if not isinstance(selected, dict):
+                selected=dict(color=selected)
+            selected = helper.merge_dicts(defaults, selected)
+            matplotlib.pyplot.quiver(
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
 # ---- Models ----
 

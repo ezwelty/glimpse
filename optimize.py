@@ -748,7 +748,7 @@ class Cameras(object):
             self.set_cameras(params)
         cam = self.cams[cam] if isinstance(cam, int) else cam
         cam_controls = prune_controls([cam], self.controls)
-        if index is not None and len(self.control) > 1:
+        if index is not None and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
             raise ValueError("Plotting with `index` not yet supported with multiple controls")
         for control in cam_controls:

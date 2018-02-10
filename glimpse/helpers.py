@@ -1,17 +1,6 @@
-import numpy as np
-import cPickle
-import pyproj
-import json
-import collections
-import copy
-import dem
-import pandas
-import scipy
-import gzip
-import gdal
-import os
-import datetime
-import time
+from .imports import (
+    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, gdal, os,
+    datetime, time, PIL)
 
 # Save and load commands for efficient pickle objects
 def save_zipped_pickle(obj, filename, protocol=-1):
@@ -64,35 +53,6 @@ def hist_match(source, template):
     interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
 
     return interp_t_values[bin_idx].reshape(oldshape)
-
-def get_cropped_dem(path,xmin,xmax,ymin,ymax):
-    dem = gdal.Open(path)
-    Z = dem.ReadAsArray()
-    Z[Z<-10000] = np.nan
-    geotransform = dem.GetGeoTransform()
-
-    # Define map coordinates
-    originX = geotransform[0]
-    originY = geotransform[3]
-    pixelX = geotransform[1]
-    pixelY = geotransform[5]
-
-    x = originX + pixelX*np.array(range(Z.shape[1]))
-    y = originY + pixelY*np.array(range(Z.shape[0]))
-
-    # Downsample DEM with rate n_skip
-    n_skip = 1
-
-    x = x[::n_skip]
-    y = y[::n_skip]
-    Z = Z[::n_skip,::n_skip]
-    x_index = (x>xmin)*(x<xmax)
-    y_index = (y>ymin)*(y<ymax)
-    x = x[x_index]
-    y = y[y_index]
-    Z = Z[y_index,:][:,x_index]
-
-    return x,y,Z
 
 def nearest_neighbours(x, lst):
     if x <= lst[0]:
@@ -737,8 +697,21 @@ def compute_mask_array_from_svg(path_to_svg,array_shape,skip=[]):
     rows_f = rows.ravel()
     for i,p in enumerate(paths):
         if i not in skip:
-    
+
             inside = p.contains_points(zip(cols.ravel(),rows.ravel()))
             mask+=inside.reshape(mask.shape)
     return mask.astype('uint8')
 
+def mask(imgsz, polygons, inverse=False):
+    im_mask = PIL.Image.new(mode='1', size=tuple(np.array(imgsz).astype(int)))
+    draw = PIL.ImageDraw.ImageDraw(im_mask)
+    if isinstance(polygons, dict):
+        polygons = polygons.values()
+    for polygon in polygons:
+        if isinstance(polygon, np.ndarray):
+            polygon = [tuple(row) for row in polygon]
+        draw.polygon(polygon, fill=1)
+    mask = np.array(im_mask)
+    if inverse:
+        mask = ~mask
+    return mask

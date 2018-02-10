@@ -1,15 +1,7 @@
-import warnings
-from datetime import datetime
-import numpy as np
-import piexif
-import PIL.Image
-import scipy.interpolate
-import shutil
-import os.path
-import matplotlib.pyplot
-import helper
-import copy
-import sharedmem
+from .imports import (
+    np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
+    sharedmem)
+from . import (helpers, svg)
 
 class Camera(object):
     """
@@ -59,11 +51,11 @@ class Camera(object):
             if (fmm is not None or cmm is not None) and sensorsz is None:
                 raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
             if sensorsz is not None and fmm is not None:
-                self.f = helper.format_list(fmm, length=2) * self.imgsz / self.sensorsz
+                self.f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
             else:
                 self.f = f
             if sensorsz is not None and cmm is not None:
-                self.c = helper.format_list(cmm, length=2) * self.imgsz / self.sensorsz
+                self.c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
             else:
                 self.c = c
             self.k = k
@@ -82,13 +74,13 @@ class Camera(object):
             **kwargs (dict): Additional arguments passed to `Camera()`.
                 These take precedence over arguments read from file.
         """
-        json_args = helper.read_json(path)
+        json_args = helpers.read_json(path)
         for key in json_args.keys():
             value = [np.nan if item is None else item for item in json_args[key]]
             if all([item is np.nan for item in value]):
                 value = None
             json_args[key] = value
-        args = helper.merge_dicts(json_args, kwargs)
+        args = helpers.merge_dicts(json_args, kwargs)
         return cls(**args)
 
     @classmethod
@@ -110,7 +102,7 @@ class Camera(object):
 
     @xyz.setter
     def xyz(self, value):
-        self.vector[0:3] = helper.format_list(value, length=3, default=0)
+        self.vector[0:3] = helpers.format_list(value, length=3, default=0)
 
     @property
     def viewdir(self):
@@ -118,7 +110,7 @@ class Camera(object):
 
     @viewdir.setter
     def viewdir(self, value):
-        self.vector[3:6] = helper.format_list(value, length=3, default=0)
+        self.vector[3:6] = helpers.format_list(value, length=3, default=0)
 
     @property
     def imgsz(self):
@@ -126,7 +118,7 @@ class Camera(object):
 
     @imgsz.setter
     def imgsz(self, value):
-        self.vector[6:8] = helper.format_list(value, length=2)
+        self.vector[6:8] = helpers.format_list(value, length=2)
 
     @property
     def f(self):
@@ -134,7 +126,7 @@ class Camera(object):
 
     @f.setter
     def f(self, value):
-        self.vector[8:10] = helper.format_list(value, length=2)
+        self.vector[8:10] = helpers.format_list(value, length=2)
 
     @property
     def c(self):
@@ -142,7 +134,7 @@ class Camera(object):
 
     @c.setter
     def c(self, value):
-        self.vector[10:12] = helper.format_list(value, length=2, default=0)
+        self.vector[10:12] = helpers.format_list(value, length=2, default=0)
 
     @property
     def k(self):
@@ -150,7 +142,7 @@ class Camera(object):
 
     @k.setter
     def k(self, value):
-        self.vector[12:18] = helper.format_list(value, length=6, default=0)
+        self.vector[12:18] = helpers.format_list(value, length=6, default=0)
 
     @property
     def p(self):
@@ -158,7 +150,7 @@ class Camera(object):
 
     @p.setter
     def p(self, value):
-        self.vector[18:20] = helper.format_list(value, length=2, default=0)
+        self.vector[18:20] = helpers.format_list(value, length=2, default=0)
 
     @property
     def sensorsz(self):
@@ -169,7 +161,7 @@ class Camera(object):
 
     @sensorsz.setter
     def sensorsz(self, value):
-        self._sensorsz = helper.format_list(value, length=2)
+        self._sensorsz = helpers.format_list(value, length=2)
 
     @property
     def fmm(self):
@@ -490,7 +482,7 @@ class Camera(object):
         """
         is_in = self.inframe(uv)
         shape = (int(self.imgsz[1]), int(self.imgsz[0]))
-        return helper.rasterize_points(uv[is_in, 1].astype(int), uv[is_in, 0].astype(int),
+        return helpers.rasterize_points(uv[is_in, 1].astype(int), uv[is_in, 0].astype(int),
             values[is_in], shape, fun=fun)
 
     def spherical_to_xyz(self, angles):
@@ -1026,7 +1018,7 @@ class Image(object):
             self.cam = cam
         else:
             if isinstance(cam, str):
-                cam = helper.read_json(cam)
+                cam = helpers.read_json(cam)
             elif isinstance(cam, dict):
                 cam = copy.deepcopy(cam)
             elif cam is None:

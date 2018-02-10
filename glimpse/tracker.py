@@ -1,11 +1,10 @@
-import numpy as np
-import matplotlib.pyplot as plt
+from .imports import (np)
 
 class Tracker(object):
     """
     A `Tracker' describes a constant velocity model particle filter.
-   
- 
+
+
     Attributes:
         N (int): Number of particles (larger N gives better results at higher expense
         x0,y0 (float): Spatial coordinates to track
@@ -30,7 +29,7 @@ class Tracker(object):
             observers (list): List of Observer objects
             dem_crop_distance (float): distance from points at which dem should be cropped to increase evaluation speed
 
-       
+
         """
         self.N = N
         self.x0 = x0
@@ -51,12 +50,12 @@ class Tracker(object):
     def initialize_particles(self,sigma_x0,sigma_y0,sigma_vx0,sigma_vy0,u0=0,v0=0):
         """
         Generate particles given initial distribution
-     
+
         Arguments:
             sigma_x0,sigma_y0 (float): standard deviation of initial positions
             sigma_vx0,sigma_vy0 (float): standard deviation of initial velocity
             u0,v0 (float,optional): Initial velocity mean
-        
+
         """
         self.particles[:,0] = self.x0 + sigma_x0*np.random.randn(self.N)
         self.particles[:,1] = self.y0 + sigma_y0*np.random.randn(self.N)
@@ -99,7 +98,7 @@ class Tracker(object):
         Update the particle filter weights based on log likelihoods from observers
         Arguments:
             log_likelihoods (array): log likelihood for each particle (sum of log likelihoods from observers)
-        """ 
+        """
         self.weights.fill(1.)
         self.weights *= np.exp(-sum(log_likelihoods))
         self.weights += 1e-300
@@ -130,7 +129,7 @@ class Tracker(object):
     def track(self,wx,wy,do_plot=False):
         """
         Commence particle filtering
-        
+
         Arguments:
             wx,wy: random acceleration std
             do_plot (optional): Plot or don't
@@ -139,14 +138,14 @@ class Tracker(object):
             assert(self.particles_are_initialized)
         except AssertionError:
             print("Particles are not initialized!")
-            return 
+            return
 
         mean,cov = self._estimate()
         self.means = [mean]
         self.covs = [cov]
         if do_plot:
             self.initialize_plot()
- 
+
         for t,dt in zip(self.times[1:],self.dt[1:]):
             self._predict(dt,wx,wy)
             pmean,pcov = self._estimate()
@@ -162,21 +161,21 @@ class Tracker(object):
     def initialize_plot(self):
         # Perform plotting animation.  Don't use this with multiprocessing!
 
-        plt.ion()
+        matplotlib.pyplot.ion()
         number_of_plots = 1 + len(self.observers)
 
-        self.fig,self.ax = plt.subplots(nrows=1,ncols=number_of_plots,figsize=(10*number_of_plots,10))
+        self.fig,self.ax = matplotlib.pyplot.subplots(nrows=1,ncols=number_of_plots,figsize=(10*number_of_plots,10))
         self.fig.tight_layout()
-        #self.ax[0].contourf(self.dem.X,self.dem.Y,self.dem.hillshade(),31,cmap=plt.cm.gray)
+        #self.ax[0].contourf(self.dem.X,self.dem.Y,self.dem.hillshade(),31,cmap=matplotlib.pyplot.cm.gray)
 
         self.meplot = self.ax[0].scatter(self.means[0][0,0],self.means[0][0,1],c='red',s=50,label='Mean Position')
         vx = self.particles[:,2]
         vy = self.particles[:,3]
         V = np.hypot(vx,vy)
-        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],vx/V,vy/V,V,cmap=plt.cm.gnuplot2,clim=[0,15],alpha=0.2,linewidths=0)
+        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],vx/V,vy/V,V,cmap=matplotlib.pyplot.cm.gnuplot2,clim=[0,15],alpha=0.2,linewidths=0)
         self.ax[0].legend()
 
-        self.cb = plt.colorbar(self.pa_plot,ax=self.ax[0],orientation='horizontal',aspect=30,pad=0.07)
+        self.cb = matplotlib.pyplot.colorbar(self.pa_plot,ax=self.ax[0],orientation='horizontal',aspect=30,pad=0.07)
         self.cb.set_label('Speed (m d$^{-1}$')
         self.cb.solids.set_edgecolor("face")
         self.cb.solids.set_alpha(1)
@@ -191,7 +190,7 @@ class Tracker(object):
         for a,o in zip(self.ax[1:],self.observers):
             o.initialize_plot(a)
 
-        plt.pause(2.0)
+        matplotlib.pyplot.pause(2.0)
 
     def update_plot(self,t):
         self.meplot.remove()
@@ -199,14 +198,14 @@ class Tracker(object):
 
         self.meplot = self.ax[0].scatter([m.squeeze()[0] for m in self.means],[m.squeeze()[1] for m in self.means],s=50,c='red')
         V = np.hypot(self.particles[:,2],self.particles[:,3])
-        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],self.particles[:,2]/V,self.particles[:,3]/V,V,scale=50,cmap=plt.cm.gnuplot2,clim=[0,15],alpha=0.2)
+        self.pa_plot = self.ax[0].quiver(self.particles[:,0],self.particles[:,1],self.particles[:,2]/V,self.particles[:,3]/V,V,scale=50,cmap=matplotlib.pyplot.cm.gnuplot2,clim=[0,15],alpha=0.2)
         xmed = np.median(self.particles[:,0])
         ymed = np.median(self.particles[:,1])
         self.ax[0].set_xlim(xmed-50,xmed+50)
         self.ax[0].set_ylim(ymed-50,ymed+50)
-    
+
         for o in self.observers:
             o.update_plot(t)
 
         #self.fig.savefig('./particle_tracker_imgs/images_{0:03d}.jpg'.format(self.counter),bbox_inches='tight',dpi=300)
-        plt.pause(0.00001)
+        matplotlib.pyplot.pause(0.00001)

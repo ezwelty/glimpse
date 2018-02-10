@@ -1,9 +1,5 @@
-import numpy as np
-import scipy.interpolate
-import scipy.ndimage
-import gdal
-import matplotlib
-import helper
+from .imports import (np, scipy, gdal, matplotlib)
+from . import (helpers)
 
 class Grid(object):
 
@@ -198,7 +194,7 @@ class Grid(object):
             xlim = self.xlim
         if ylim is None:
             ylim = self.ylim
-        box = helper.intersect_boxes(np.vstack((
+        box = helpers.intersect_boxes(np.vstack((
             np.hstack((min(xlim), min(ylim), max(xlim), max(ylim))),
             np.hstack((self.min[0:2], self.max[0:2]))
         )))
@@ -410,7 +406,7 @@ class DEM(Grid):
         """
         is_in = self.inbounds(xy)
         rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
-        return helper.rasterize_points(rowcol[:, 0], rowcol[:, 1],
+        return helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1],
             values[is_in], self.Z.shape, fun=fun)
 
     def crop(self, xlim=None, ylim=None, zlim=None):
@@ -572,7 +568,7 @@ class DEM(Grid):
         directions = np.column_stack((np.cos(thetas), np.sin(thetas)))
         # Intersect with box (2d)
         box = np.concatenate((self.min[0:2], self.max[0:2]))
-        xy_starts, xy_ends = helper.intersect_rays_box(origin[0:2], directions, box)
+        xy_starts, xy_ends = helpers.intersect_rays_box(origin[0:2], directions, box)
         # Convert spatial coordinates (x, y) to grid indices (xi, yi)
         inside = self.inbounds(np.atleast_2d(origin[0:2]))[0]
         if inside:
@@ -587,7 +583,7 @@ class DEM(Grid):
         # Iterate over line in each direction
         hxyz = np.full((n, 3), np.nan)
         for i in range(n):
-            rowcol = helper.bresenham_line(starts[i, :], ends[i, :])[:, ::-1]
+            rowcol = helpers.bresenham_line(starts[i, :], ends[i, :])[:, ::-1]
             if inside:
                 # Skip start cell
                 rowcol = rowcol[1:]
@@ -604,7 +600,7 @@ class DEM(Grid):
         hxyz[:, 2] += origin[2]
         # Split at NaN
         mask = np.isnan(hxyz[:, 0])
-        splits = helper.boolean_split(hxyz, mask, axis=0, circular=True)
+        splits = helpers.boolean_split(hxyz, mask, axis=0, circular=True)
         if mask[0]:
             # Starts with isnan group
             return splits[1::2]
@@ -616,7 +612,7 @@ class DEM(Grid):
         # Circle indices
         rowcol = self.xy_to_rowcol(np.atleast_2d(center[0:2]), snap=True)
         r = np.round(radius / self.d[0])
-        xyi = helper.bresenham_circle(rowcol[0, ::-1], r).astype(int)
+        xyi = helpers.bresenham_circle(rowcol[0, ::-1], r).astype(int)
         # Filled circle indices
         ind = []
         y = np.unique(xyi[:, 1])

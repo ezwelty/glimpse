@@ -1,6 +1,4 @@
-import lxml.etree
-import re
-import numpy as np
+from .imports import (np, lxml, re)
 
 # ---- Parse SVG file ----
 
@@ -70,11 +68,9 @@ def parse_svg(path, imgsz=None):
     selfs = " | ".join(["self::" + tag for tag in tags])
     descendants = " | ".join(["descendant-or-self::" + tag for tag in tags])
     nodes = tree.xpath("//*[not(ancestor::g[@id]) and (self::g[@id] or (" + selfs + ")) and (" + descendants + ")]")
-    return parse_svg_nodes(nodes, scale=scale)
+    return _parse_nodes(nodes, scale=scale)
 
-# ---- Helpers ----
-
-def parse_svg_nodes(nodes, scale=None):
+def _parse_nodes(nodes, scale=None):
     """
     Return vertices of SVG elements in ElementTree nodes.
 
@@ -101,7 +97,7 @@ def parse_svg_nodes(nodes, scale=None):
             id = tag
         if len(nodes[i]):
             # Iterage on parent node
-            branch[id] = parse_svg_nodes(nodes[i], scale=scale)
+            branch[id] = _parse_nodes(nodes[i], scale=scale)
         else:
             # Parse element (if supported)
             if tag == 'path':
@@ -117,6 +113,8 @@ def parse_svg_nodes(nodes, scale=None):
             if scale is not None and isinstance(branch[id], np.ndarray):
                 branch[id] *= scale
     return branch
+
+# ---- Helpers ----
 
 def parse_polyline(points):
     """
@@ -276,4 +274,4 @@ def parse_circle(cx, cy):
     Returns:
         array: Coordinates x,y (1x2)
     """
-    return np.array([cx, cy], dtype=float).reshape((1, 2))
+    return np.array((cx, cy), dtype=float).reshape((1, 2))

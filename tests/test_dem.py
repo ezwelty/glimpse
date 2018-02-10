@@ -1,4 +1,4 @@
-from .context import glimpse
+from .context import *
 from glimpse.imports import (np)
 import pytest
 

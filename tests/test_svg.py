@@ -1,4 +1,4 @@
-from .context import glimpse
+from .context import *
 from glimpse.imports import (np)
 
 def test_parse_polyline():
@@ -43,7 +43,7 @@ def test_parse_circle():
     assert np.array_equal(expected, result)
 
 def test_parse_svg():
-    path = "AK10b_20141013_020336.svg"
+    path = os.path.join(test_dir, 'AK10b_20141013_020336.svg')
     svg = glimpse.svg.parse_svg(path)
     assert set(svg.keys()) == set(('glacier', 'gcp', 'land', 'horizon', 'coast'))
     assert set(svg['gcp'].keys()) == set(('pier', 'orb', 'slant', 'beetle'))

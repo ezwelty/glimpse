@@ -1,4 +1,4 @@
-from .context import glimpse
+from .context import *
 from glimpse.imports import (np)
 
 def test_ransac_polynomial():
@@ -12,7 +12,8 @@ def test_ransac_polynomial():
     assert set(rindex) == set(inliers)
 
 def test_ransac_camera_viewdir(tol=0.1):
-    imgA = glimpse.Image("AK10b_20141013_020336.JPG")
+    path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')
+    imgA = glimpse.Image(path)
     imgA.cam.resize(0.5)
     imgB = imgA.copy()
     viewdir = (2, 2, 2)

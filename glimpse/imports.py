@@ -2,7 +2,7 @@ import collections
 import copy
 import cPickle
 import cv2
-from datetime import datetime
+import datetime
 import gdal
 import gzip
 import json

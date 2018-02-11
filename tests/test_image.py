@@ -12,7 +12,7 @@ def test_image_init_defaults():
 
 def test_image_init_custom():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')
-    img_datetime = datetime(2010, 1, 1, 0, 0, 0)
+    img_datetime = datetime.datetime(2010, 1, 1, 0, 0, 0)
     cam_args = dict(imgsz=(100, 100), sensorsz=(10, 10))
     img = glimpse.Image(path, cam=cam_args, datetime=img_datetime)
     assert img.datetime == img_datetime

@@ -893,9 +893,9 @@ class Exif(object):
         datetime_str = self.get_tag('DateTimeOriginal')
         subsec_str = self.get_tag('SubSecTimeOriginal')
         if datetime_str and not subsec_str:
-            return datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
+            return datetime.datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
         elif datetime_str and subsec_str:
-            return datetime.strptime(datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f")
+            return datetime.datetime.strptime(datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f")
         else:
             return None
 
@@ -1009,6 +1009,7 @@ class Image(object):
     def __init__(self, path, cam=None, datetime=None):
         self.path = path
         self.exif = Exif(path=path)
+        # NOTE: Namespace conflict with datetime (package)
         if datetime:
             self.datetime = datetime
         else:

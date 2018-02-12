@@ -70,8 +70,8 @@ class Observer(object):
         Arguments:
             tracker (Tracker): Tracker object
         """
-        col_0, row_0 =  self.images[0].cam.project(tracker.particle_mean[:, [0, 1, 4]]).squeeze()
-        self.rc = self.images[0].cam.project(tracker.particles[:, [0, 1, 4]])[:, ::-1]
+        col_0, row_0 =  self.images[0].cam.project(tracker.particle_mean[:, 0:3]).squeeze()
+        self.rc = self.images[0].cam.project(tracker.particles[:, 0:3])[:, ::-1]
         self.log_like = np.zeros((tracker.n))
         self.ref_hist_template = self.get_subimage(row_0, col_0, self.sd_row, self.sd_col, 0, get_ref_template=True)
         self.ref_subimage = self.get_subimage(row_0, col_0, self.hw_row, self.hw_col, 0)
@@ -143,12 +143,12 @@ class Observer(object):
             return 0.0
         # Extract a subimage around predicted coordinates
         current_image = self.images[image_index]
-        col_1, row_1 = current_image.cam.project(pmean[:, [0, 1, 4]]).squeeze()
+        col_1, row_1 = current_image.cam.project(pmean[:, 0:3]).squeeze()
         self.test_subimage = self.get_subimage(row_1, col_1, self.sd_row, self.sd_col, image_index)
         # Try generating a likelihood interpolant and evaluate for each particle
         #try:
         like_interpolant = self.get_likelihood_interpolant(self.ref_subimage, self.test_subimage, row_1, col_1)
-        self.rc = current_image.cam.project(particles[:, [0, 1, 4]])[:, ::-1]
+        self.rc = current_image.cam.project(particles[:, 0:3])[:, ::-1]
         self.log_like = like_interpolant(self.rc[:, 0], self.rc[:, 1], grid=False) / self.sigma_pixel**2
         # If too close to the image boundary, return a constant log_likelihood
         #except IndexError:

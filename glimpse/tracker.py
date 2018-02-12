@@ -10,9 +10,9 @@ class Tracker(object):
         time_unit (float): Length of time unit for particle evolution arguments, in seconds
             (e.g., 1 minute = 60, 1 hour = 3600)
         n (int): Number of particles (more particles gives better results at higher expense)
-        particles (array): Positions and velocities of particles (n, 5) [[x, y, vx, vy, z], ...]
+        particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
         weights (array): Particle likelihoods (n, )
-        particle_mean (array): Weighted mean of `particles` (1, 5) [[x, y, vx, vy, z]]
+        particle_mean (array): Weighted mean of `particles` (1, 5) [[x, y, z, vx, vy]]
         particle_covariance (array): Weighted covariance matrix of `particles` (5, 5)
         datetimes (array): Date and times at which particle positions were estimated.
         means (list): `particle_mean` at each `datetimes`
@@ -58,8 +58,8 @@ class Tracker(object):
         if self.particles is None or self.n != n:
             self.particles = np.zeros((n, 5))
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
-        self.particles[:, 2:4] = vxy + vxy_sigma * np.random.randn(n, 2)
-        self.particles[:, 4] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
         self.weights = np.ones(n).astype(float) / n
 
     def initialize_observers(self):
@@ -85,9 +85,9 @@ class Tracker(object):
             axy_sigma (array-like): Standard deviation of random accelerations (x, y)
         """
         daxy = axy_sigma * np.random.randn(self.n, 2)
-        self.particles[:, 0:2] += dt * self.particles[:, 2:4] + 0.5 * (axy + daxy) * dt**2
-        self.particles[:, 2:4] += dt * (axy + daxy)
-        self.particles[:, 4] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 0:2] += dt * self.particles[:, 3:5] + 0.5 * (axy + daxy) * dt**2
+        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 3:5] += dt * (axy + daxy)
 
     def update_weights(self, log_likelihoods):
         """
@@ -176,10 +176,10 @@ class Tracker(object):
         self.meplot = self.ax[0].scatter(
             self.means[0][0, 0], self.means[0][0, 1],
             c='red', s=50, label='Mean position')
-        v = np.hypot(self.particles[:, 2], self.particles[:, 3])
+        v = np.hypot(self.particles[:, 3], self.particles[:, 4])
         self.pa_plot = self.ax[0].quiver(
             self.particles[:, 0], self.particles[:, 1],
-            self.particles[:, 2] / v, self.particles[:, 3] / v, v,
+            self.particles[:, 3] / v, self.particles[:, 4] / v, v,
             cmap=matplotlib.pyplot.cm.gnuplot2, clim=(0, 15), alpha=0.2, linewidths=0)
         self.ax[0].legend()
         self.cb = matplotlib.pyplot.colorbar(self.pa_plot, ax=self.ax[0],
@@ -208,10 +208,10 @@ class Tracker(object):
         self.meplot = self.ax[0].scatter(
             [m.squeeze()[0] for m in self.means],
             [m.squeeze()[1] for m in self.means], s=50, c='red')
-        v = np.hypot(self.particles[:, 2], self.particles[:, 3])
+        v = np.hypot(self.particles[:, 3], self.particles[:, 4])
         self.pa_plot = self.ax[0].quiver(
             self.particles[:, 0], self.particles[:, 1],
-            self.particles[:, 2] / v, self.particles[:, 3] / v, v,
+            self.particles[:, 3] / v, self.particles[:, 4] / v, v,
             scale=50, cmap=matplotlib.pyplot.cm.gnuplot2, clim=[0, 15], alpha=0.2)
         xmed = np.median(self.particles[:, 0])
         ymed = np.median(self.particles[:, 1])

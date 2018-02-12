@@ -1043,7 +1043,7 @@ class Image(object):
         """
         return Image(path=self.path, cam=self.cam.copy())
 
-    def read(self, gray=False):
+    def read(self, box=None, gray=False, cache=True):
         """
         Read image data from file.
 
@@ -1052,25 +1052,42 @@ class Image(object):
         The result is cached (`self.I`) and reused only if it matches the camera image size, or,
         if not set, the original image size.
         To clear the cache, set `self.I` to `None`.
+
+        Arguments:
+            box (array-like): Crop rectangle (left, upper, right, lower).
+                If set, `cache = False` since crop is read directly from file.
+            gray (bool): Whether to return image as grayscale.
+            cache (bool): Whether to save read image in `self.I`
         """
-        if self.I is not None:
-            size = np.flipud(self.I.shape[0:2])
+        I = self.I
+        if box is not None:
+            cache = False
+        if I is not None:
+            size = np.flipud(I.shape[0:2])
         has_cam_size = all(~np.isnan(self.cam.imgsz))
-        if ((self.I is None) or
-            (not has_cam_size and not np.array_equal(size, self.exif.size)) or
-            (has_cam_size and not np.array_equal(size, self.cam.imgsz))):
-            # Read file
+        if ((I is None) or
+            (not has_cam_size and any(size != self.exif.size)) or
+            (has_cam_size and any(size != self.cam.imgsz))):
+            # Wrong size or not cached: Read image from file
             im = PIL.Image.open(self.path)
-            if has_cam_size and not np.array_equal(self.cam.imgsz, self.exif.size):
-                # Resize to match camera model
-                im = im.resize(size=self.cam.imgsz.astype(int), resample=PIL.Image.BILINEAR)
-            I_hat = np.array(im)
-            self.I = sharedmem.copy(I_hat)
-            del I_hat
-        if gray and self.I.ndim > 2:
-            return (0.2126 * self.I[:, :, 0] + 0.7152 * self.I[:, :, 1] + 0.0722 * self.I[:, :, 2]).astype(np.uint8)
+            if has_cam_size:
+                cam_size = self.cam.imgsz.astype(int)
+                if any(cam_size != im.size):
+                    im = im.resize(size=size.astype(int), resample=PIL.Image.BILINEAR)
+            if box is not None:
+                im = im.crop(box=box)
+            I = np.array(im)
+        elif box is not None:
+            # Cached but cropping: Subset array
+            I = I[box[0]:box[2], box[1]:box[3]].copy()
+        if I is not self.I and cache:
+            # New and not cropping: Cache
+            I = sharedmem.copy(I)
+            self.I = I
+        if gray and I.ndim > 2:
+            return (0.2126 * I[:, :, 0] + 0.7152 * I[:, :, 1] + 0.0722 * I[:, :, 2]).astype(np.uint8)
         else:
-            return self.I
+            return I
 
     def write(self, path, I=None, **params):
         """

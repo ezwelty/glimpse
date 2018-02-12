@@ -13,6 +13,9 @@ class Grid(object):
         if ylim is None:
             ylim = (0, self.n[1])
         self.ylim = np.atleast_1d(ylim).astype(float)
+        # Placeholders
+        self._x, self._y = None, None
+        self._X, self._Y = None, None
 
     # ---- Properties (dependent) ---- #
 

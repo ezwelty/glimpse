@@ -1,6 +1,6 @@
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem)
+    sharedmem, gdal)
 from . import (helpers, svg)
 
 class Camera(object):
@@ -1054,38 +1054,53 @@ class Image(object):
         To clear the cache, set `self.I` to `None`.
 
         Arguments:
-            box (array-like): Crop rectangle (left, upper, right, lower).
-                If set, `cache = False` since crop is read directly from file.
+            box (array-like): Crop extent in image coordinates (left, top, right, bottom)
+                relative to `self.cam.imgsz`.
+                If `cache=True`, the region is extracted from the cached image.
+                If `cache=False`, the region is extracted directly from the file
+                (faster than reading the entire image).
             gray (bool): Whether to return image as grayscale.
-            cache (bool): Whether to save read image in `self.I`
+            cache (bool): Whether to save image in `self.I`
         """
         I = self.I
-        if box is not None:
-            cache = False
         if I is not None:
             size = np.flipud(I.shape[0:2])
         has_cam_size = all(~np.isnan(self.cam.imgsz))
+        new_I = False
         if ((I is None) or
             (not has_cam_size and any(size != self.exif.size)) or
             (has_cam_size and any(size != self.cam.imgsz))):
             # Wrong size or not cached: Read image from file
-            im = PIL.Image.open(self.path)
-            if has_cam_size:
-                cam_size = self.cam.imgsz.astype(int)
-                if any(cam_size != im.size):
-                    im = im.resize(size=size.astype(int), resample=PIL.Image.BILINEAR)
-            if box is not None:
-                im = im.crop(box=box)
-            I = np.array(im)
-        elif box is not None:
-            # Cached but cropping: Subset array
-            I = I[box[0]:box[2], box[1]:box[3]].copy()
-        if I is not self.I and cache:
-            # New and not cropping: Cache
-            I = sharedmem.copy(I)
-            self.I = I
+            im = gdal.Open(self.path)
+            args = dict()
+            original_size = (im.RasterXSize, im.RasterYSize)
+            target_size = self.cam.imgsz.astype(int) if has_cam_size else original_size
+            if any(target_size != original_size):
+                # Read image into target-sized buffer
+                args['buf_xsize'] = target_size[0]
+                args['buf_ysize'] = target_size[1]
+            if box is not None and not cache:
+                # Resize box to image actual size
+                scale = np.divide(original_size, target_size)
+                # Read image subset
+                args['xoff'] = int(round(box[0] * scale[0]))
+                args['win_xsize'] = int(round((box[2] - box[0]) * scale[0]))
+                args['yoff'] = int(round(box[1] * scale[1]))
+                args['win_ysize'] = int(round((box[3] - box[1]) * scale[1]))
+            I = np.stack((im.GetRasterBand(i + 1).ReadAsArray(**args)
+                for i in xrange(im.RasterCount)), axis=2)
+            if I.shape[2] == 1:
+                I = I.squeeze(axis=2)
+            if cache:
+                # Caching: Cache result
+                I = sharedmem.copy(I)
+                self.I = I
+            new_I = True
+        if box is not None and (cache or not new_I):
+            # Caching and cropping: Subset cached array
+            I = I[box[1]:box[3], box[0]:box[2]]
         if gray and I.ndim > 2:
-            return (0.2126 * I[:, :, 0] + 0.7152 * I[:, :, 1] + 0.0722 * I[:, :, 2]).astype(np.uint8)
+            return (0.2126 * I[:, :, 0] + 0.7152 * I[:, :, 1] + 0.0722 * I[:, :, 2]).astype(I.dtype)
         else:
             return I
 

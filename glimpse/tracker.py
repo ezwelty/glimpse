@@ -1,4 +1,5 @@
-from .imports import (np, datetime, matplotlib)
+from .imports import (np, cv2)
+from . import (helpers)
 
 class Tracker(object):
     """
@@ -18,16 +19,21 @@ class Tracker(object):
         means (list): `particle_mean` at each `datetimes`
         covariances (list): `particle_covariance` at each `datetimes`
     """
-    def __init__(self, observers, dem, time_unit=1):
+    def __init__(self, observers, dem, tile_size=(15, 15), time_unit=1):
         self.observers = observers
         self.dem = dem
+        self.tile_size = tile_size
         self.time_unit = time_unit
-        # Placeholders
+        # Placeholders: particles
         self.particles = None
         self.weights = None
-        self.datetimes = []
-        self.means = []
-        self.covariances = []
+        # Placeholders: observers
+        self.tiles = None
+        self.histograms = None
+        # Placeholders: track
+        self.datetimes = None
+        self.means = None
+        self.covariances = None
 
     @property
     def n(self):
@@ -41,12 +47,16 @@ class Tracker(object):
     def particle_covariance(self):
         return np.cov(self.particles.T, aweights=self.weights)
 
-    def initialize_particles(self, n, xy, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0)):
+    # TODO: initialized property
+
+    def initialize(self, n, xy, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0)):
         """
         Initialize particles given an initial normal distribution.
 
         Temporal arguments (`vxy`, `vxy_sigma`) are assumed to be in
         `self.time_unit` time units.
+        Reference image tiles are loaded from each observer centered around
+        the weighted mean of the particles positions (`self.tiles` and `self.histograms`).
 
         Arguments:
             n (int): Number of particles
@@ -55,22 +65,27 @@ class Tracker(object):
             vxy (array-like): Mean velocity (x, y)
             vxy_sigma (array-like): Standard deviation of velocities (x, y)
         """
+        # TODO: Tile operations to properties: Observer or Tracker?
+        # TODO: Initialize observers based on start time?
+        # Initialize particles with equal weights
         if self.particles is None or self.n != n:
             self.particles = np.zeros((n, 5))
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
         self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
         self.weights = np.ones(n).astype(float) / n
-
-    def initialize_observers(self):
-        """
-        Link the tracker to each associated observer.
-        """
-        # NOTE: Move to init?
-        if self.particles is None:
-            raise Exception("Particles are not initialized")
-        for observer in self.observers:
-            observer.link_tracker(self)
+        # Initialize reference tiles and histograms
+        center_xyz = self.particle_mean[:, 0:3]
+        self.tiles = []
+        self.histograms = []
+        for i, observer in enumerate(self.observers):
+            center_uv = observer.project(center_xyz)
+            box = observer.tile_box(center_uv, size=self.tile_size)
+            self.tiles.append(observer.extract_tile(
+                box, gray=dict(method='pca'), highpass=dict(size=(5, 5)),
+                subpixel=dict(kx=3, ky=3), uv=center_uv))
+            self.histograms.append(helpers.compute_cdf(
+                self.tiles[-1], return_inverse=False))
 
     def advance_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
         """
@@ -89,18 +104,17 @@ class Tracker(object):
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
         self.particles[:, 3:5] += dt * (axy + daxy)
 
-    def update_weights(self, log_likelihoods):
+    def update_weights(self, likelihoods):
         """
-        Update particle weights based on their log likelihoods.
+        Update particle weights based on their likelihoods.
 
         Arguments:
-            log_likelihoods (array): Log likelihood of each particle
-                (summed over all observers)
+            likelihoods (array): Likelihood of each particle
         """
         self.weights.fill(1)
-        self.weights *= np.exp(-sum(log_likelihoods))
+        self.weights *= likelihoods
         self.weights += 1e-300
-        self.weights /= self.weights.sum()
+        self.weights *= 1 / self.weights.sum()
 
     def resample_particles(self):
         """
@@ -118,7 +132,7 @@ class Tracker(object):
                 j += 1
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]
-        self.weights /= np.sum(self.weights)
+        self.weights *= 1 / self.weights.sum()
 
     def track(self, datetimes=None, axy=(0, 0), axy_sigma=(0, 0), plot=False):
         """
@@ -151,15 +165,71 @@ class Tracker(object):
         delta_times /= self.time_unit
         for t, dt in zip(self.datetimes[1:], delta_times):
             self.advance_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
-            log_likelihoods = [observer.compute_likelihood(
-                self.particle_mean, self.particles, t)
-                for observer in self.observers]
-            self.update_weights(log_likelihoods)
+            likelihoods = self.compute_likelihoods(t)
+            self.update_weights(likelihoods)
             self.resample_particles()
             self.means.append(self.particle_mean)
             self.covariances.append(self.particle_covariance)
             if plot:
                 self.update_plot(t)
+
+    def compute_likelihoods(self, t):
+        """
+        Compute the likelihoods of the particles summed across all observers.
+
+        Arguments:
+            t (datetime): Date and time at which to query Observers
+        """
+        log_likelihoods = [self.compute_observer_log_likelihoods(t, observer)
+            for observer in self.observers]
+        return np.exp(-sum(log_likelihoods))
+
+    def compute_observer_log_likelihoods(self, t, obs=0):
+        """
+        Compute the log likelihoods of each particle for an Observer.
+
+        Arguments:
+            t (datetime): Date and time at which to query Observer
+            obs: Either index of Observer or Observer object
+        """
+        # Select observer
+        if isinstance(obs, int):
+            observer = self.observers[obs]
+            i = obs
+        else:
+            i = self.observers.index(obs)
+            observer = obs
+        # Select image
+        try:
+            img = observer.index(t)
+        except IndexError:
+            # If no image, return a constant log likelihood
+            return np.array([0.0])
+        # Build image box around all particles, with a buffer for template matching
+        # -1, +1 adjustment ensures SSE size > 3 pixels (5+) for cubic spline interpolation
+        # TODO: Adjust minimum size based on interpolation order
+        uv = observer.project(self.particles[:, 0:3])
+        halfsize = np.multiply(self.tiles[i].shape[-2::-1], 0.5)
+        box = np.vstack((
+            np.floor(uv.min(axis=0) - halfsize) - 1,
+            np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int)
+        if any(~observer.grid.inbounds(box)):
+            # Tile extends beyond image bounds
+            raise IndexError("Particle bounding box extends beyond image bounds: " + str(box))
+        # Extract test tile
+        test_tile = observer.extract_tile(box=box.flatten(), template=self.histograms[i],
+            gray=dict(method='pca'), highpass=dict(size=(5, 5)))
+        # Compute area-averaged sum of squares error
+        sse = cv2.matchTemplate(test_tile.astype(np.float32),
+            templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)
+        sse *= 1.0 / (self.tiles[i].shape[0] * self.tiles[i].shape[1])
+        # Sample at projected particles
+        # SSE tile box is shrunk by halfsize of reference tile - 0.5 pixel
+        box_edge = halfsize - 0.5
+        sse_box = box + np.vstack((box_edge, -box_edge))
+        sampled_sse = observer.sample_tile(uv, tile=sse,
+            box=sse_box.flatten(), grid=False, **dict(kx=3, ky=3))
+        return sampled_sse * (1.0 / observer.sigma**2)
 
     def initialize_plot(self):
         """

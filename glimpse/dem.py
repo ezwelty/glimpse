@@ -129,6 +129,9 @@ class Grid(object):
 
     # ---- Methods ---- #
 
+    def copy(self):
+        return Grid(n=self.n, xlim=self.xlim, y=self.ylim)
+
     def resize(self, scale):
         """
         Resize grid.
@@ -153,6 +156,60 @@ class Grid(object):
         """
         return np.logical_and(xy >= self.min[0:2], xy <= self.max[0:2]).all(axis = 1)
 
+    def snap_xy(self, xy, centers=False, edges=False, inbounds=True):
+        """
+        Snap x,y coordinates to nearest grid position.
+
+        When snapping to cell centers, points on edges snap to higher grid indices.
+        If `inbounds=True`, points on right or bottom edges snap down to stay in bounds.
+
+        Arguments:
+            xy (array): Point coordinates (Nx2)
+            centers (bool): Whether to snap to nearest cell centers
+            edges (bool): Whether to snap to nearest cell edges
+            inbounds (bool): Whether to snap points on right and bottom edges
+                to interior cell centers
+        """
+        # TODO: Faster version for image grid
+        if not centers and not edges:
+            raise ValueError("centers and edges cannot both be false")
+        origin = np.append(self.xlim[0], self.ylim[0])
+        nxy = (xy - origin) / self.d
+        if centers and not edges:
+            nxy -= 0.5
+        elif centers and edges:
+            nxy *= 2
+        nxy = np.floor(nxy + 0.5)
+        if not edges and inbounds:
+            # Points on right or bottom edges snap down to stay in bounds
+            is_outer_edge = xy == np.append(self.xlim[1], self.ylim[1])
+            nxy[is_outer_edge] -= 1
+        if centers and not edges:
+            nxy += 0.5
+        elif centers and edges:
+            nxy /= 2
+        return nxy * self.d + origin
+
+    def snap_box(self, xy, size, centers=False, edges=True, inbounds=True):
+        """
+        Snap x,y box boundaries to nearest grid positions.
+
+        Arguments:
+            xy (array-like): Point coordinates of desired box center (x, y)
+            size (array-like): Size of desired box in `xy` units (nx, ny)
+            centers (bool): Whether to snap to nearest cell centers
+            edges (bool): Whether to snap to nearest cell edges
+            inbounds (bool): See `self.snap_xy()`
+
+        Returns:
+            array: x,y box boundaries (xmin, ymin, xmax, ymax)
+        """
+        halfsize = np.multiply(size, 0.5)
+        xy_box = np.vstack((xy - halfsize, xy + halfsize))
+        if any(~self.inbounds(xy_box)):
+            raise IndexError("Sample extends beyond grid bounds")
+        return self.snap_xy(xy_box, centers=centers, edges=edges, inbounds=inbounds).flatten()
+
     def rowcol_to_xy(self, rowcol):
         """
         Return x,y coordinates of row,col indices.
@@ -167,26 +224,28 @@ class Grid(object):
         xy_origin = np.array((self.xlim[0], self.ylim[0]))
         return (rowcol + 0.5)[:, ::-1] * self.d + xy_origin
 
-    def xy_to_rowcol(self, xy, snap=False):
+    def xy_to_rowcol(self, xy, snap=False, inbounds=True):
         """
         Return row,col indices of x,y coordinates.
 
         Arguments:
             xy (array): Spatial coordinates (Nx2)
-            snap (bool): Whether to snap indices to nearest integers (cell centers).
-                Points on cell edges snap to higher indices, except
-                points on right or bottom edges snap down to stay in bounds.
+            snap (bool): Whether to snap indices to nearest cell centers
+                (see `self.snap_xy()`)
+            inbounds (bool): See `self.snap_xy()`
+
+        Returns:
+            array: row,col indices as either float (`snap=False`)
+                or int (`snap=True`)
         """
-        origin = np.append(self.xlim[0], self.ylim[0])
-        colrow = ((xy - origin) / self.d - 0.5)
+        # TODO: Remove snapping from function (now a seperate operation)
         if snap:
-            temp = np.floor(colrow + 0.5).astype(int)
-            # Points on right or bottom edges snap down to stay in bounds
-            is_outer_edge = xy == np.append(self.xlim[1], self.ylim[1])
-            temp[is_outer_edge] -= 1
-            return temp[:, ::-1]
-        else:
-            return colrow[:, ::-1]
+            xy = self.snap_xy(xy, centers=True, edges=False, inbounds=inbounds)
+        origin = np.append(self.xlim[0], self.ylim[0])
+        colrow = (xy - origin) / self.d - 0.5
+        if snap:
+            colrow = colrow.astype(int)
+        return colrow[:, ::-1]
 
     def rowcol_to_idx(self, rowcol):
         return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.n[::-1])

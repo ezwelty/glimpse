@@ -1,54 +1,57 @@
-from .imports import (np, sklearn, scipy, cv2, matplotlib, datetime)
-from . import (helpers)
+from .imports import (np, scipy, datetime)
+from . import (helpers, dem)
 
 class Observer(object):
     """
     An `Observer` contains a sequence of `Image` objects and the methods to compute
     the misfit between image subsets.
 
-    Arguments:
-        reference_halwidth: Halfwidth of reference subimage
-        search_halfwidth: Halfwidth of test subimage
-
     Attributes:
-        images (list): Image objects
+        xyz (array): Position in world coordinates (from `images[0].cam.xyz`)
+        images (list): Image objects with equal camera position (xyz),
+            focal length (f), and image size (imgsz).
         datetimes (array): Image capture times
-        ref_template (array): a subimage which acts as a color palette to match
-        pca (sklearn.decomposition.PCA): Principal components analyzer
-        sigma_pixel (float): Average std between all images for a pixel
-        hw_row, hw_col, sd_row, sd_col: Halfwidths for reference and test subimages
-        row_diff_0, col_diff_0: Residuals between prediction in pixel coords and viable index
-        ref_subimage: Reference subimage
-        rows_predicted, cols_predicted:
+        anchor (int): Index of default anchor image
+        sigma (float): Standard deviation of pixel values between images
+            due to changes in illumination, deformation, or unresolved camera motion
+        correction: Curvature and refraction correction (see `glimpse.Camera.project()`)
+        cache (bool): Whether to cache images on read
+        grid (dem.Grid): Grid object for operations on image coordinates
     """
 
-    def __init__(self, images, sigma_pixel=0.3, reference_halfwidth=15, search_halfwidth=20):
+    def __init__(self, images, anchor=0, sigma=0.3, correction=True, cache=True):
+        self.xyz = images[0].cam.xyz
+        for img in images[1:]:
+            if any(img.cam.xyz != self.xyz):
+                raise ValueError("Positions (xyz) are not equal")
+            if any(img.cam.f != images[0].cam.f):
+                raise ValueError("Focal lengths (f) are not equal")
+            if any(img.cam.imgsz != images[0].cam.imgsz):
+                raise ValueError("Image sizes (imgsz) are not equal")
         self.images = images
         self.datetimes = np.array([img.datetime for img in self.images])
-        self.pca = sklearn.decomposition.PCA(n_components=1, svd_solver='arpack', whiten=True)
-        self.sigma_pixel = sigma_pixel
-        self.hw_row = reference_halfwidth
-        self.hw_col = reference_halfwidth
-        self.sd_row = search_halfwidth
-        self.sd_col = search_halfwidth
-        self.ref_hist_template = None
+        self.anchor = self.index(anchor)
+        # TODO: Measure directly from images
+        self.sigma = sigma
+        self.correction = correction
+        self.cache = cache
+        n = self.images[0].cam.imgsz
+        self.grid = dem.Grid(n=n, xlim=(0, n[0]), ylim=(0, n[1]))
 
-    def image_index(self, img, max_seconds=0.1):
+    def index(self, img=None, max_seconds=1):
         """
-        Retrieve the integer index of an image.
+        Retrieve the index of an image.
 
         Arguments:
-            img: Either an index (int),
-                Image to find in `self.images`, or
+            img: Integer index, Image object to find in `self.images`, or
                 Date and time to match against `self.datetimes` (datetime).
+                If `None`, returns `self.anchor`.
             max_seconds (float): If `img` is datetime,
-                maximum distance in seconds to be considered a match.
+                maximum time delta in seconds to be considered a match.
         """
-        if isinstance(img, int):
-            try:
-                self.images[img]
-            except IndexError:
-                raise IndexError("Index out of range")
+        if img is None:
+            return self.anchor
+        elif isinstance(img, int):
             return img
         elif isinstance(img, datetime.datetime):
             delta_seconds = np.abs([dt.total_seconds()
@@ -61,120 +64,149 @@ class Observer(object):
         else:
             return self.images.index(img)
 
-    def link_tracker(self, tracker):
+    def project(self, xyz, directions=False, img=None):
         """
-        Assign Tracker object.
-
-        Sets some initial variables associated with the initial point.
+        Project world coordinates to image coordinates.
 
         Arguments:
-            tracker (Tracker): Tracker object
+            xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
+            directions (bool): Whether `xyz` are absolute coordinates (False)
+                or ray directions (True)
+            img: Image to sample (see `self.index()`)
         """
-        col_0, row_0 =  self.images[0].cam.project(tracker.particle_mean[:, 0:3]).squeeze()
-        self.rc = self.images[0].cam.project(tracker.particles[:, 0:3])[:, ::-1]
-        self.log_like = np.zeros((tracker.n))
-        self.ref_hist_template = self.get_subimage(row_0, col_0, self.sd_row, self.sd_col, 0, get_ref_template=True)
-        self.ref_subimage = self.get_subimage(row_0, col_0, self.hw_row, self.hw_col, 0)
+        img = self.images[self.index(img)]
+        return img.cam.project(xyz, directions=directions, correction=self.correction)
 
-    def get_subimage(self, row, col, hw_row, hw_col, image_index, do_histogram_matching=True, do_pca=True, do_median_filtering=True, median_filter_size=(5, 5), get_ref_template=False):
+    def tile_box(self, uv, size=(1, 1)):
         """
-        Extract a subimage given a row and column, and apply some image processing.
+        Compute a grid-aligned box centered around a point.
 
         Arguments:
-            row, col: row and column index
-            hw_row, hw_col: halfwidth of subimage to extract
-            image_index: which stored image to extract
-            pca: apply PCA transformation to grayscale
-            median_filter_size: apply highpass filter with specified bandwidth
+            uv (array-like): Desired box center in image coordinates (u, v)
+            size (array-like): Size of box in pixels (width, height)
 
         Returns:
-            array: Extracted subimage
+            array: Integer (pixel edge) boundaries (left, top, right, bottom)
         """
-        row_nearest = int(round(row))
-        col_nearest = int(round(col))
-        row_hw = np.linspace(row - hw_row, row + hw_row, 2 * hw_row + 1, endpoint=True)
-        col_hw = np.linspace(col - hw_col, col + hw_col, 2 * hw_col + 1, endpoint=True)
-        chip = self.images[image_index].read()[
-            (row_nearest - hw_row - 1):(2 + row_nearest + hw_row),
-            (col_nearest - hw_col - 1):(2 + col_nearest + hw_col), :].copy()
-        if get_ref_template:
-            return chip
-        rows = range(row_nearest - hw_row - 1, row_nearest + hw_row + 2)
-        cols = range(col_nearest - hw_col - 1, col_nearest + hw_col + 2)
-        if do_histogram_matching:
-            # If a reference template has been defined, perform histogram matching.  This is
-            # very helpful for ameliorating the effects of illumination changes.
-            chip[:, :, 0] = helpers.hist_match(chip[:, :, 0], self.ref_hist_template[:, :, 0])
-            chip[:, :, 1] = helpers.hist_match(chip[:, :, 1], self.ref_hist_template[:, :, 1])
-            chip[:, :, 2] = helpers.hist_match(chip[:, :, 2], self.ref_hist_template[:, :, 2])
-        if do_pca:
-            # If a pca has been defined, compute an intensity image using it.
-            m, n, q = chip.shape
-            Q = chip.reshape((m*n, q))
-            self.pca.fit(Q)
-            self.pca.components_ = np.sign(self.pca.components_[0]) * self.pca.components_
-            Qp = self.pca.transform(Q)
-            chip = Qp.reshape((m, n))
-        Ri = scipy.interpolate.RectBivariateSpline(rows, cols, chip, kx=3, ky=3)
-        chip = Ri(row_hw, col_hw, grid=True)
-        if do_median_filtering:
-            # Do median highpass filtering
-            chip_lowpass = scipy.ndimage.filters.median_filter(chip, (median_filter_size[0], median_filter_size[1]))
-            chip -= chip_lowpass
-        return chip
+        return self.grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
-    def compute_likelihood(self, pmean, particles, t):
+    def extract_tile(self, box, img=None, gray=False, highpass=False,
+        template=False, subpixel=False, uv=None):
         """
-        Compute the likelihood of each particle in a population based on SSE between a reference and test subimage.
+        Extract rectangular image region.
+
+        Optional operations are applied in the following order:
+        convert to grayscale (`gray`), apply high-pass filter (`highpass`),
+        match histogram to template (`template`), correct subpixel offset (`subpixel`).
 
         Arguments:
-            pmean: particle mean values
-            particles: particle array
-            t (datetime): Target date and time
-
-        Returns:
-            log_likelihood: log likelihood for each particle
+            box (array-like): Boundaries of tile in image coordinates
+                (left, top, right, bottom)
+            img: Image to read (see `self.index()`)
+            gray (bool or dict): Whether to convert tile to grayscale.
+                Either arguments to `helpers.rgb_to_gray` (dict),
+                `True` for default arguments, or `False` to skip.
+            template (bool or array-like): Histogram matching template
+                (see `helpers.match_histogram`) or `False` to skip.
+            highpass (bool or dict): Whether to apply a median high-pass filter.
+                Either arguments to `scipy.ndimage.filters.median_filter`,
+                `True` for default arguments, or `False` to skip.
+            subpixel (bool or dict): Whether to correct for subpixel offset
+                between desired and actual center of tile.
+                Either arguments to `scipy.interpolate.RectBivariateSpline` (dict),
+                `True` for default arguments, or `False` to skip.
+            uv (array-like): Desired center of tile in image coordinates (u, v)
         """
-        # Check for an image at the current time.
-        try:
-            image_index = self.image_index(t, max_seconds=0.1)
-        except IndexError:
-            # If none, return a constant likelihood
-            return 0.0
-        # Extract a subimage around predicted coordinates
-        current_image = self.images[image_index]
-        col_1, row_1 = current_image.cam.project(pmean[:, 0:3]).squeeze()
-        self.test_subimage = self.get_subimage(row_1, col_1, self.sd_row, self.sd_col, image_index)
-        # Try generating a likelihood interpolant and evaluate for each particle
-        #try:
-        like_interpolant = self.get_likelihood_interpolant(self.ref_subimage, self.test_subimage, row_1, col_1)
-        self.rc = current_image.cam.project(particles[:, 0:3])[:, ::-1]
-        self.log_like = like_interpolant(self.rc[:, 0], self.rc[:, 1], grid=False) / self.sigma_pixel**2
-        # If too close to the image boundary, return a constant log_likelihood
-        #except IndexError:
-        #    log_like = 1.
-        return self.log_like
+        # Apply defaults
+        if gray is True:
+            gray = dict()
+        if highpass is True:
+            highpass = dict()
+        if subpixel is True:
+            subpixel = dict()
+        # Extract image region
+        img = self.images[self.index(img)]
+        # NOTE: Copy not necessary here in cases when copied later
+        I = img.read(box=box, cache=self.cache).copy()
+        # NOTE: Move operations to tracker? Different trackers may have different needs.
+        if gray is not False:
+            # Convert to grayscale
+            I = helpers.rgb_to_gray(I, **gray)
+        if highpass is not False:
+            # Apply median high-pass filter
+            I_low = scipy.ndimage.filters.median_filter(I, **highpass)
+            I -= I_low
+        if template is not False:
+            # Match histogram to template
+            if I.ndim < 3:
+                I = helpers.match_histogram(I, template=template)
+            else:
+                for i in xrange(I.shape[2]):
+                    I[i] = helpers.hist_match(I[i], template[i])
+        if subpixel is not False and uv is not None:
+            # Correct subpixel offset from desired center
+            duv = uv - np.reshape(box, (2, -1)).mean(axis=0)
+            I = self.shift_tile(I, duv=duv.flatten(), **subpixel)
+        return I
 
-    def get_likelihood_interpolant(self, ref_subimage, test_subimage, row, col):
+    def shift_tile(self, tile, duv, **kwargs):
         """
-        Produce an object for evaluating the log likelihood of particles.
+        Shift tile by a half-pixel (or smaller) offset.
+
+        Useful for centering a tile over an arbitrary center point.
 
         Arguments:
-            ref_subimage, test_subimage:
-            row_nearest, col_nearest: the row and column corresponding to the center of test_subimage
-            row_diff_*: corrections for rounding to indices
-        Returns:
-            local_interp: A Bivariate Spline that can be used to assign
-                          likelihood to particles
+            tile (array): 2-d array
+            duv (array-like): Shift in image coordinates (du, dv).
+                Must be 0.5 pixels or smaller in each dimension.
+            **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
-        # Compute normalized correlation coefficients
-        rhos = cv2.matchTemplate(test_subimage.astype('float32'), ref_subimage.astype('float32'), method=cv2.TM_SQDIFF)
-        rhos /= (ref_subimage.shape[0] * ref_subimage.shape[1])
-        rcoords = row - (self.sd_row - self.hw_row) + np.array(range(rhos.shape[0]))
-        ccoords = col - (self.sd_col - self.hw_col) + np.array(range(rhos.shape[1]))
-        # Get subpixel accuracy by fitting the correlation surface with a cubic spline and maximizing
-        local_interp = scipy.interpolate.RectBivariateSpline(rcoords, ccoords, rhos, kx=3, ky=3)
-        return local_interp
+        if any(np.abs(duv) > 0.5):
+            raise ValueError("Shift larger than 0.5 pixels")
+        # Cell center coordinates (arbitrary origin)
+        cu = self.grid.x[0:tile.shape[0]] # x|cols
+        cv = self.grid.y[0:tile.shape[1]] # y|rows
+        # Interpolate at shifted center coordinates
+        f = scipy.interpolate.RectBivariateSpline(
+            cv, cu, tile, **kwargs)
+        return f(cv + duv[1], cu + duv[0], grid=True)
+
+    def sample_tile(self, uv, tile, box, grid=False, **kwargs):
+        """
+        Sample tile at image coordinates.
+
+        Arguments:
+            uv (array-like): Image coordinates as either points (Nx2) if `grid=False`
+                or an iterable of grid coordinate arrays (u, v) if `grid=True`
+            tile (array): 2-d array
+            box (array-like): Boundaries of tile in image coordinates
+                (left, top, right, bottom)
+            grid (bool): See `uv`
+            **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
+        """
+        # TODO: Throw error if uv out of bounds (use helpers.in_box)
+        # NOTE: Very similar to DEM.sample(). Consider a general Raster(Grid) object.
+        # NOTE: Would scipy.interpolate.RegularGridInterpolator be faster?
+        # Cell sizes
+        du = (box[2] - box[0]) / tile.shape[1]
+        dv = (box[3] - box[1]) / tile.shape[0]
+        # Cell center coordinates
+        cu = np.arange(box[0] + du * 0.5, box[2]) # x|cols
+        cv = np.arange(box[1] + dv * 0.5, box[3]) # y|rows
+        # Interpolate at arbitrary coordinates
+        f = scipy.interpolate.RectBivariateSpline(
+            cv, cu, tile, **kwargs)
+        if grid:
+            return f(uv[1], uv[0], grid=grid)
+        else:
+            return f(uv[:, 1], uv[:, 0], grid=grid)
+
+    def clear_cache(self):
+        """
+        Clear cached image data from all images.
+        """
+        for img in self.images:
+            img.I = None
 
     # Real time plotting utilities
     def initialize_plot(self, ax):

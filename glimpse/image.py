@@ -1043,7 +1043,7 @@ class Image(object):
         """
         return Image(path=self.path, cam=self.cam.copy())
 
-    def read(self, box=None, gray=False, cache=True):
+    def read(self, box=None, cache=True):
         """
         Read image data from file.
 
@@ -1059,7 +1059,6 @@ class Image(object):
                 If `cache=True`, the region is extracted from the cached image.
                 If `cache=False`, the region is extracted directly from the file
                 (faster than reading the entire image).
-            gray (bool): Whether to return image as grayscale.
             cache (bool): Whether to save image in `self.I`
         """
         I = self.I
@@ -1099,10 +1098,7 @@ class Image(object):
         if box is not None and (cache or not new_I):
             # Caching and cropping: Subset cached array
             I = I[box[1]:box[3], box[0]:box[2]]
-        if gray and I.ndim > 2:
-            return (0.2126 * I[:, :, 0] + 0.7152 * I[:, :, 1] + 0.0722 * I[:, :, 2]).astype(I.dtype)
-        else:
-            return I
+        return I
 
     def write(self, path, I=None, **params):
         """

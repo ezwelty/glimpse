@@ -1,75 +1,7 @@
 from .imports import (
-    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, gdal, os,
-    datetime, time, PIL)
+    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL, sklearn)
 
-# Save and load commands for efficient pickle objects
-def save_zipped_pickle(obj, filename, protocol=-1):
-    with gzip.open(filename, 'wb') as f:
-        cPickle.dump(obj, f, protocol)
-
-def load_zipped_pickle(filename):
-    with gzip.open(filename, 'rb') as f:
-        loaded_object = cPickle.load(f)
-        return loaded_object
-
-def hist_match(source, template):
-    """
-    Adjust the pixel values of a grayscale image such that its histogram
-    matches that of a target image
-
-    Arguments:
-    -----------
-        source: np.ndarray
-            Image to transform; the histogram is computed over the flattened
-            array
-        template: np.ndarray
-            Template image; can have different dimensions to source
-    Returns:
-    -----------
-        matched: np.ndarray
-            The transformed output image
-    """
-
-    oldshape = source.shape
-    source = source.ravel()
-    template = template.ravel()
-
-    # get the set of unique pixel values and their corresponding indices and
-    # counts
-    s_values, bin_idx, s_counts = np.unique(source, return_inverse=True,
-                                            return_counts=True)
-    t_values, t_counts = np.unique(template, return_counts=True)
-
-    # take the cumsum of the counts and normalize by the number of pixels to
-    # get the empirical cumulative distribution functions for the source and
-    # template images (maps pixel value --> quantile)
-    s_quantiles = np.cumsum(s_counts).astype(np.float64)
-    s_quantiles /= s_quantiles[-1]
-    t_quantiles = np.cumsum(t_counts).astype(np.float64)
-    t_quantiles /= t_quantiles[-1]
-
-    # interpolate linearly to find the pixel values in the template image
-    # that correspond most closely to the quantiles in the source image
-    interp_t_values = np.interp(s_quantiles, t_quantiles, t_values)
-
-    return interp_t_values[bin_idx].reshape(oldshape)
-
-def nearest_neighbours(x, lst):
-    if x <= lst[0]:
-        return 0
-    elif x >= lst[-1]:
-        return len(lst)-1
-    else:
-        for i,y in enumerate(lst[:-1]):
-            if y <= x <= lst[i+1]:
-                return i,i+1
-
-def get_image_names_and_times(img_dir,extension='.json'):
-    img_names = np.sort([s.rstrip(extension) for s in os.listdir(img_dir)])
-    img_names.sort()
-    datetimes = [datetime.datetime(int(n[6:10]),int(n[10:12]),int(n[12:14]),int(n[15:17]),int(n[17:19]),int(n[19:21])) for n in img_names]
-    times = np.array([time.mktime(dd.timetuple()) for dd in datetimes])#/(60**2*24)
-    return img_names,times
+# ---- General ---- #
 
 def merge_dicts(*args):
     """
@@ -118,6 +50,160 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
     if ltype:
         obj = ltype(obj)
     return obj
+
+# ---- Pickles ---- #
+
+def save_zipped_pickle(obj, path, protocol=-1):
+    """
+    Save object to compressed pickle file.
+    """
+    with gzip.open(path, 'wb') as fp:
+        cPickle.dump(obj=obj, file=fp, protocol=protocol)
+
+def load_zipped_pickle(path):
+    """
+    Load object from compressed pickle file.
+    """
+    with gzip.open(path, 'rb') as fp:
+        return cPickle.load(fp)
+
+# ---- Arrays: General ---- #
+
+def normalize(array, interval=None):
+    """
+    Normalize a numeric array.
+
+    Translates and scales the values of an array to the interval (0, 1) based on
+    the specified measurement interval (min, max).
+
+    Arguments:
+        array (array): Input array
+        interval: Measurement interval (min, max) as either an iterable or np.dtype.
+            If `None`, the min and max of `array` are used.
+
+    Returns:
+        array (optional): Normalized copy of array, cast to float
+    """
+    if isinstance(interval, np.dtype):
+        dtype = interval.type
+        if issubclass(dtype, np.integer):
+            info = np.iinfo(dtype)
+        elif issubclass(dtype, np.floating):
+            info = np.finfo(dtype)
+        interval = (info.min, info.max)
+    else:
+        if interval is None:
+            interval = array
+        interval = (min(interval), max(interval))
+    return (array + (-interval[0])) * (1.0 / (interval[1] - interval[0]))
+
+# ---- Arrays: Images ---- #
+
+def linear_to_gamma(array, gamma=2.2):
+    """
+    Converts linear values to gamma-corrected values.
+
+    f(x) = x ^ (1 / gamma)
+    Assumes the array values are normalized to interval (0, 1).
+
+    Arguments:
+        array (array): Input array
+        gamma (float): Gamma coefficient
+    """
+    return array**gamma
+
+def gamma_to_linear(array, gamma=2.2):
+    """
+    Converts gamma-corrected values to linear values.
+
+    f(x) = x ^ (1 / gamma)
+    Assumes the array values are normalized to interval (0, 1).
+
+    Arguments:
+        array (array): Input array
+        gamma (float): Gamma coefficient
+    """
+    return array**(1 / gamma)
+
+GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver='arpack', whiten=True)
+
+def rgb_to_gray(rgb, method='average', weights=None, pca=None):
+    """
+    Convert a color image to a grayscale image.
+
+    Arguments:
+        rgb (array): 3-d color image
+        method (str): Either 'average' for a weighted average of each channel,
+            or 'pca' for a principal components transform.
+        weights (array-like): Weights for each channel of `rgb`.
+            If `None`, the channels are assigned equal weight.
+        pca (sklearn.decomposition.pca.PCA): PCA object.
+            If `None`, `glimpse.helpers.GRAY_PCA` is used
+            (n_components=1, svd_solver='arpack', whiten=True).
+
+    Returns:
+        array: 2-d grayscale image
+    """
+    if method is 'average':
+        return np.average(rgb, axis=2, weights=weights)
+    else:
+        if pca is None:
+            pca = GRAY_PCA
+        Q = rgb.reshape(-1, rgb.shape[2])
+        pca.fit(Q)
+        pca.components_ = np.sign(pca.components_[0]) * pca.components_
+        return pca.transform(Q).reshape(rgb.shape[0:2])
+
+def compute_cdf(array, return_inverse=False):
+    """
+    Compute the cumulative distribution function of an array.
+
+    Arguments:
+        array (array): Input array
+        return_inverse (bool): Whether to return the indices of the returned
+            `values` that reconstruct `array`
+
+    Returns:
+        array: Sorted unique values
+        array: Quantile of each value in `values`
+        array (optional): Indices of `values` which reconstruct `array`.
+            Only returned if `return_inverse=True`.
+    """
+    results = np.unique(array, return_inverse=return_inverse, return_counts=True)
+    # Normalize cumulative sum of counts by the number of pixels
+    quantiles = np.cumsum(results[-1]).astype(float) / array.size
+    if return_inverse:
+        return results[0], quantiles, results[1]
+    else:
+        return results[0], quantiles
+
+def match_histogram(source, template): # hist_match
+    """
+    Adjust the values of an array such that its histogram matches that of a target array.
+
+    Arguments:
+        source (array): Array to transform.
+        template: Histogram template as either an array (of any shape)
+            or an iterable (unique values, unique value quantiles).
+
+    Returns:
+        array: Transformed `source` array
+    """
+    s_values, s_quantiles, inverse_index = compute_cdf(source, return_inverse=True)
+    if isinstance(template, np.ndarray):
+        template = compute_cdf(template, return_inverse=False)
+    # Interpolate new values based on source and template quantiles
+    new_values = np.interp(s_quantiles, template[1], template[0])
+    return new_values[inverse_index].reshape(source.shape)
+
+# ---- GIS ---- #
+
+# FIXME: Unused?
+def dms_to_degrees(degrees, minutes, seconds):
+    """
+    Convert degree-minute-second to decimal degrees.
+    """
+    return degrees + minutes / 60.0 + seconds / 3600.0
 
 def sp_transform(points, current, target):
     """
@@ -319,6 +405,8 @@ def ordered_geojson(obj, properties=None,
     obj = copy.deepcopy(obj)
     return order_item(obj)
 
+# ---- Geometry ---- #
+
 def boolean_split(x, mask, axis=0, circular=False, include='all'):
     """
     Split array by boolean mask.
@@ -342,31 +430,6 @@ def boolean_split(x, mask, axis=0, circular=False, include='all'):
         return splits[index]
     else:
         return list()
-
-def rasterize_points(rows, cols, values, shape, fun=np.mean):
-    """
-    Rasterize points by array indices.
-
-    Points are aggregated by equal row and column indices and the specified function,
-    then inserted into an empty array.
-
-    Arguments:
-        rows (array): Point row indices
-        cols (array): Point column indices
-        values (array): Point value
-        shape (tuple): Output array row and column size
-        fun (function): Aggregate function to apply to values of overlapping points
-
-    Returns:
-        array: Float array of shape `shape` with aggregated point values
-            where available and `NaN` elsewhere
-    """
-    df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
-    groups = df.groupby(('row', 'col')).aggregate(fun).reset_index()
-    idx = np.ravel_multi_index((groups.row.as_matrix(), groups.col.as_matrix()), shape)
-    grid = np.full(shape, np.nan)
-    grid.flat[idx] = groups.value.as_matrix()
-    return grid
 
 def intersect_rays_plane(origin, directions, plane):
     """
@@ -399,9 +462,9 @@ def in_box(points, box):
 
     Arguments:
         points (array): Point coordinates (npts, ndim)
-        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        box (array-like): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
-    box = box.reshape(2, -1)
+    box = np.reshape(box, (2, -1))
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
 
 def clip_polyline_box(line, box, t=False):
@@ -580,6 +643,7 @@ def bresenham_line(start, end):
         points.reverse()
     return np.array(points)
 
+# FIXME: Unused?
 def bresenham_circle(center, radius):
     x0 = center[0]
     y0 = center[1]
@@ -634,6 +698,7 @@ def bresenham_circle(center, radius):
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
     return xy
 
+# FIXME: Unused?
 def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
     # http://pysal.readthedocs.io/en/latest/library/weights/Distance.html#pysal.weights.Distance.Kernel
     nd = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(data))
@@ -654,11 +719,16 @@ def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
     # Compute weights as inverse sum of kernel distances
     return 1 / np.sum(temp, axis=1)
 
-def dms_to_degrees(degrees, minutes, seconds):
-    """
-    Convert degree-minute-second to decimal degrees.
-    """
-    return degrees + minutes / 60.0 + seconds / 3600.0
+# TODO: Deprecate?
+def nearest_neighbours(x, lst):
+    if x <= lst[0]:
+        return 0
+    elif x >= lst[-1]:
+        return len(lst)-1
+    else:
+        for i, y in enumerate(lst[:-1]):
+            if y <= x <= lst[i+1]:
+                return i, i+1
 
 def intersect_ranges(ranges):
     # ranges: ((min, max), ...) or 2-d array
@@ -684,21 +754,46 @@ def intersect_boxes(boxes):
     else:
         return np.hstack((boxmin, boxmax))
 
-def compute_mask_array_from_svg(path_to_svg,array_shape,skip=[]):
+# ---- Image formation ---- #
+
+def rasterize_points(rows, cols, values, shape, fun=np.mean):
+    """
+    Rasterize points by array indices.
+
+    Points are aggregated by equal row and column indices and the specified function,
+    then inserted into an empty array.
+
+    Arguments:
+        rows (array): Point row indices
+        cols (array): Point column indices
+        values (array): Point value
+        shape (tuple): Output array row and column size
+        fun (function): Aggregate function to apply to values of overlapping points
+
+    Returns:
+        array: Float array of shape `shape` with aggregated point values
+            where available and `NaN` elsewhere
+    """
+    df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
+    groups = df.groupby(('row', 'col')).aggregate(fun).reset_index()
+    idx = np.ravel_multi_index((groups.row.as_matrix(), groups.col.as_matrix()), shape)
+    grid = np.full(shape, np.nan)
+    grid.flat[idx] = groups.value.as_matrix()
+    return grid
+
+def compute_mask_array_from_svg(path_to_svg, array_shape, skip=[]):
     from svgpathtools import svg2paths
     from matplotlib import path
-    paths,attributes = svg2paths(path_to_svg)
-    q = [np.array([(l.point(0).real,l.point(0).imag) for l in p] + [(p[0].point(0).real,p[0].point(0).imag)]) for p in paths]
+    paths, attributes = svg2paths(path_to_svg)
+    q = [np.array([(l.point(0).real, l.point(0).imag) for l in p] + [(p[0].point(0).real, p[0].point(0).imag)]) for p in paths]
     paths = [path.Path(qq) for qq in q]
-
     mask = np.zeros(array_shape).astype(bool)
-    cols,rows = np.meshgrid(range(mask.shape[1]),range(mask.shape[0]))
+    cols, rows = np.meshgrid(range(mask.shape[1]), range(mask.shape[0]))
     cols_f = cols.ravel()
     rows_f = rows.ravel()
-    for i,p in enumerate(paths):
+    for i, p in enumerate(paths):
         if i not in skip:
-
-            inside = p.contains_points(zip(cols.ravel(),rows.ravel()))
+            inside = p.contains_points(zip(cols.ravel(), rows.ravel()))
             mask+=inside.reshape(mask.shape)
     return mask.astype('uint8')
 

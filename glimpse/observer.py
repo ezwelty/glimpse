@@ -9,7 +9,8 @@ class Observer(object):
     Attributes:
         xyz (array): Position in world coordinates (from `images[0].cam.xyz`)
         images (list): Image objects with equal camera position (xyz),
-            focal length (f), and image size (imgsz).
+            focal length (f), image size (imgsz) and
+            strictly increasing in time (`datetime`)
         datetimes (array): Image capture times
         anchor (int): Index of default anchor image
         sigma (float): Standard deviation of pixel values between images
@@ -30,8 +31,11 @@ class Observer(object):
                 raise ValueError("Image sizes (imgsz) are not equal")
         self.images = images
         self.datetimes = np.array([img.datetime for img in self.images])
+        time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
+        if any(time_deltas <= 0):
+            raise ValueError("Image datetimes are not stricly increasing")
         self.anchor = self.index(anchor)
-        # TODO: Measure directly from images
+        # TODO: Estimate sigma from images
         self.sigma = sigma
         self.correction = correction
         self.cache = cache

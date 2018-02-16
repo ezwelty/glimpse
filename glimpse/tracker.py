@@ -1,4 +1,4 @@
-from .imports import (np, cv2, warnings, datetime)
+from .imports import (np, cv2, warnings, datetime, matplotlib)
 from . import (helpers)
 
 class Tracker(object):
@@ -33,6 +33,8 @@ class Tracker(object):
         self.datetimes = None
         self.means = None
         self.covariances = None
+        # Plotting only
+        self.test_tiles = None
 
     @property
     def n(self):
@@ -69,7 +71,7 @@ class Tracker(object):
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
         self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
-        self.weights = np.ones(n).astype(float) / n
+        self.weights = np.full(n, 1.0 / n)
 
     def advance_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
         """
@@ -104,16 +106,45 @@ class Tracker(object):
         """
         Prune unlikely particles and reproduce likely ones.
         """
-        relative_position = (np.arange(self.n) + np.random.random()) / self.n
-        cumulative_weight = np.cumsum(self.weights)
-        indexes = np.zeros(self.n, dtype=int)
-        i, j = 0, 0
-        while i < self.n:
-            if relative_position[i] < cumulative_weight[j]:
-                indexes[i] = j
-                i += 1
-            else:
-                j += 1
+        # Systematic resample
+        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+        def f():
+            positions = (np.arange(self.n) + np.random.random()) * (1.0 / self.n)
+            cumulative_weight = np.cumsum(self.weights)
+            indexes = np.zeros(self.n, dtype=int)
+            i, j = 0, 0
+            while i < self.n:
+                if positions[i] < cumulative_weight[j]:
+                    indexes[i] = j
+                    i += 1
+                else:
+                    j += 1
+            return indexes
+        # Residual resample (vectorized)
+        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+        def f1a():
+            repetitions = (self.n * self.weights).astype(int)
+            initial_indexes = np.repeat(np.arange(self.n), repetitions)
+            residuals = self.weights - repetitions
+            residuals *= 1 / residuals.sum()
+            cumulative_sum = np.cumsum(residuals)
+            cumulative_sum[-1] = 1.0
+            additional_indexes = np.searchsorted(
+                cumulative_sum, np.random.random(self.n - len(initial_indexes)))
+            return np.hstack((initial_indexes, additional_indexes))
+        def f1b():
+            repetitions = (self.n * self.weights).astype(int)
+            initial_indexes = np.repeat(np.arange(self.n), repetitions)
+            residuals = self.weights - repetitions
+            residuals += residuals.min()
+            residuals *= 1 / residuals.sum()
+            additional_indexes = np.random.choice(
+                np.arange(self.n), size=(self.n - len(initial_indexes), ), replace=True, p=residuals)
+            return np.hstack((initial_indexes, additional_indexes))
+        # Random sample
+        def f3():
+            return np.random.choice(np.arange(self.n), size=(self.n, ), replace=True, p=self.weights)
+        indexes = f()
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
@@ -145,17 +176,19 @@ class Tracker(object):
         self.covariances = [self.particle_covariance]
         if plot:
             self.initialize_plot()
-        delta_times = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
-        delta_times /= self.time_unit
-        for t, dt in zip(self.datetimes[1:], delta_times):
+        time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
+        time_deltas *= 1.0 / self.time_unit
+        for t, dt in zip(self.datetimes[1:], time_deltas):
+            self.test_tiles = [None] * len(self.observers)
             self.advance_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
-            likelihoods = self.compute_likelihoods(t)
+            likelihoods = self.compute_likelihoods(t, maxdt=maxdt)
             self.update_weights(likelihoods)
             self.resample_particles()
             self.means.append(self.particle_mean)
             self.covariances.append(self.particle_covariance)
             if plot:
-                self.update_plot(t)
+                matplotlib.pyplot.waitforbuttonpress()
+                self.update_plot()
 
     def _initialize_track(self, datetimes=None, maxdt=0, tile_size=(15, 15)):
         """
@@ -216,7 +249,7 @@ class Tracker(object):
             except IndexError:
                 # Skip Observer if no matching image
                 continue
-            img = observer.index(ti, max_seconds=maxdt * self.time_unit)
+            img = observer.index(img=self.datetimes[ti], max_seconds=maxdt * self.time_unit)
             center_uv = observer.project(center_xyz, img=img)
             box = observer.tile_box(center_uv, size=tile_size)
             self.tiles[i] = observer.extract_tile(
@@ -225,36 +258,30 @@ class Tracker(object):
             self.histograms[i] = helpers.compute_cdf(
                 self.tiles[i], return_inverse=False)
 
-    def compute_likelihoods(self, t):
+    def compute_likelihoods(self, t, maxdt=0):
         """
         Compute the likelihoods of the particles summed across all observers.
 
         Arguments:
             t (datetime): Date and time at which to query Observers
         """
-        log_likelihoods = [self._compute_observer_log_likelihoods(t, observer)
+        log_likelihoods = [self._compute_observer_log_likelihoods(observer, t, maxdt)
             for observer in self.observers]
         return np.exp(-sum(log_likelihoods))
 
-    def _compute_observer_log_likelihoods(self, t, obs=0):
+    def _compute_observer_log_likelihoods(self, observer, t, maxdt=0):
         """
         Compute the log likelihoods of each particle for an Observer.
 
         Arguments:
             t (datetime): Date and time at which to query Observer
-            obs: Either index of Observer or Observer object
+            obsberver (Observer): Observer object
         """
-        # Select observer
-        if isinstance(obs, int):
-            observer = self.observers[obs]
-            i = obs
-        else:
-            i = self.observers.index(obs)
-            observer = obs
+        i = self.observers.index(observer)
         # Select image
         try:
             # TODO: Control
-            img = observer.index(t)
+            img = observer.index(t, max_seconds=maxdt * self.time_unit)
         except IndexError:
             # If no image, return a constant log likelihood
             return np.array([0.0])
@@ -270,10 +297,10 @@ class Tracker(object):
             # Tile extends beyond image bounds
             raise IndexError("Particle bounding box extends beyond image bounds: " + str(box))
         # Extract test tile
-        test_tile = observer.extract_tile(box=box.flatten(), template=self.histograms[i],
-            gray=dict(method='pca'), highpass=dict(size=(5, 5)))
+        self.test_tiles[i] = observer.extract_tile(box=box.flatten(), template=self.histograms[i],
+            img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)))
         # Compute area-averaged sum of squares error
-        sse = cv2.matchTemplate(test_tile.astype(np.float32),
+        sse = cv2.matchTemplate(self.test_tiles[i].astype(np.float32),
             templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)
         sse *= 1.0 / (self.tiles[i].shape[0] * self.tiles[i].shape[1])
         # Sample at projected particles
@@ -285,62 +312,57 @@ class Tracker(object):
         return sampled_sse * (1.0 / observer.sigma**2)
 
     def initialize_plot(self):
+        # useful plot:
+        # map of mean position and particles
+        # test_tile with reference tile as box
+        # particles projected
         """
         Initialize animation plot.
-
         Warning: Do not use with multiprocessing!
         """
         matplotlib.pyplot.ion()
-        nplots = 1 + len(self.observers)
+        nplots = len(self.observers) + 1
         self.fig, self.ax = matplotlib.pyplot.subplots(
             nrows=1, ncols=nplots, figsize=(10 * nplots, 10))
         self.fig.tight_layout()
-        #self.ax[0].contourf(self.dem.X, self.dem.Y, self.dem.hillshade(), 31, cmap=matplotlib.pyplot.cm.gray)
         self.meplot = self.ax[0].scatter(
             self.means[0][0, 0], self.means[0][0, 1],
-            c='red', s=50, label='Mean position')
+            color='red', s=50, label='Mean position')
         v = np.hypot(self.particles[:, 3], self.particles[:, 4])
         self.pa_plot = self.ax[0].quiver(
             self.particles[:, 0], self.particles[:, 1],
             self.particles[:, 3] / v, self.particles[:, 4] / v, v,
             cmap=matplotlib.pyplot.cm.gnuplot2, clim=(0, 15), alpha=0.2, linewidths=0)
         self.ax[0].legend()
-        self.cb = matplotlib.pyplot.colorbar(self.pa_plot, ax=self.ax[0],
-            orientation='horizontal', aspect=30, pad=0.07)
-        self.cb.set_label('Speed')
-        self.cb.solids.set_edgecolor('face')
-        self.cb.solids.set_alpha(1)
         self.ax[0].set_xlabel('X')
         self.ax[0].set_ylabel('Y')
         self.ax[0].axis('equal')
         self.ax[0].set_xlim(self.means[0][0, 0] - 50, self.means[0][0, 0] + 50)
         self.ax[0].set_ylim(self.means[0][0, 1] - 50, self.means[0][0, 1] + 50)
-        for axis, observer in zip(self.ax[1:], self.observers):
-            observer.initialize_plot(axis)
-        matplotlib.pyplot.pause(2.0)
+        self.cb = matplotlib.pyplot.colorbar(self.pa_plot, ax=self.ax[0],
+            orientation='horizontal', aspect=30, pad=0.07)
+        self.cb.set_label('Speed')
+        self.cb.solids.set_edgecolor('face')
+        self.cb.solids.set_alpha(1)
+        # for i, tile in enumerate(self.tiles):
+        #     if tile is not None:
+        #         self.ax[i + 1].imshow(tile, cmap='Greys_r')
 
-    def update_plot(self, t):
+    def update_plot(self):
         """
         Update animation plot.
-
-        Arguments:
-            t (datetime): Date and time
         """
         self.meplot.remove()
-        self.pa_plot.remove()
-        self.meplot = self.ax[0].scatter(
-            [m.squeeze()[0] for m in self.means],
-            [m.squeeze()[1] for m in self.means], s=50, c='red')
+        means = np.vstack(self.means)
+        self.meplot = self.ax[0].scatter(means[:, 0], means[:, 1], s=50, c='red')
         v = np.hypot(self.particles[:, 3], self.particles[:, 4])
+        self.pa_plot.remove()
         self.pa_plot = self.ax[0].quiver(
             self.particles[:, 0], self.particles[:, 1],
             self.particles[:, 3] / v, self.particles[:, 4] / v, v,
             scale=50, cmap=matplotlib.pyplot.cm.gnuplot2, clim=[0, 15], alpha=0.2)
-        xmed = np.median(self.particles[:, 0])
-        ymed = np.median(self.particles[:, 1])
-        self.ax[0].set_xlim(xmed - 50, xmed + 50)
-        self.ax[0].set_ylim(ymed - 50, ymed + 50)
-        for observer in self.observers:
-            observer.update_plot(t)
-        #self.fig.savefig('./particle_tracker_imgs/images_{0:03d}.jpg'.format(self.counter), bbox_inches='tight', dpi=300)
-        matplotlib.pyplot.pause(0.00001)
+        self.ax[0].set_xlim(means[-1, 0] - 50, means[-1, 0] + 50)
+        self.ax[0].set_ylim(means[-1, 1] - 50, means[-1, 1] + 50)
+        for i, tile in enumerate(self.test_tiles):
+            if tile is not None:
+                self.ax[i + 1].imshow(tile, cmap='Greys_r')

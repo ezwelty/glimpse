@@ -1,4 +1,4 @@
-from .imports import (np, cv2)
+from .imports import (np, cv2, warnings, datetime)
 from . import (helpers)
 
 class Tracker(object):
@@ -8,7 +8,7 @@ class Tracker(object):
     Attributes:
         observers (list): Observer objects
         dem (DEM): Digital elevation model of the surface on which to track points
-        time_unit (float): Length of time unit for particle evolution arguments, in seconds
+        time_unit (float): Length of time unit for temporal arguments, in seconds
             (e.g., 1 minute = 60, 1 hour = 3600)
         n (int): Number of particles (more particles gives better results at higher expense)
         particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
@@ -19,10 +19,9 @@ class Tracker(object):
         means (list): `particle_mean` at each `datetimes`
         covariances (list): `particle_covariance` at each `datetimes`
     """
-    def __init__(self, observers, dem, tile_size=(15, 15), time_unit=1):
+    def __init__(self, observers, dem, time_unit=1):
         self.observers = observers
         self.dem = dem
-        self.tile_size = tile_size
         self.time_unit = time_unit
         # Placeholders: particles
         self.particles = None
@@ -47,16 +46,16 @@ class Tracker(object):
     def particle_covariance(self):
         return np.cov(self.particles.T, aweights=self.weights)
 
-    # TODO: initialized property
+    @property
+    def initialized(self):
+        return self.particles is not None
 
-    def initialize(self, n, xy, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0)):
+    def initialize_particles(self, n, xy, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0)):
         """
         Initialize particles given an initial normal distribution.
 
         Temporal arguments (`vxy`, `vxy_sigma`) are assumed to be in
         `self.time_unit` time units.
-        Reference image tiles are loaded from each observer centered around
-        the weighted mean of the particles positions (`self.tiles` and `self.histograms`).
 
         Arguments:
             n (int): Number of particles
@@ -65,27 +64,12 @@ class Tracker(object):
             vxy (array-like): Mean velocity (x, y)
             vxy_sigma (array-like): Standard deviation of velocities (x, y)
         """
-        # TODO: Tile operations to properties: Observer or Tracker?
-        # TODO: Initialize observers based on start time?
-        # Initialize particles with equal weights
         if self.particles is None or self.n != n:
             self.particles = np.zeros((n, 5))
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
         self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
         self.weights = np.ones(n).astype(float) / n
-        # Initialize reference tiles and histograms
-        center_xyz = self.particle_mean[:, 0:3]
-        self.tiles = []
-        self.histograms = []
-        for i, observer in enumerate(self.observers):
-            center_uv = observer.project(center_xyz)
-            box = observer.tile_box(center_uv, size=self.tile_size)
-            self.tiles.append(observer.extract_tile(
-                box, gray=dict(method='pca'), highpass=dict(size=(5, 5)),
-                subpixel=dict(kx=3, ky=3), uv=center_uv))
-            self.histograms.append(helpers.compute_cdf(
-                self.tiles[-1], return_inverse=False))
 
     def advance_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
         """
@@ -134,29 +118,29 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, datetimes=None, axy=(0, 0), axy_sigma=(0, 0), plot=False):
+    def track(self, datetimes=None, maxdt=0, tile_size=(15, 15),
+        axy=(0, 0), axy_sigma=(0, 0), plot=False):
         """
         Track particles through time.
 
-        Temporal arguments (`axy`, `axy_sigma`) are assumed to be in
+        Temporal arguments (`maxdt`, `axy`, `axy_sigma`) are assumed to be in
         `self.time_unit` time units.
-        Results are saved as
+        Tracking results are saved in
         `self.datetimes`, `self.means`, and `self.covariances`.
 
         Arguments:
-            datetimes (array-like): Datetime.datetime objects at which to track particles.
+            datetimes (array-like): Monotonically increasing sequence of
+                datetimes at which to track particles.
                 If `None`, defaults to all unique datetimes in `self.observers`.
+            maxdt (float): Maximum time delta for an image to match `datetimes`
+            tile_size (array-like): Size of reference tiles in pixels (width, height)
             axy (array-like): Mean of random accelerations (x, y)
             axy_sigma (array-like) Standard deviation of random accelerations (x, y)
             plot (bool): Whether to plot results in realtime
         """
         if self.particles is None:
             raise Exception("Particles are not initialized")
-        if datetimes:
-            self.datetimes = datetimes
-        else:
-            obs_datetimes = np.hstack((obs.datetimes for obs in self.observers))
-            self.datetimes = np.sort(np.unique(obs_datetimes))
+        self._initialize_track(datetimes=datetimes, maxdt=maxdt, tile_size=tile_size)
         self.means = [self.particle_mean]
         self.covariances = [self.particle_covariance]
         if plot:
@@ -173,6 +157,74 @@ class Tracker(object):
             if plot:
                 self.update_plot(t)
 
+    def _initialize_track(self, datetimes=None, maxdt=0, tile_size=(15, 15)):
+        """
+        Initialize track properties.
+
+        `self.datetimes`: Datetimes are tested to be monotonically increasing,
+        duplicates are dropped, those matching no Observers are dropped,
+        and an error is thrown if fewer than two remain.
+
+        `self.tiles` and `self.histograms`: For each Observer, the earliest image
+        matching a datetime is selected and a reference image tile is extracted
+        centered around the weighted mean of the current particles.
+
+        Arguments:
+            datetimes (array-like): Monotonically increasing sequence of
+                datetimes at which to track particles.
+                If `None`, defaults to all unique datetimes in `self.observers`.
+            maxdt (float): Maximum time delta for an image to match `datetimes`
+            tile_size (array-like): Size of reference tiles in pixels (width, height)
+        """
+        if datetimes is None:
+            datetimes = np.sort(np.hstack((obs.datetimes for obs in self.observers)))
+        datetimes = np.unique(datetimes)
+        # Datetimes must be stricly increasing
+        # NOTE: Not necessary if default datetimes
+        time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
+        if any(time_deltas < 0):
+            raise ValueError("Datetimes are not monotonically increasing")
+        # Drop datetimes not matching any Observer
+        # NOTE: Not necessary if default datetimes
+        nearest = []
+        for observer in self.observers:
+            indices = np.searchsorted(observer.datetimes, datetimes, side='left')
+            indices = np.where(indices < 0, 1, indices)
+            n = len(observer.datetimes)
+            indices = np.where(indices > n - 1, n - 1, indices)
+            nearest.append(np.column_stack((
+                observer.datetimes[indices - 1],
+                observer.datetimes[indices])))
+        dt = abs(np.hstack(nearest) - datetimes.reshape(-1, 1))
+        has_match = dt <= datetime.timedelta(seconds=maxdt * self.time_unit)
+        has_any_match = np.any(has_match, axis=1)
+        if not all(has_any_match):
+            warnings.warn("Dropping datetimes not matching any Observers")
+            datetimes = datetimes[has_any_match]
+            has_match = has_match[has_any_match, :]
+        if len(datetimes) < 2:
+            raise ValueError("Fewer than two valid datetimes")
+        self.datetimes = datetimes
+        # Initialize each Observer at first matching datetime
+        self.tiles = [None] * len(self.observers)
+        self.histograms = [None] * len(self.observers)
+        center_xyz = self.particle_mean[:, 0:3]
+        for i, observer in enumerate(self.observers):
+            # NOTE: May be faster to retrieve index of match in earlier loop
+            try:
+                ti = np.nonzero(np.any(has_match[:, (i * 2):(i * 2) + 2], axis=1))[0][0]
+            except IndexError:
+                # Skip Observer if no matching image
+                continue
+            img = observer.index(ti, max_seconds=maxdt * self.time_unit)
+            center_uv = observer.project(center_xyz, img=img)
+            box = observer.tile_box(center_uv, size=tile_size)
+            self.tiles[i] = observer.extract_tile(
+                box, img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)),
+                subpixel=dict(kx=3, ky=3), uv=center_uv)
+            self.histograms[i] = helpers.compute_cdf(
+                self.tiles[i], return_inverse=False)
+
     def compute_likelihoods(self, t):
         """
         Compute the likelihoods of the particles summed across all observers.
@@ -180,11 +232,11 @@ class Tracker(object):
         Arguments:
             t (datetime): Date and time at which to query Observers
         """
-        log_likelihoods = [self.compute_observer_log_likelihoods(t, observer)
+        log_likelihoods = [self._compute_observer_log_likelihoods(t, observer)
             for observer in self.observers]
         return np.exp(-sum(log_likelihoods))
 
-    def compute_observer_log_likelihoods(self, t, obs=0):
+    def _compute_observer_log_likelihoods(self, t, obs=0):
         """
         Compute the log likelihoods of each particle for an Observer.
 
@@ -201,6 +253,7 @@ class Tracker(object):
             observer = obs
         # Select image
         try:
+            # TODO: Control
             img = observer.index(t)
         except IndexError:
             # If no image, return a constant log likelihood

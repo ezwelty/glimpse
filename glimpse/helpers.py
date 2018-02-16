@@ -171,7 +171,7 @@ def compute_cdf(array, return_inverse=False):
     """
     results = np.unique(array, return_inverse=return_inverse, return_counts=True)
     # Normalize cumulative sum of counts by the number of pixels
-    quantiles = np.cumsum(results[-1]).astype(float) / array.size
+    quantiles = np.cumsum(results[-1]) * (1.0 / array.size)
     if return_inverse:
         return results[0], quantiles, results[1]
     else:

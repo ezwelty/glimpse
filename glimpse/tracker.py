@@ -97,6 +97,7 @@ class Tracker(object):
         Arguments:
             likelihoods (array): Likelihood of each particle
         """
+        # TODO: Make faster?
         self.weights.fill(1)
         self.weights *= likelihoods
         self.weights += 1e-300
@@ -288,7 +289,7 @@ class Tracker(object):
         # Build image box around all particles, with a buffer for template matching
         # -1, +1 adjustment ensures SSE size > 3 pixels (5+) for cubic spline interpolation
         # TODO: Adjust minimum size based on interpolation order
-        uv = observer.project(self.particles[:, 0:3])
+        uv = observer.project(self.particles[:, 0:3], img=img)
         halfsize = np.multiply(self.tiles[i].shape[-2::-1], 0.5)
         box = np.vstack((
             np.floor(uv.min(axis=0) - halfsize) - 1,

@@ -177,6 +177,7 @@ class Tracker(object):
         self.covariances = [self.particle_covariance]
         if plot:
             self.initialize_plot()
+            matplotlib.pyplot.pause(2)
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
         time_deltas *= 1.0 / self.time_unit
         for t, dt in zip(self.datetimes[1:], time_deltas):
@@ -188,8 +189,8 @@ class Tracker(object):
             self.means.append(self.particle_mean)
             self.covariances.append(self.particle_covariance)
             if plot:
-                matplotlib.pyplot.waitforbuttonpress()
                 self.update_plot()
+                matplotlib.pyplot.pause(1)
 
     def _initialize_track(self, datetimes=None, maxdt=0, tile_size=(15, 15)):
         """
@@ -242,6 +243,7 @@ class Tracker(object):
         # Initialize each Observer at first matching datetime
         self.tiles = [None] * len(self.observers)
         self.histograms = [None] * len(self.observers)
+        self.duvs = [None] * len(self.observers)
         center_xyz = self.particle_mean[:, 0:3]
         for i, observer in enumerate(self.observers):
             # NOTE: May be faster to retrieve index of match in earlier loop
@@ -253,11 +255,14 @@ class Tracker(object):
             img = observer.index(img=self.datetimes[ti], max_seconds=maxdt * self.time_unit)
             center_uv = observer.project(center_xyz, img=img)
             box = observer.tile_box(center_uv, size=tile_size)
+            self.duvs[i] = center_uv[0] - box.reshape(2, -1).mean(axis=0)
+            # TODO: Process outside Observer.extract_tile
             self.tiles[i] = observer.extract_tile(
                 box, img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)),
-                subpixel=dict(kx=3, ky=3), uv=center_uv)
-            self.histograms[i] = helpers.compute_cdf(
-                self.tiles[i], return_inverse=False)
+                subpixel=False, uv=center_uv)
+            temp = np.atleast_3d(observer.extract_tile(box, img=img))
+            self.histograms[i] = [helpers.compute_cdf(temp[:, :, b], return_inverse=False)
+                for b in range(temp.shape[2])]
 
     def compute_likelihoods(self, t, maxdt=0):
         """
@@ -290,16 +295,19 @@ class Tracker(object):
         # -1, +1 adjustment ensures SSE size > 3 pixels (5+) for cubic spline interpolation
         # TODO: Adjust minimum size based on interpolation order
         uv = observer.project(self.particles[:, 0:3], img=img)
-        halfsize = np.multiply(self.tiles[i].shape[-2::-1], 0.5)
-        box = np.vstack((
-            np.floor(uv.min(axis=0) - halfsize) - 1,
-            np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int)
-        if any(~observer.grid.inbounds(box)):
+        halfsize = np.multiply(self.tiles[i].shape[0:2][::-1], 0.5)
+        # TEMP: Test if even tile size is the problem
+        # box = np.vstack((
+        #     np.floor(uv.min(axis=0) - halfsize) - 1,
+        #     np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int)
+        center_uv = observer.project(self.particle_mean[:, 0:3], img=img)
+        box = observer.tile_box(center_uv, size=(71, 71))
+        if any(~observer.grid.inbounds(box.reshape(2, -2))):
             # Tile extends beyond image bounds
             raise IndexError("Particle bounding box extends beyond image bounds: " + str(box))
         # Extract test tile
-        self.test_tiles[i] = observer.extract_tile(box=box.flatten(), template=self.histograms[i],
-            img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)))
+        self.test_tiles[i] = observer.extract_tile(box=box, template=self.histograms[i],
+            img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)), subpixel=False)
         # Compute area-averaged sum of squares error
         sse = cv2.matchTemplate(self.test_tiles[i].astype(np.float32),
             templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)
@@ -307,9 +315,11 @@ class Tracker(object):
         # Sample at projected particles
         # SSE tile box is shrunk by halfsize of reference tile - 0.5 pixel
         box_edge = halfsize - 0.5
-        sse_box = box + np.vstack((box_edge, -box_edge))
+        sse_box = box + np.hstack((box_edge, -box_edge))
+        # Shift box by subpixel offset
+        sse_box += np.tile(self.duvs[i], 2)
         sampled_sse = observer.sample_tile(uv, tile=sse,
-            box=sse_box.flatten(), grid=False, **dict(kx=3, ky=3))
+            box=sse_box, grid=False, **dict(kx=3, ky=3))
         return sampled_sse * (1.0 / observer.sigma**2)
 
     def initialize_plot(self):

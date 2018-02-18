@@ -1,4 +1,4 @@
-from .imports import (np, scipy, datetime)
+from .imports import (np, scipy, datetime, matplotlib)
 from . import (helpers, dem)
 
 class Observer(object):
@@ -133,24 +133,27 @@ class Observer(object):
         # NOTE: Copy not necessary here in cases when copied later
         I = img.read(box=box, cache=self.cache).copy()
         # NOTE: Move operations to tracker? Different trackers may have different needs.
-        if gray is not False:
-            # Convert to grayscale
-            I = helpers.rgb_to_gray(I, **gray)
-        if highpass is not False:
-            # Apply median high-pass filter
-            I_low = scipy.ndimage.filters.median_filter(I, **highpass)
-            I -= I_low
         if template is not False:
             # Match histogram to template
             if I.ndim < 3:
                 I = helpers.match_histogram(I, template=template)
             else:
+                if isinstance(template, np.ndarray):
+                    template = np.dsplit(template, template.shape[2])
                 for i in xrange(I.shape[2]):
-                    I[i] = helpers.hist_match(I[i], template[i])
+                    I[:, :, i] = helpers.match_histogram(I[:, :, i], template[i])
+        if gray is not False:
+            # Convert to grayscale
+            I = helpers.rgb_to_gray(I, **gray)
         if subpixel is not False and uv is not None:
+            # FIXME: Works only for grayscale
             # Correct subpixel offset from desired center
             duv = uv - np.reshape(box, (2, -1)).mean(axis=0)
             I = self.shift_tile(I, duv=duv.flatten(), **subpixel)
+        if highpass is not False:
+            # Apply median high-pass filter
+            I_low = scipy.ndimage.filters.median_filter(I, **highpass)
+            I -= I_low
         return I
 
     def shift_tile(self, tile, duv, **kwargs):
@@ -188,6 +191,7 @@ class Observer(object):
             grid (bool): See `uv`
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
+        # NOTE: No dependence on self
         # TODO: Throw error if uv out of bounds (use helpers.in_box)
         # NOTE: Very similar to DEM.sample(). Consider a general Raster(Grid) object.
         # NOTE: Would scipy.interpolate.RegularGridInterpolator be faster?
@@ -204,6 +208,26 @@ class Observer(object):
             return f(uv[1], uv[0], grid=grid)
         else:
             return f(uv[:, 1], uv[:, 0], grid=grid)
+
+    def plot_tile(self, tile, box=None, origin='upper', **kwargs):
+        # NOTE: No dependence on self
+        if box is None:
+            box = (0, 0, tile.shape[0], tile.shape[1])
+        extent = (box[0], box[2], box[1], box[3])
+        matplotlib.pyplot.imshow(tile, origin=origin, extent=extent, **kwargs)
+
+    def plot_box(self, box, fill=False, **kwargs):
+        # NOTE: No dependence on self
+        axis = matplotlib.pyplot.gca()
+        axis.add_patch(matplotlib.patches.Rectangle(
+            xy=box[0:2], width=box[2] - box[0], height=box[3] - box[1],
+            fill=fill, **kwargs))
+
+    def set_plot_limits(self, box=None):
+        if box is None:
+            box = (0, 0, self.grid.n[0], self.grid.n[1])
+        matplotlib.pyplot.xlim(box[0::2])
+        matplotlib.pyplot.ylim(box[1::2])
 
     def clear_cache(self):
         """

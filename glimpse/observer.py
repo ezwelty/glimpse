@@ -84,74 +84,17 @@ class Observer(object):
         """
         return self.grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
-    def extract_tile(self, box, img=None, gray=False, highpass=False,
-        template=False, subpixel=False, uv=None, cache=None):
+    def extract_tile(self, box, img, cache=None):
         """
         Extract rectangular image region.
 
         Cached results are slowest the first time (the full image is read),
-        but fastest on subsequent reads. A subset of the cached image is returned,
-        so modifications are applied to the cached image.
+        but fastest on subsequent reads.
         Non-cached results are read with a speed proportional to the size of the box.
-
-        Optional operations are applied in the following order:
-        match histogram to template (`template`), convert to grayscale (`gray`),
-        correct subpixel offset (`subpixel`), apply high-pass filter (`highpass`).
-
-        Arguments:
-            box (array-like): Boundaries of tile in image coordinates
-                (left, top, right, bottom)
-            img: Index of Image to read
-            gray (bool or dict): Whether to convert tile to grayscale.
-                Either arguments to `helpers.rgb_to_gray` (dict),
-                `True` for default arguments, or `False` to skip.
-            template (bool or array-like): Histogram matching template
-                (see `helpers.match_histogram`) or `False` to skip.
-            highpass (bool or dict): Whether to apply a median high-pass filter.
-                Either arguments to `scipy.ndimage.filters.median_filter`,
-                `True` for default arguments, or `False` to skip.
-            subpixel (bool or dict): Whether to correct for subpixel offset
-                between desired and actual center of tile.
-                Either arguments to `scipy.interpolate.RectBivariateSpline` (dict),
-                `True` for default arguments, or `False` to skip.
-            uv (array-like): Desired center of tile in image coordinates (u, v)
-            cache (bool): Optional override of `self.cache`
         """
-        # Apply defaults
         if cache is None:
             cache = self.cache
-        if gray is True:
-            gray = dict()
-        if highpass is True:
-            highpass = dict()
-        if subpixel is True:
-            subpixel = dict()
-        # Extract image region
-        # NOTE: Copy not necessary here in cases when copied later
-        I = self.images[img].read(box=box, cache=cache).copy()
-        # NOTE: Move operations to tracker? Different trackers may have different needs.
-        if template is not False:
-            # Match histogram to template
-            if I.ndim < 3:
-                I = helpers.match_histogram(I, template=template)
-            else:
-                if isinstance(template, np.ndarray):
-                    template = np.dsplit(template, template.shape[2])
-                for i in xrange(I.shape[2]):
-                    I[:, :, i] = helpers.match_histogram(I[:, :, i], template[i])
-        if gray is not False:
-            # Convert to grayscale
-            I = helpers.rgb_to_gray(I, **gray)
-        if subpixel is not False and uv is not None:
-            # FIXME: Works only for grayscale
-            # Correct subpixel offset from desired center
-            duv = uv - np.reshape(box, (2, -1)).mean(axis=0)
-            I = self.shift_tile(I, duv=duv.flatten(), **subpixel)
-        if highpass is not False:
-            # Apply median high-pass filter
-            I_low = scipy.ndimage.filters.median_filter(I, **highpass)
-            I -= I_low
-        return I
+        return self.images[img].read(box=box, cache=cache)
 
     def shift_tile(self, tile, duv, **kwargs):
         """

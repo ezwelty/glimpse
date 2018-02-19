@@ -1,4 +1,4 @@
-from .imports import (np, cv2, warnings, datetime, matplotlib)
+from .imports import (np, cv2, warnings, datetime, matplotlib, scipy)
 from . import (helpers)
 
 class Tracker(object):
@@ -256,13 +256,33 @@ class Tracker(object):
             center_uv = observer.project(center_xyz, img=img)
             box = observer.tile_box(center_uv, size=tile_size)
             self.duvs[i] = center_uv[0] - box.reshape(2, -1).mean(axis=0)
-            # TODO: Process outside Observer.extract_tile
-            self.tiles[i] = observer.extract_tile(
-                box, img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)),
-                subpixel=False, uv=center_uv)
-            temp = np.atleast_3d(observer.extract_tile(box, img=img))
-            self.histograms[i] = [helpers.compute_cdf(temp[:, :, b], return_inverse=False)
-                for b in range(temp.shape[2])]
+            self.tiles[i], self.histograms[i] = self._prepare_tile_histogram(
+                obs=i, img=img, box=box)
+
+    def _prepare_tile_histogram(self, obs, img, box):
+        tile = self.observers[obs].extract_tile(box=box, img=img)
+        if tile.ndim > 2:
+            histogram = [helpers.compute_cdf(tile[:, :, b], return_inverse=False)
+                for b in range(tile.shape[2])]
+            tile = helpers.rgb_to_gray(tile, **dict(method='pca'))
+        else:
+            histogram = helpers.compute_cdf(tile, return_inverse=False)
+        # tile = self.observers[obs].shift_tile(tile, duv=duv, **dict(kx=3, ky=3))
+        tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
+        tile -= tile_low
+        return tile, histogram
+
+    def _prepare_test_tile(self, obs, img, box, template):
+        tile = self.observers[obs].extract_tile(box=box, img=img)
+        if tile.ndim > 2:
+            for i in range(tile.shape[2]):
+                tile[:, :, i] = helpers.match_histogram(tile[:, :, i], template[i])
+            tile = helpers.rgb_to_gray(tile, **dict(method='pca'))
+        else:
+            tile = helpers.match_histogram(tile, template=template)
+        tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
+        tile -= tile_low
+        return tile
 
     def compute_likelihoods(self, t, maxdt=0):
         """
@@ -299,15 +319,11 @@ class Tracker(object):
         box = np.vstack((
             np.floor(uv.min(axis=0) - halfsize) - 1,
             np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int).flatten()
-        # TEMP: Test if even tile size is the problem
-        # center_uv = observer.project(self.particle_mean[:, 0:3], img=img)
-        # box = observer.tile_box(center_uv, size=(71, 71))
         if any(~observer.grid.inbounds(box.reshape(2, -2))):
-            # Tile extends beyond image bounds
-            raise IndexError("Particle bounding box extends beyond image bounds: " + str(box))
+            raise IndexError("Particle bounding box extends past image bounds: " + str(box))
         # Extract test tile
-        self.test_tiles[i] = observer.extract_tile(box=box, template=self.histograms[i],
-            img=img, gray=dict(method='pca'), highpass=dict(size=(5, 5)), subpixel=False)
+        self.test_tiles[i] = self._prepare_test_tile(
+            obs=i, img=img, box=box, template=self.histograms[i])
         # Compute area-averaged sum of squares error
         sse = cv2.matchTemplate(self.test_tiles[i].astype(np.float32),
             templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)

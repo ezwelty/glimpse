@@ -1,4 +1,4 @@
-from .imports import (np, cv2, warnings, datetime, matplotlib, scipy)
+from .imports import (np, cv2, warnings, datetime, scipy)
 from . import (helpers)
 
 class Tracker(object):
@@ -46,8 +46,6 @@ class Tracker(object):
         self.datetimes = None
         self.means = None
         self.covariances = None
-        # Plotting only
-        self.test_tiles = None
 
     @property
     def n(self):
@@ -179,7 +177,7 @@ class Tracker(object):
         self.weights *= 1 / self.weights.sum()
 
     def track(self, datetimes=None, maxdt=0, tile_size=(15, 15),
-        axy=(0, 0), axy_sigma=(0, 0), plot=False):
+        axy=(0, 0), axy_sigma=(0, 0)):
         """
         Track particles through time.
 
@@ -196,29 +194,21 @@ class Tracker(object):
             tile_size (array-like): Size of reference tiles in pixels (width, height)
             axy (array-like): Mean of random accelerations (x, y)
             axy_sigma (array-like) Standard deviation of random accelerations (x, y)
-            plot (bool): Whether to plot results in realtime
         """
         if self.particles is None:
             raise Exception("Particles are not initialized")
         self._initialize_track(datetimes=datetimes, maxdt=maxdt, tile_size=tile_size)
         self.means = [self.particle_mean]
         self.covariances = [self.particle_covariance]
-        if plot:
-            self.initialize_plot()
-            matplotlib.pyplot.pause(2)
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
         time_deltas *= 1.0 / self.time_unit
         for t, dt in zip(self.datetimes[1:], time_deltas):
-            self.test_tiles = [None] * len(self.observers)
             self.advance_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
             likelihoods = self.compute_likelihoods(t, maxdt=maxdt)
             self.update_weights(likelihoods)
             self.resample_particles()
             self.means.append(self.particle_mean)
             self.covariances.append(self.particle_covariance)
-            if plot:
-                self.update_plot()
-                matplotlib.pyplot.pause(1)
 
     def _initialize_track(self, datetimes=None, maxdt=0, tile_size=(15, 15)):
         """
@@ -344,10 +334,10 @@ class Tracker(object):
         if any(~observer.grid.inbounds(box.reshape(2, -2))):
             raise IndexError("Particle bounding box extends past image bounds: " + str(box))
         # Extract test tile
-        self.test_tiles[i] = self._prepare_test_tile(
+        test_tile = self._prepare_test_tile(
             obs=i, img=img, box=box, template=self.histograms[i])
         # Compute area-averaged sum of squares error
-        sse = cv2.matchTemplate(self.test_tiles[i].astype(np.float32),
+        sse = cv2.matchTemplate(test_tile.astype(np.float32),
             templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)
         sse *= 1.0 / (self.tiles[i].shape[0] * self.tiles[i].shape[1])
         # Sample at projected particles
@@ -359,59 +349,3 @@ class Tracker(object):
         sampled_sse = observer.sample_tile(uv, tile=sse,
             box=sse_box, grid=False, **self.interpolation)
         return sampled_sse * (1.0 / observer.sigma**2)
-
-    def initialize_plot(self):
-        # useful plot:
-        # map of mean position and particles
-        # test_tile with reference tile as box
-        # particles projected
-        """
-        Initialize animation plot.
-        Warning: Do not use with multiprocessing!
-        """
-        matplotlib.pyplot.ion()
-        nplots = len(self.observers) + 1
-        self.fig, self.ax = matplotlib.pyplot.subplots(
-            nrows=1, ncols=nplots, figsize=(10 * nplots, 10))
-        self.fig.tight_layout()
-        self.meplot = self.ax[0].scatter(
-            self.means[0][0, 0], self.means[0][0, 1],
-            color='red', s=50, label='Mean position')
-        v = np.hypot(self.particles[:, 3], self.particles[:, 4])
-        self.pa_plot = self.ax[0].quiver(
-            self.particles[:, 0], self.particles[:, 1],
-            self.particles[:, 3] / v, self.particles[:, 4] / v, v,
-            cmap=matplotlib.pyplot.cm.gnuplot2, clim=(0, 15), alpha=0.2, linewidths=0)
-        self.ax[0].legend()
-        self.ax[0].set_xlabel('X')
-        self.ax[0].set_ylabel('Y')
-        self.ax[0].axis('equal')
-        self.ax[0].set_xlim(self.means[0][0, 0] - 50, self.means[0][0, 0] + 50)
-        self.ax[0].set_ylim(self.means[0][0, 1] - 50, self.means[0][0, 1] + 50)
-        self.cb = matplotlib.pyplot.colorbar(self.pa_plot, ax=self.ax[0],
-            orientation='horizontal', aspect=30, pad=0.07)
-        self.cb.set_label('Speed')
-        self.cb.solids.set_edgecolor('face')
-        self.cb.solids.set_alpha(1)
-        # for i, tile in enumerate(self.tiles):
-        #     if tile is not None:
-        #         self.ax[i + 1].imshow(tile, cmap='Greys_r')
-
-    def update_plot(self):
-        """
-        Update animation plot.
-        """
-        self.meplot.remove()
-        means = np.vstack(self.means)
-        self.meplot = self.ax[0].scatter(means[:, 0], means[:, 1], s=50, c='red')
-        v = np.hypot(self.particles[:, 3], self.particles[:, 4])
-        self.pa_plot.remove()
-        self.pa_plot = self.ax[0].quiver(
-            self.particles[:, 0], self.particles[:, 1],
-            self.particles[:, 3] / v, self.particles[:, 4] / v, v,
-            scale=50, cmap=matplotlib.pyplot.cm.gnuplot2, clim=[0, 15], alpha=0.2)
-        self.ax[0].set_xlim(means[-1, 0] - 50, means[-1, 0] + 50)
-        self.ax[0].set_ylim(means[-1, 1] - 50, means[-1, 1] + 50)
-        for i, tile in enumerate(self.test_tiles):
-            if tile is not None:
-                self.ax[i + 1].imshow(tile, cmap='Greys_r')

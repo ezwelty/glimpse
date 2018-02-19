@@ -205,37 +205,3 @@ class Observer(object):
         """
         for img in self.images:
             img.I = None
-
-    def initialize_plot(self, ax):
-        self.ax = ax
-        self.im_plot = ax.imshow(self.images[0].I, interpolation='none')
-        self.le0, self.re0, self.be0, self.te0 = self.im_plot.get_extent()
-        #self.spprd = ax.scatter(self.cols_predicted, self.rows_predicted, s=50, c='green', label='Prior Prediction')
-        self.sppnts = self.ax.scatter(self.rc[:, 1], self.rc[:, 0], s=25, c=-self.log_like, cmap=matplotlib.pyplot.cm.gnuplot2, linewidths=0, alpha=0.2, vmin=-3., vmax=-1, label='Particle Position/Log-Likelihood')
-        self.ax.legend()
-        self.cb = matplotlib.pyplot.colorbar(self.sppnts, ax=self.ax, orientation='horizontal', aspect=30, pad=0.07)
-        self.cb.set_label('Log-likelihood')
-        self.cb.solids.set_edgecolor('face')
-        self.cb.solids.set_alpha(1)
-        self.row_0 = np.mean(self.rc[:, 0])
-        self.col_0 = np.mean(self.rc[:, 1])
-        self.re = ax.add_patch(matplotlib.patches.Rectangle((self.col_0 - self.hw_col, self.row_0 - self.hw_row), self.hw_col * 2 + 1, self.hw_row * 2 + 1, fill=False))
-        ax.set_xlim(self.col_0 - 50, self.col_0 + 50)
-        ax.set_ylim(self.row_0 + 50, self.row_0 - 50)
-
-    def update_plot(self, t):
-        try:
-            image_index = self.image_index(t, max_seconds=0.1)
-        except IndexError:
-            return
-        self.sppnts.remove()
-        self.sppnts = self.ax.scatter(self.rc[:, 1], self.rc[:, 0], s=25, c=-self.log_like, cmap=matplotlib.pyplot.cm.gnuplot2, linewidths=0, alpha=0.2, vmin=-3., vmax=-1)
-        self.row_1 = np.mean(self.rc[:, 0])
-        self.col_1 = np.mean(self.rc[:, 1])
-        self.re.set_bounds(self.col_1 - self.hw_col, self.row_1 - self.hw_row, 2 * self.hw_col + 1, 2 * self.hw_row + 1)
-        col_offset = self.col_1 - self.col_0
-        row_offset = self.row_1 - self.row_0
-        self.im_plot.set_data(self.images[image_index].read())
-        self.ax.set_xlim(self.col_1 - 50, self.col_1 + 50)
-        self.ax.set_ylim(self.row_1 + 50, self.row_1 - 50)
-        #self.im_plot.set_extent((self.le0 + col_offset, self.re0 + col_offset, self.be0 + row_offset, self.te0 + row_offset))

@@ -12,6 +12,12 @@ class Tracker(object):
             (e.g., 1 minute = 60, 1 hour = 3600)
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
+        grayscale (dict): Grayscale conversion
+            (arguments to glimpse.helpers.rgb_to_gray)
+        highpass (dict): Median high-pass filter
+            (arguments to scipy.ndimage.filters.median_filter)
+        interpolation (dict): Subpixel interpolation
+            (arguments to scipy.interpolate.RectBivariateSpline)
         n (int): Number of particles (more particles gives better results at higher expense)
         particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
         weights (array): Particle likelihoods (n, )
@@ -21,11 +27,15 @@ class Tracker(object):
         means (list): `particle_mean` at each `datetimes`
         covariances (list): `particle_covariance` at each `datetimes`
     """
-    def __init__(self, observers, dem, time_unit=1, resample_method='systematic'):
+    def __init__(self, observers, dem, time_unit=1, resample_method='systematic',
+        grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
         self.dem = dem
         self.time_unit = time_unit
         self.resample_method = resample_method
+        self.grayscale = grayscale
+        self.highpass = highpass
+        self.interpolation = interpolation
         # Placeholders: particles
         self.particles = None
         self.weights = None
@@ -279,19 +289,21 @@ class Tracker(object):
 
     def _prepare_tile_histogram(self, obs, img, box):
         tile = self.observers[obs].extract_tile(box=box, img=img)
-        tile = helpers.rgb_to_gray(tile, **dict(method='average'))
+        if tile.ndim > 2:
+            tile = helpers.rgb_to_gray(tile, **self.grayscale)
         tile = helpers.normalize(tile)
         histogram = helpers.compute_cdf(tile, return_inverse=False)
-        tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
+        tile_low = scipy.ndimage.filters.median_filter(tile, **self.highpass)
         tile -= tile_low
         return tile, histogram
 
     def _prepare_test_tile(self, obs, img, box, template):
         tile = self.observers[obs].extract_tile(box=box, img=img)
-        tile = helpers.rgb_to_gray(tile, **dict(method='average'))
+        if tile.ndim > 2:
+            tile = helpers.rgb_to_gray(tile, **self.grayscale)
         tile = helpers.normalize(tile)
         tile = helpers.match_histogram(tile, template=template)
-        tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
+        tile_low = scipy.ndimage.filters.median_filter(tile, **self.highpass)
         tile -= tile_low
         return tile
 
@@ -345,7 +357,7 @@ class Tracker(object):
         # Shift box by subpixel offset
         sse_box += np.tile(self.duvs[i], 2)
         sampled_sse = observer.sample_tile(uv, tile=sse,
-            box=sse_box, grid=False, **dict(kx=3, ky=3))
+            box=sse_box, grid=False, **self.interpolation)
         return sampled_sse * (1.0 / observer.sigma**2)
 
     def initialize_plot(self):

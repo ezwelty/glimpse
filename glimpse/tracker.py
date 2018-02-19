@@ -296,12 +296,12 @@ class Tracker(object):
         # TODO: Adjust minimum size based on interpolation order
         uv = observer.project(self.particles[:, 0:3], img=img)
         halfsize = np.multiply(self.tiles[i].shape[0:2][::-1], 0.5)
+        box = np.vstack((
+            np.floor(uv.min(axis=0) - halfsize) - 1,
+            np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int).flatten()
         # TEMP: Test if even tile size is the problem
-        # box = np.vstack((
-        #     np.floor(uv.min(axis=0) - halfsize) - 1,
-        #     np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int)
-        center_uv = observer.project(self.particle_mean[:, 0:3], img=img)
-        box = observer.tile_box(center_uv, size=(71, 71))
+        # center_uv = observer.project(self.particle_mean[:, 0:3], img=img)
+        # box = observer.tile_box(center_uv, size=(71, 71))
         if any(~observer.grid.inbounds(box.reshape(2, -2))):
             # Tile extends beyond image bounds
             raise IndexError("Particle bounding box extends beyond image bounds: " + str(box))

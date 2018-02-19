@@ -97,10 +97,7 @@ class Tracker(object):
         Arguments:
             likelihoods (array): Likelihood of each particle
         """
-        # TODO: Make faster?
-        self.weights.fill(1)
-        self.weights *= likelihoods
-        self.weights += 1e-300
+        self.weights = likelihoods + 1e-300
         self.weights *= 1 / self.weights.sum()
 
     def resample_particles(self):

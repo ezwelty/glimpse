@@ -72,6 +72,9 @@ def load_zipped_pickle(path):
 def normalize(array):
     """
     Normalize a numeric array to mean 0, variance 1.
+
+    Arguments:
+        array (array): Input array
     """
     return (array - array.mean()) * (1 / array.std())
 

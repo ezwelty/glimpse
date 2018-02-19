@@ -361,9 +361,12 @@ class Tracker(object):
         return sampled_sse * (1.0 / observer.sigma**2)
 
     def initialize_plot(self):
+        # useful plot:
+        # map of mean position and particles
+        # test_tile with reference tile as box
+        # particles projected
         """
         Initialize animation plot.
-
         Warning: Do not use with multiprocessing!
         """
         matplotlib.pyplot.ion()

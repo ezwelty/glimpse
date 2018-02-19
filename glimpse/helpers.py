@@ -69,12 +69,15 @@ def load_zipped_pickle(path):
 
 # ---- Arrays: General ---- #
 
-def normalize(array, interval=None):
+def normalize(array):
     """
-    Normalize a numeric array.
+    Normalize a numeric array to mean 0, variance 1.
+    """
+    return (array - array.mean()) * (1 / array.std())
 
-    Translates and scales the values of an array to the interval (0, 1) based on
-    the specified measurement interval (min, max).
+def normalize_range(array, interval=None):
+    """
+    Translate and scale a numeric array to the interval (0, 1).
 
     Arguments:
         array (array): Input array
@@ -125,7 +128,7 @@ def gamma_to_linear(array, gamma=2.2):
     """
     return array**(1 / gamma)
 
-GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver='arpack', whiten=True)
+GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver='arpack', whiten=False)
 
 def rgb_to_gray(rgb, method='average', weights=None, pca=None):
     """

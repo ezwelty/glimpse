@@ -7,7 +7,7 @@ class Observer(object):
     the misfit between image subsets.
 
     Attributes:
-        xyz (array): Position in world coordinates (from `images[0].cam.xyz`)
+        xyz (array): Position in world coordinates (`images[0].cam.xyz`)
         images (list): Image objects with equal camera position (xyz),
             focal length (f), image size (imgsz) and
             strictly increasing in time (`datetime`)
@@ -16,7 +16,7 @@ class Observer(object):
             due to changes in illumination, deformation, or unresolved camera motion
         correction: Curvature and refraction correction (see `glimpse.Camera.project()`)
         cache (bool): Whether to cache images on read
-        grid (dem.Grid): Grid object for operations on image coordinates
+        grid (glimpse.dem.Grid): Grid object for operations on image coordinates
     """
 
     def __init__(self, images, sigma=0.3, correction=True, cache=True):
@@ -33,7 +33,6 @@ class Observer(object):
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
         if any(time_deltas <= 0):
             raise ValueError("Image datetimes are not stricly increasing")
-        # TODO: Estimate sigma from images
         self.sigma = sigma
         self.correction = correction
         self.cache = cache
@@ -60,15 +59,15 @@ class Observer(object):
         else:
             return self.images.index(value)
 
-    def project(self, xyz, directions=False, img=None):
+    def project(self, xyz, img, directions=False):
         """
         Project world coordinates to image coordinates.
 
         Arguments:
             xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
+            img: Index of Image to project into
             directions (bool): Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
-            img: Index of Image to sample
         """
         return self.images[img].cam.project(xyz, directions=directions, correction=self.correction)
 
@@ -86,13 +85,18 @@ class Observer(object):
         return self.grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
     def extract_tile(self, box, img=None, gray=False, highpass=False,
-        template=False, subpixel=False, uv=None):
+        template=False, subpixel=False, uv=None, cache=None):
         """
         Extract rectangular image region.
 
+        Cached results are slowest the first time (the full image is read),
+        but fastest on subsequent reads. A subset of the cached image is returned,
+        so modifications are applied to the cached image.
+        Non-cached results are read with a speed proportional to the size of the box.
+
         Optional operations are applied in the following order:
-        convert to grayscale (`gray`), apply high-pass filter (`highpass`),
-        match histogram to template (`template`), correct subpixel offset (`subpixel`).
+        match histogram to template (`template`), convert to grayscale (`gray`),
+        correct subpixel offset (`subpixel`), apply high-pass filter (`highpass`).
 
         Arguments:
             box (array-like): Boundaries of tile in image coordinates
@@ -111,8 +115,11 @@ class Observer(object):
                 Either arguments to `scipy.interpolate.RectBivariateSpline` (dict),
                 `True` for default arguments, or `False` to skip.
             uv (array-like): Desired center of tile in image coordinates (u, v)
+            cache (bool): Optional override of `self.cache`
         """
         # Apply defaults
+        if cache is None:
+            cache = self.cache
         if gray is True:
             gray = dict()
         if highpass is True:
@@ -121,7 +128,7 @@ class Observer(object):
             subpixel = dict()
         # Extract image region
         # NOTE: Copy not necessary here in cases when copied later
-        I = self.images[img].read(box=box, cache=self.cache).copy()
+        I = self.images[img].read(box=box, cache=cache).copy()
         # NOTE: Move operations to tracker? Different trackers may have different needs.
         if template is not False:
             # Match histogram to template
@@ -153,7 +160,7 @@ class Observer(object):
         Useful for centering a tile over an arbitrary center point.
 
         Arguments:
-            tile (array): 2-d array
+            tile (array): 2-d or 3-d array
             duv (array-like): Shift in image coordinates (du, dv).
                 Must be 0.5 pixels or smaller in each dimension.
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
@@ -164,9 +171,14 @@ class Observer(object):
         cu = self.grid.x[0:tile.shape[0]] # x|cols
         cv = self.grid.y[0:tile.shape[1]] # y|rows
         # Interpolate at shifted center coordinates
-        f = scipy.interpolate.RectBivariateSpline(
-            cv, cu, tile, **kwargs)
-        return f(cv + duv[1], cu + duv[0], grid=True)
+        tile = np.atleast_3d(tile)
+        for i in range(tile.shape[2]):
+            f = scipy.interpolate.RectBivariateSpline(cv, cu, tile[:, :, i], **kwargs)
+            tile[:, :, i] = f(cv + duv[1], cu + duv[0], grid=True)
+        if tile.shape[2] is 1:
+            return tile.squeeze(axis=2)
+        else:
+            return tile
 
     def sample_tile(self, uv, tile, box, grid=False, **kwargs):
         """
@@ -181,10 +193,8 @@ class Observer(object):
             grid (bool): See `uv`
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
-        # NOTE: No dependence on self
-        # TODO: Throw error if uv out of bounds (use helpers.in_box)
-        # NOTE: Very similar to DEM.sample(). Consider a general Raster(Grid) object.
-        # NOTE: Would scipy.interpolate.RegularGridInterpolator be faster?
+        if not np.all(helpers.in_box(uv, box)):
+            raise ValueError("Some sampling points are outside box")
         # Cell sizes
         du = (box[2] - box[0]) / tile.shape[1]
         dv = (box[3] - box[1]) / tile.shape[0]
@@ -192,28 +202,49 @@ class Observer(object):
         cu = np.arange(box[0] + du * 0.5, box[2]) # x|cols
         cv = np.arange(box[1] + dv * 0.5, box[3]) # y|rows
         # Interpolate at arbitrary coordinates
-        f = scipy.interpolate.RectBivariateSpline(
-            cv, cu, tile, **kwargs)
+        f = scipy.interpolate.RectBivariateSpline(cv, cu, tile, **kwargs)
         if grid:
             return f(uv[1], uv[0], grid=grid)
         else:
             return f(uv[:, 1], uv[:, 0], grid=grid)
 
-    def plot_tile(self, tile, box=None, origin='upper', **kwargs):
-        # NOTE: No dependence on self
+    def plot_tile(self, tile, box=None, **kwargs):
+        """
+        Draw tile on current matplotlib axes.
+
+        Arguments:
+            tile (array): 2-d or 3-d array
+            box (array-like): Boundaries of tile in image coordinates (left, top, right, bottom).
+                If `None`, the upper-left corner of the upper-left pixel is placed at (0, 0).
+            **kwargs: Optional arguments to matplotlib.pyplot.imshow
+        """
         if box is None:
             box = (0, 0, tile.shape[0], tile.shape[1])
         extent = (box[0], box[2], box[1], box[3])
-        matplotlib.pyplot.imshow(tile, origin=origin, extent=extent, **kwargs)
+        matplotlib.pyplot.imshow(tile, origin='upper', extent=extent, **kwargs)
 
     def plot_box(self, box, fill=False, **kwargs):
-        # NOTE: No dependence on self
+        """
+        Draw box on current matplotlib axes.
+
+        Arguments:
+            box (array-like): Box in image coordinates (left, top, right, bottom)
+            fill (bool): Whether to fill the box
+            **kwargs: Optional arguments to matplotlib.patches.Rectangle
+        """
         axis = matplotlib.pyplot.gca()
         axis.add_patch(matplotlib.patches.Rectangle(
             xy=box[0:2], width=box[2] - box[0], height=box[3] - box[1],
             fill=fill, **kwargs))
 
     def set_plot_limits(self, box=None):
+        """
+        Set the x,y limits of the current matplotlib axes.
+
+        Arguments:
+            box (array-like): Plot limits in image coordinates (left, top, right, bottom).
+                If `None`, uses the full extent of the images.
+        """
         if box is None:
             box = (0, 0, self.grid.n[0], self.grid.n[1])
         matplotlib.pyplot.xlim(box[0::2])
@@ -226,7 +257,6 @@ class Observer(object):
         for img in self.images:
             img.I = None
 
-    # Real time plotting utilities
     def initialize_plot(self, ax):
         self.ax = ax
         self.im_plot = ax.imshow(self.images[0].I, interpolation='none')

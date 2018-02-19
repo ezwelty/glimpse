@@ -279,25 +279,18 @@ class Tracker(object):
 
     def _prepare_tile_histogram(self, obs, img, box):
         tile = self.observers[obs].extract_tile(box=box, img=img)
-        if tile.ndim > 2:
-            histogram = [helpers.compute_cdf(tile[:, :, b], return_inverse=False)
-                for b in range(tile.shape[2])]
-            tile = helpers.rgb_to_gray(tile, **dict(method='pca'))
-        else:
-            histogram = helpers.compute_cdf(tile, return_inverse=False)
-        # tile = self.observers[obs].shift_tile(tile, duv=duv, **dict(kx=3, ky=3))
+        tile = helpers.rgb_to_gray(tile, **dict(method='average'))
+        tile = helpers.normalize(tile)
+        histogram = helpers.compute_cdf(tile, return_inverse=False)
         tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
         tile -= tile_low
         return tile, histogram
 
     def _prepare_test_tile(self, obs, img, box, template):
         tile = self.observers[obs].extract_tile(box=box, img=img)
-        if tile.ndim > 2:
-            for i in range(tile.shape[2]):
-                tile[:, :, i] = helpers.match_histogram(tile[:, :, i], template[i])
-            tile = helpers.rgb_to_gray(tile, **dict(method='pca'))
-        else:
-            tile = helpers.match_histogram(tile, template=template)
+        tile = helpers.rgb_to_gray(tile, **dict(method='average'))
+        tile = helpers.normalize(tile)
+        tile = helpers.match_histogram(tile, template=template)
         tile_low = scipy.ndimage.filters.median_filter(tile, **dict(size=(5, 5)))
         tile -= tile_low
         return tile

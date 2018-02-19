@@ -12,7 +12,6 @@ class Observer(object):
             focal length (f), image size (imgsz) and
             strictly increasing in time (`datetime`)
         datetimes (array): Image capture times
-        anchor (int): Index of default anchor image
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
         correction: Curvature and refraction correction (see `glimpse.Camera.project()`)
@@ -20,7 +19,7 @@ class Observer(object):
         grid (dem.Grid): Grid object for operations on image coordinates
     """
 
-    def __init__(self, images, anchor=0, sigma=0.3, correction=True, cache=True):
+    def __init__(self, images, sigma=0.3, correction=True, cache=True):
         self.xyz = images[0].cam.xyz
         for img in images[1:]:
             if any(img.cam.xyz != self.xyz):
@@ -34,7 +33,6 @@ class Observer(object):
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
         if any(time_deltas <= 0):
             raise ValueError("Image datetimes are not stricly increasing")
-        self.anchor = self.index(anchor)
         # TODO: Estimate sigma from images
         self.sigma = sigma
         self.correction = correction
@@ -42,31 +40,25 @@ class Observer(object):
         n = self.images[0].cam.imgsz
         self.grid = dem.Grid(n=n, xlim=(0, n[0]), ylim=(0, n[1]))
 
-    def index(self, img=None, max_seconds=1):
+    def index(self, value, max_seconds=1):
         """
         Retrieve the index of an image.
 
         Arguments:
-            img: Integer index, Image object to find in `self.images`, or
-                Date and time to match against `self.datetimes` (datetime).
-                If `None`, returns `self.anchor`.
-            max_seconds (float): If `img` is datetime,
+            value: Either Image object to find in `self.images` or
+                Date and time to match against `self.datetimes` (datetime)
+            max_seconds (float): If `value` is datetime,
                 maximum time delta in seconds to be considered a match.
         """
-        if img is None:
-            return self.anchor
-        elif isinstance(img, int):
-            return img
-        elif isinstance(img, datetime.datetime):
-            delta_seconds = np.abs([dt.total_seconds()
-                for dt in (img - self.datetimes)])
-            index = np.argmin(delta_seconds)
-            if delta_seconds[index] > max_seconds:
-                distance = delta_seconds[index] - max_seconds
-                raise IndexError("Nearest image out of range by " + str(distance) + " seconds")
+        if isinstance(value, datetime.datetime):
+            time_deltas = np.abs(value - self.datetimes)
+            index = np.argmin(time_deltas)
+            seconds = time_deltas[index].total_seconds()
+            if seconds > max_seconds:
+                raise IndexError("Nearest image out of range by " + str(seconds - max_seconds) + " s")
             return index
         else:
-            return self.images.index(img)
+            return self.images.index(value)
 
     def project(self, xyz, directions=False, img=None):
         """
@@ -76,10 +68,9 @@ class Observer(object):
             xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
             directions (bool): Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
-            img: Image to sample (see `self.index()`)
+            img: Index of Image to sample
         """
-        img = self.images[self.index(img)]
-        return img.cam.project(xyz, directions=directions, correction=self.correction)
+        return self.images[img].cam.project(xyz, directions=directions, correction=self.correction)
 
     def tile_box(self, uv, size=(1, 1)):
         """
@@ -106,7 +97,7 @@ class Observer(object):
         Arguments:
             box (array-like): Boundaries of tile in image coordinates
                 (left, top, right, bottom)
-            img: Image to read (see `self.index()`)
+            img: Index of Image to read
             gray (bool or dict): Whether to convert tile to grayscale.
                 Either arguments to `helpers.rgb_to_gray` (dict),
                 `True` for default arguments, or `False` to skip.
@@ -129,9 +120,8 @@ class Observer(object):
         if subpixel is True:
             subpixel = dict()
         # Extract image region
-        img = self.images[self.index(img)]
         # NOTE: Copy not necessary here in cases when copied later
-        I = img.read(box=box, cache=self.cache).copy()
+        I = self.images[img].read(box=box, cache=self.cache).copy()
         # NOTE: Move operations to tracker? Different trackers may have different needs.
         if template is not False:
             # Match histogram to template

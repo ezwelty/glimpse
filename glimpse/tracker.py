@@ -252,7 +252,7 @@ class Tracker(object):
             except IndexError:
                 # Skip Observer if no matching image
                 continue
-            img = observer.index(img=self.datetimes[ti], max_seconds=maxdt * self.time_unit)
+            img = observer.index(self.datetimes[ti], max_seconds=maxdt * self.time_unit)
             center_uv = observer.project(center_xyz, img=img)
             box = observer.tile_box(center_uv, size=tile_size)
             self.duvs[i] = center_uv[0] - box.reshape(2, -1).mean(axis=0)

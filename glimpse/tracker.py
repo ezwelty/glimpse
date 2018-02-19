@@ -10,6 +10,8 @@ class Tracker(object):
         dem (DEM): Digital elevation model of the surface on which to track points
         time_unit (float): Length of time unit for temporal arguments, in seconds
             (e.g., 1 minute = 60, 1 hour = 3600)
+        resample_method (str): Particle resampling method
+            ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
         n (int): Number of particles (more particles gives better results at higher expense)
         particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
         weights (array): Particle likelihoods (n, )
@@ -19,10 +21,11 @@ class Tracker(object):
         means (list): `particle_mean` at each `datetimes`
         covariances (list): `particle_covariance` at each `datetimes`
     """
-    def __init__(self, observers, dem, time_unit=1):
+    def __init__(self, observers, dem, time_unit=1, resample_method='systematic'):
         self.observers = observers
         self.dem = dem
         self.time_unit = time_unit
+        self.resample_method = resample_method
         # Placeholders: particles
         self.particles = None
         self.weights = None
@@ -100,14 +103,31 @@ class Tracker(object):
         self.weights = likelihoods + 1e-300
         self.weights *= 1 / self.weights.sum()
 
-    def resample_particles(self):
+    def resample_particles(self, method=None):
         """
         Prune unlikely particles and reproduce likely ones.
+
+        Arguments:
+            method (str): Optional override of `self.resample_method`
         """
         # Systematic resample
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
-        def f():
+        def systematic():
             positions = (np.arange(self.n) + np.random.random()) * (1.0 / self.n)
+            cumulative_weight = np.cumsum(self.weights)
+            indexes = np.zeros(self.n, dtype=int)
+            i, j = 0, 0
+            while i < self.n:
+                if positions[i] < cumulative_weight[j]:
+                    indexes[i] = j
+                    i += 1
+                else:
+                    j += 1
+            return indexes
+        # Stratified resample
+        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+        def stratified():
+            positions = (np.arange(self.n) + np.random.random(self.n)) * (1.0 / self.n)
             cumulative_weight = np.cumsum(self.weights)
             indexes = np.zeros(self.n, dtype=int)
             i, j = 0, 0
@@ -120,7 +140,7 @@ class Tracker(object):
             return indexes
         # Residual resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
-        def f1a():
+        def residual():
             repetitions = (self.n * self.weights).astype(int)
             initial_indexes = np.repeat(np.arange(self.n), repetitions)
             residuals = self.weights - repetitions
@@ -130,19 +150,20 @@ class Tracker(object):
             additional_indexes = np.searchsorted(
                 cumulative_sum, np.random.random(self.n - len(initial_indexes)))
             return np.hstack((initial_indexes, additional_indexes))
-        def f1b():
-            repetitions = (self.n * self.weights).astype(int)
-            initial_indexes = np.repeat(np.arange(self.n), repetitions)
-            residuals = self.weights - repetitions
-            residuals += residuals.min()
-            residuals *= 1 / residuals.sum()
-            additional_indexes = np.random.choice(
-                np.arange(self.n), size=(self.n - len(initial_indexes), ), replace=True, p=residuals)
-            return np.hstack((initial_indexes, additional_indexes))
-        # Random sample
-        def f3():
-            return np.random.choice(np.arange(self.n), size=(self.n, ), replace=True, p=self.weights)
-        indexes = f()
+        # Random choice
+        def choice():
+            return np.random.choice(np.arange(self.n), size=(self.n, ),
+                replace=True, p=self.weights)
+        if method is None:
+            method = self.resample_method
+        if method is 'systematic':
+            indexes = systematic()
+        elif method is 'stratified':
+            indexes = stratified()
+        elif method is 'residual':
+            indexes = residual()
+        elif method is 'choice':
+            indexes = choice()
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()

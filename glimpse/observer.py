@@ -91,6 +91,12 @@ class Observer(object):
         Cached results are slowest the first time (the full image is read),
         but fastest on subsequent reads.
         Non-cached results are read with a speed proportional to the size of the box.
+
+        Arguments:
+            box (array-like): Boundaries of tile in image coordinates
+                (left, top, right, bottom)
+            img: Inded of Image to read
+            cache (bool): Optional override of `self.cache`
         """
         if cache is None:
             cache = self.cache

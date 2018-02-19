@@ -95,7 +95,7 @@ class Observer(object):
         Arguments:
             box (array-like): Boundaries of tile in image coordinates
                 (left, top, right, bottom)
-            img: Inded of Image to read
+            img: Index of Image to read
             cache (bool): Optional override of `self.cache`
         """
         if cache is None:

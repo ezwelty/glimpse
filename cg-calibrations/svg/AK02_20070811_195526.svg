@@ -1,20 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 16.0.4, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="968.0px" height="648.0px" viewBox="0 0 968.0 648.0" enable-background="new 0 0 968.0 648.0">
-    <g id="image">
-        <image overflow="visible" width="3872.0" height="2592.0" xlink:href="AK02_20070811_195526.JPG" transform="matrix(0.25 0 0 0.25 0 0)">
-        </image>
-    </g>
-    <g id="gcp">
-        <circle id="P7010" cx="61.25" cy="115.25" r="0.25" fill="red"/>
-        <circle id="TOOTH" cx="248.25" cy="100.25" r="0.25" fill="red"/>
-        <circle id="P7930" cx="316.0" cy="98.75" r="0.25" fill="red"/>
-        <circle id="TRIANGLEPK" cx="448.25" cy="83.5" r="0.25" fill="red"/>
-        <circle id="clubarm" cx="495.75" cy="157.25" r="0.25" fill="red"/>
-        <circle id="bullseye" cx="512.25" cy="158.5" r="0.25" fill="red"/>
-        <circle id="xcrack" cx="631.25" cy="171.5" r="0.25" fill="red"/>
-        <circle id="wfalls" cx="691.5" cy="188.0" r="0.25" fill="red"/>
-        <circle id="JNCSLDR" cx="749.25" cy="204.75" r="0.25" fill="red"/>
-        <circle id="pinch" cx="943.0" cy="156.5" r="0.25" fill="red"/>
-    </g>
+<svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 width="968px" height="648px" viewBox="0 0 968 648" enable-background="new 0 0 968 648" xml:space="preserve">
+<g id="image">
+	
+		<image overflow="visible" enable-background="new    " width="3872" height="2592" xlink:href="AK02_20070811_195526.JPG"  transform="matrix(0.25 0 0 0.25 0 0)">
+	</image>
+</g>
+<g id="gcp-peaks">
+	<circle id="P7010" fill="#FF0000" cx="61.25" cy="115.25" r="0.25"/>
+	<circle id="TOOTH" fill="#FF0000" cx="248.25" cy="100.25" r="0.25"/>
+	<circle id="P7930" fill="#FF0000" cx="316" cy="98.75" r="0.25"/>
+	<circle id="TRIANGLEPK" fill="#FF0000" cx="448.25" cy="83.5" r="0.25"/>
+</g>
+<g id="gcp">
+	<circle id="clubarm" fill="#FF0000" cx="495.75" cy="157.25" r="0.25"/>
+	<circle id="bullseye" fill="#FF0000" cx="512.25" cy="158.5" r="0.25"/>
+	<circle id="xcrack" fill="#FF0000" cx="631.25" cy="171.5" r="0.25"/>
+	<circle id="wfalls" fill="#FF0000" cx="691.5" cy="188" r="0.25"/>
+	<circle id="JNCSLDR" fill="#FF0000" cx="749.25" cy="204.75" r="0.25"/>
+	<circle id="pinch" fill="#FF0000" cx="943" cy="156.5" r="0.25"/>
+</g>
 </svg>

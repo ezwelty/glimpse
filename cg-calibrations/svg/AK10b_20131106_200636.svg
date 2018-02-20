@@ -8,7 +8,7 @@
 		<image overflow="visible" enable-background="new    " width="3872" height="2592" xlink:href="AK10b_20131106_200636.JPG"  transform="matrix(0.25 0 0 0.25 0 9.765625e-04)">
 	</image>
 </g>
-<g id="gcp">
+<g id="gcp-doug">
 	<circle id="doug-12" fill="#FF0000" cx="305" cy="226.25" r="0.25"/>
 	<circle id="doug-13" fill="#FF0000" cx="8.5" cy="94" r="0.25"/>
 	<circle id="doug-14" fill="#FF0000" cx="623.75" cy="153.5" r="0.25"/>
@@ -16,6 +16,8 @@
 	<circle id="doug-16" fill="#FF0000" cx="744.5" cy="159.5" r="0.25"/>
 	<circle id="doug-17" fill="#FF0000" cx="440.25" cy="161" r="0.25"/>
 	<circle id="doug-25" fill="#FF0000" cx="877.75" cy="181.5" r="0.25"/>
+</g>
+<g id="gcp">
 	<circle id="beetle" fill="#FF0000" cx="589.562" cy="229.75" r="0.25"/>
 	<circle id="slant" fill="#FF0000" cx="577.25" cy="210.125" r="0.25"/>
 </g>

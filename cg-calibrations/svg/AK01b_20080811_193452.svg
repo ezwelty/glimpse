@@ -8,23 +8,21 @@
 		<image overflow="visible" enable-background="new    " width="3872" height="2592" xlink:href="AK01b_20080811_193452.JPG"  transform="matrix(0.25 0 0 0.25 0 9.765625e-04)">
 	</image>
 </g>
+<g id="gcp-peaks">
+	<circle id="P5330" fill="#FF0000" cx="237.438" cy="198.375" r="0.25"/>
+	<circle id="P8510" fill="#FF0000" cx="382.125" cy="200.312" r="0.25"/>
+	<circle id="P6940" fill="#FF0000" cx="429" cy="209.312" r="0.25"/>
+	<circle id="P6330" fill="#FF0000" cx="553.375" cy="202.5" r="0.25"/>
+	<circle id="P5360" fill="#FF0000" cx="629.875" cy="199.25" r="0.25"/>
+	<circle id="P5090" fill="#FF0000" cx="726.688" cy="190.062" r="0.25"/>
+	<circle id="P5170" fill="#FF0000" cx="775.188" cy="186.688" r="0.25"/>
+</g>
 <g id="gcp">
-	
-		<circle id="T20080811-01" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="407.25" cy="435.75" r="0.25"/>
-	
-		<circle id="T20080811-02" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="321.875" cy="480.688" r="0.25"/>
-	
-		<circle id="T20080811-03" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="450" cy="296.562" r="0.25"/>
-	
-		<circle id="topshelf" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="17.875" cy="270.875" r="0.25"/>
-	<circle id="nostril" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="110" cy="276.438" r="0.25"/>
-	<circle id="P5330" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="237.438" cy="198.375" r="0.25"/>
-	<circle id="P8510" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="382.125" cy="200.312" r="0.25"/>
-	<circle id="P6940" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="429" cy="209.312" r="0.25"/>
-	<circle id="P6330" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="553.375" cy="202.5" r="0.25"/>
-	<circle id="P5360" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="629.875" cy="199.25" r="0.25"/>
-	<circle id="P5090" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="726.688" cy="190.062" r="0.25"/>
-	<circle id="P5170" fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" cx="775.188" cy="186.688" r="0.25"/>
+	<circle id="T20080811-01" fill="#FF0000" cx="407.25" cy="435.75" r="0.25"/>
+	<circle id="T20080811-02" fill="#FF0000" cx="321.875" cy="480.688" r="0.25"/>
+	<circle id="T20080811-03" fill="#FF0000" cx="450" cy="296.562" r="0.25"/>
+	<circle id="topshelf" fill="#FF0000" cx="17.875" cy="270.875" r="0.25"/>
+	<circle id="nostril" fill="#FF0000" cx="110" cy="276.438" r="0.25"/>
 </g>
 <g id="terminus">
 	<polyline fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" points="299.25,498.625 303.625,492.375 
@@ -32,8 +30,8 @@
 		380.105,454.703 386.75,452 394.293,446.814 397.5,444.125 399.25,441.375 	"/>
 	<path fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" d="M968,385.499l-11.998,0.334l-16.833,0.333
 		l-16.333,0.167l-15-0.167l-16.334,0.167l-19.668,1.167l-21.167,0.5l-17.333,0.666L813.667,389l-23.833,1.333l-43.668,0.478
-		L732.5,391l-13.816,0.611l-3.894,0.115l-5.038-0.229l-11.919,0.67l-11.326,0.935l-7.1,0.229l-5.153,1.029l-6.184,0.229
-		l-7.215,0.458l-6.642,0.458l-7.1,0.459l-10.865,0.286c-9.507,1.074-19.052,0.443-28.577,1.303"/>
+		L732.5,391l-13.816,0.611l-3.894,0.114l-5.038-0.229l-11.919,0.67l-11.326,0.935l-7.1,0.229l-5.153,1.029l-6.184,0.229
+		l-7.215,0.458l-6.643,0.458l-7.1,0.459l-10.865,0.286c-9.507,1.074-19.052,0.443-28.577,1.303"/>
 	<polyline fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" points="436.125,426.25 442.375,423.5 
 		446,422.125 448.75,422.125 452.75,421.5 459.625,420.5 467.625,419 	"/>
 </g>

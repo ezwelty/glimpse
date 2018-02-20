@@ -324,28 +324,42 @@ class Tracker(object):
             # If no image, return a constant log likelihood
             return np.array([0.0])
         # Build image box around all particles, with a buffer for template matching
-        # -1, +1 adjustment ensures SSE size > 3 pixels (5+) for cubic spline interpolation
-        # TODO: Adjust minimum size based on interpolation order
         uv = observer.project(self.particles[:, 0:3], img=img)
         halfsize = np.multiply(self.tiles[i].shape[0:2][::-1], 0.5)
         box = np.vstack((
-            np.floor(uv.min(axis=0) - halfsize) - 1,
-            np.ceil(uv.max(axis=0) + halfsize) + 1)).astype(int).flatten()
-        if any(~observer.grid.inbounds(box.reshape(2, -2))):
-            raise IndexError("Particle bounding box extends past image bounds: " + str(box))
+            uv.min(axis=0) - halfsize,
+            uv.max(axis=0) + halfsize))
+        # Enlarge box to ensure SSE has cols, rows (ky + 1, kx + 1) for interpolation
+        ky = self.interpolation.get('ky', 3)
+        ncols = ky - (np.diff(box[:, 0]) - self.tiles[i].shape[1])
+        if ncols > 0:
+            # Widen box in 2nd ('y') dimension (x|cols)
+            box[:, 0] += np.hstack((-ncols, ncols)) / 2
+        kx = self.interpolation.get('kx', 3)
+        nrows = kx - (np.diff(box[:, 1]) - self.tiles[i].shape[0])
+        if nrows > 0:
+            # Widen box in 1st ('x') dimension (y|rows)
+            box[:, 1] += np.hstack((-nrows, nrows)) / 2
+        box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)
+        # Check that box is within image bounds
+        if not all(observer.grid.inbounds(box)):
+            raise IndexError("Particle bounding box extends past image bounds")
+        # Flatten box
+        box = box.ravel()
         # Extract test tile
         test_tile = self._prepare_test_tile(
             obs=i, img=img, box=box, template=self.histograms[i])
-        # Compute area-averaged sum of squares error
+        # Compute area-averaged sum of squares error (SSE)
         sse = cv2.matchTemplate(test_tile.astype(np.float32),
             templ=self.tiles[i].astype(np.float32), method=cv2.TM_SQDIFF)
         sse *= 1.0 / (self.tiles[i].shape[0] * self.tiles[i].shape[1])
-        # Sample at projected particles
-        # SSE tile box is shrunk by halfsize of reference tile - 0.5 pixel
+        # Compute SSE bounding box
+        # (relative to test tile: shrunk by halfsize of reference tile - 0.5 pixel)
         box_edge = halfsize - 0.5
         sse_box = box + np.hstack((box_edge, -box_edge))
-        # Shift box by subpixel offset
+        # (shift by subpixel offset of reference tile)
         sse_box += np.tile(self.duvs[i], 2)
+        # Sample at projected particles
         sampled_sse = observer.sample_tile(uv, tile=sse,
             box=sse_box, grid=False, **self.interpolation)
         return sampled_sse * (1.0 / observer.sigma**2)

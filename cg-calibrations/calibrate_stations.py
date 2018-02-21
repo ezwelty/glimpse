@@ -1,10 +1,9 @@
-import glob
-import os
 import sys
-sys.path.append("../")
-import optimize
+sys.path.insert(0, '..')
+import glimpse
+from glimpse.imports import (os, re, np)
+import glob
 import cgcalib
-import dem as DEM
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
 IMG_SIZE = 1
@@ -49,7 +48,7 @@ images2, controls2, cam_params2 = [], [], []
 #     station_calib=False, camera_calib=True)
 
 # Calibrate station
-station_model = optimize.Cameras(
+station_model = glimpse.optimize.Cameras(
     cams=[img.cam for img in images + images2],
     controls=controls + controls2,
     cam_params=cam_params + cam_params2,

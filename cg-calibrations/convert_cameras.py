@@ -1,7 +1,7 @@
-import re
 import sys
-sys.path.append('../')
-import image
+sys.path.insert(0, '..')
+import glimpse
+from glimpse.imports import (re)
 import cgcalib
 
 def parse_matlab_calibration(path):
@@ -29,14 +29,14 @@ def import_matlab_calibration(path, camera, suffix='-calib'):
     imgsz = [calib['nx'], calib['ny']]
     sensorsz = cgcalib.load_calibration(camera=camera)['sensorsz']
     # mean values
-    cam = image.Camera.from_matlab(
+    cam = glimpse.Camera.from_matlab(
         imgsz=imgsz, sensorsz=sensorsz,
         fc=calib['fc'], cc=calib['cc'], kc=calib['kc'])
     cam.write(
         path="cameras/" + camera + suffix + ".json",
         attributes=["fmm", "cmm", "k", "p", "sensorsz"])
     # standard errors
-    cam = image.Camera.from_matlab(
+    cam = glimpse.Camera.from_matlab(
         imgsz=imgsz, sensorsz=sensorsz,
         fc=calib['fc_error'], cc=calib['cc_error'], kc=calib['kc_error'])
     cam.vector /= 3 # "errors are approximately three times the standard deviations"

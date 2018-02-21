@@ -1,7 +1,8 @@
+import sys
+sys.path.insert(0, '..')
+import glimpse
+from glimpse.imports import (os, re, np)
 import glob
-import os
-import re
-import dem as DEM
 
 DEM_DIR = "/volumes/science-b/data/columbia/dem/"
 DATE_STR = '20070922'
@@ -9,20 +10,20 @@ DATE_STR = '20070922'
 # ---- Read DEM ----
 
 dem_path = glob.glob(DEM_DIR + DATE_STR + "*.tif")[-1]
-dem = DEM.DEM.read(dem_path)
+dem = glimpse.DEM.read(dem_path)
 
 # ---- Moraine lines ----
 
 paths = glob.glob("geojson/moraines/" + DATE_STR + ".geojson")
 for path in paths:
     basename = os.path.basename(path)
-    geo = helper.read_geojson(path, crs=32606)
-    helper.elevate_geojson(geo, elevation=dem)
-    for coords in helper.geojson_itercoords(geo):
+    geo = glimpse.helpers.read_geojson(path, crs=32606)
+    glimpse.helpers.elevate_geojson(geo, elevation=dem)
+    for coords in glimpse.helpers.geojson_itercoords(geo):
         if any(np.isnan(coords[:, 2])):
             print "Missing elevations in " + path
-    geo2 = helper.ordered_geojson(geo)
-    helper.write_geojson(geo2,
+    geo2 = glimpse.helpers.ordered_geojson(geo)
+    glimpse.helpers.write_geojson(geo2,
         path=os.path.splitext(path)[0] + ".geojson",
         decimals=[7, 7, 2],
         crs=32606)
@@ -30,9 +31,9 @@ for path in paths:
 # ---- Ground control points ----
 
 GCP_DEM_PATH = "/volumes/science-b/data/columbia/_new/ArcticDEM/v2.0/tiles/merged_projected_clipped.tif"
-dem_ref = DEM.DEM.read(GCP_DEM_PATH)
+dem_ref = glimpse.DEM.read(GCP_DEM_PATH)
 
-geo = helper.read_geojson("geojson/gcp.geojson", crs=32606, key="id")
+geo = glimpse.helpers.read_geojson("geojson/gcp.geojson", crs=32606, key="id")
 keys = [key for key in geo['features'].iterkeys() if re.findall("T" + DATE_STR + '-08', key)]
 keys.sort()
 for key in keys:
@@ -46,8 +47,8 @@ z = np.vstack([geo['features'][key]['geometry']['coordinates'][:, 2] for key in 
 z_ref = np.vstack([dem_ref.sample(geo['features'][key]['geometry']['coordinates'][:, 0:2]) for key in keys])
 z - z_ref
 
-geo2 = helper.ordered_geojson(geo, properties=['id', 'valid', 'notes'])
-helper.write_geojson(geo2,
+geo2 = glimpse.helpers.ordered_geojson(geo, properties=['id', 'valid', 'notes'])
+glimpse.helpers.write_geojson(geo2,
     path="geojson/gcp.geojson",
     decimals=[7, 7, 2],
     crs=32606)

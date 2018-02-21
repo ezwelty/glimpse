@@ -1,14 +1,9 @@
-import glob
-import os
 import sys
-import re
-import matplotlib
+sys.path.insert(0, '..')
+import glimpse
+from glimpse.imports import (os, re, np, matplotlib)
+import glob
 import cgcalib
-sys.path.append('../')
-import image
-import optimize
-import dem as DEM
-import numpy as np
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
 IMG_SIZE = 0.5
@@ -31,10 +26,10 @@ for path in svg_paths:
         except IOError:
             break
         img_path = cgcalib.find_image(path, root=IMG_DIR)
-        img = image.Image(img_path, cam=calibration)
+        img = glimpse.Image(img_path, cam=calibration)
         img.cam.resize(IMG_SIZE)
         controls = cgcalib.svg_controls(img, path, keys=SVG_KEYS)
-        image_model = optimize.Cameras(
+        image_model = glimpse.optimize.Cameras(
             cams=img.cam,
             controls=controls,
             cam_params=dict(viewdir=True))
@@ -67,17 +62,17 @@ for i, date in enumerate(img_dates):
     dem_paths = glob.glob(DEM_DIR + date + "*.tif")
     ortho_paths = glob.glob(ORTHO_DIR + date + "*.tif")
     if dem_paths and ortho_paths:
-        img = image.Image(cgcalib.find_image(img_paths[i], root=IMG_DIR), cam=img_paths[i])
+        img = glimpse.Image(cgcalib.find_image(img_paths[i], root=IMG_DIR), cam=img_paths[i])
         img.cam.resize(IMG_SIZE)
         viewbox = img.cam.viewbox(radius=30e3)
         if date != previous_date:
             # Prepare dem
-            dem = DEM.DEM.read(dem_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
+            dem = glimpse.DEM.read(dem_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
             dem.crop(zlim=[1, np.inf])
-            # FIXME: DEM.visible() not working from inside NAN
+            # FIXME: glimpse.DEM.visible() not working from inside NAN
             dem.fill_circle(center=img.cam.xyz, radius=500, value=0)
             # Prepare ortho
-            ortho = DEM.DEM.read(ortho_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
+            ortho = glimpse.DEM.read(ortho_paths[-1], d=DEM_GRID_SIZE, xlim=viewbox[0::3], ylim=viewbox[1::3])
             ortho.resample(dem, method="linear")
         # Save results as images
         basename = os.path.splitext(img_paths[i])[0]
@@ -93,7 +88,7 @@ for i, date in enumerate(img_dates):
         img.cam.idealize()
         img.cam.f = img.exif.fmm * img.cam.imgsz / img.cam.sensorsz
         controls = cgcalib.svg_controls(img, "svg/" + cgcalib.parse_image_path(basename)['basename'] + ".svg", keys=SVG_KEYS)
-        ideal_model = optimize.Cameras(img.cam, controls)
+        ideal_model = glimpse.optimize.Cameras(img.cam, controls)
         img.cam.viewdir = ideal_model.fit()
         I = cgcalib.dem_to_image(img.cam, dem, ortho.Z, mask=mask)
         I[np.isnan(I)] = np.nanmax(I) / 2 # fill holes with grey

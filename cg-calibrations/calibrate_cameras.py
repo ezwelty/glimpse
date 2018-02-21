@@ -1,12 +1,8 @@
-import os
 import sys
-import image
-import optimize
-import matplotlib
+sys.path.insert(0, '..')
+import glimpse
+from glimpse.imports import (os, re, np, matplotlib)
 import glob
-import re
-import dem as DEM
-cd ./cg-calibrations
 import cgcalib
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse/"
@@ -31,19 +27,19 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # GROUP_PARAMS[5]['k'] = ([0, 1], -0.25, 0.25)
 # CAMERA = 'nikon-d2x' # CG05
 # IMG_SIZE = 0.5
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'canon-20d' # CG06
 # IMG_SIZE = 0.5
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d200-03-20' # AK03(b)
 # IMG_SIZE = 0.5
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d200-13-20' # AK09
 # IMG_SIZE = 0.5
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d200-14-20' # AK09b
 # IMG_SIZE = np.array([968, 648]) * 1.5
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d300s' # AK12
 # IMG_SIZE = 0.25
 # svg_images[2].cam.viewdir = [5.5, -9, 0]
@@ -51,10 +47,10 @@ SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
 # CAMERA = 'canon-40d-01' # AKJNC
 # IMG_SIZE = 0.5
 # SVG_KEYS = ['moraines', 'gcp', 'horizon']
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d200-10-24' # AK10
 # IMG_SIZE = [1936, 1296]
-# GROUP_PARAMS.append(helper.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
+# GROUP_PARAMS.append(glimpse.helpers.merge_dicts(GROUP_PARAMS[-1], dict(xyz=True)))
 # CAMERA = 'nikon-d200-04-24' # AK01-2
 # IMG_SIZE = 1
 # CAMERA = 'nikon-d200-11-28' # AKST0XA
@@ -76,7 +72,7 @@ svg_images, svg_controls, svg_cam_params = cgcalib.camera_svg_controls(
 
 # Calibrate camera
 # NOTE: Doesn't account for stations with non-fixed xyz
-camera_model = optimize.Cameras(
+camera_model = glimpse.optimize.Cameras(
     cams=[img.cam for img in motion_images + svg_images],
     controls=motion_controls + svg_controls,
     cam_params=motion_cam_params + svg_cam_params,
@@ -123,13 +119,13 @@ ortho_path = glob.glob(ORTHO_DIR + date + "*.tif")[-1]
 camera_model.set_cameras(camera_fit.params)
 svg_images[i].cam.resize(IMG_SIZE2)
 # Prepare dem
-dem = DEM.DEM.read(dem_path)
+dem = glimpse.DEM.read(dem_path)
 smdem = dem.copy()
 smdem.resize(smdem.d[0] / DEM_GRID_SIZE)
 smdem.crop(zlim=[1, np.inf])
 mask = smdem.visible(svg_images[i].cam.xyz) & ~np.isnan(smortho.Z)
 # Prepare ortho
-ortho = DEM.DEM.read(ortho_path)
+ortho = glimpse.DEM.read(ortho_path)
 smortho = ortho.copy()
 smortho.resize(smortho.d[0] / DEM_GRID_SIZE)
 smortho.resample(smdem, method="linear")
@@ -166,9 +162,9 @@ svg_path = "svg/AKST03B_20100602_224800.svg"
 img_path = cgcalib.find_image(svg_path, IMG_DIR)
 ids = cgcalib.parse_image_path(img_path)
 eop = cgcalib.station_eop(ids['station'])
-img = image.Image(img_path, cam=dict(xyz=eop['xyz'], viewdir=eop['viewdir']))
+img = glimpse.Image(img_path, cam=dict(xyz=eop['xyz'], viewdir=eop['viewdir']))
 controls = cgcalib.svg_controls(img, svg_path, keys=SVG_KEYS)
-svg_model = optimize.Cameras(img.cam, controls,
+svg_model = glimpse.optimize.Cameras(img.cam, controls,
     cam_params=dict(viewdir=True), group_params=GROUP_PARAMS[-1])
 svg_fit = svg_model.fit(full=True, group_params=GROUP_PARAMS[:-1])
 img.plot()
@@ -177,7 +173,7 @@ img.set_plot_limits()
 
 # ---- Check undistorted image ---- #
 
-img = image.Image(
+img = glimpse.Image(
     cgcalib.find_image("AKJNC_20120508_191103C", root=IMG_DIR),
     cam="cameras/canon-40d-01b.json")
 ideal_cam = img.cam.copy()

@@ -1,19 +1,11 @@
 import os
-import numpy as np
+DIR = os.path.dirname(os.path.abspath(__file__))
 import sys
-sys.path.append("../")
-import helper
-import optimize
-import pandas
-import re
-import datetime
-import svg
-import image
-import dem as DEM
+sys.path.insert(0, os.path.join(DIR, '..'))
+import glimpse
+from glimpse.imports import (np, pandas, re, datetime)
 import glob
 import requests
-
-DIR = os.path.dirname(os.path.abspath(__file__))
 
 def parse_image_path(path):
     basename = os.path.basename(path)
@@ -41,7 +33,7 @@ def find_image(path, root="."):
                 return image_path
 
 def station_eop(station):
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "stations.geojson"), crs=32606, key="id")
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "stations.geojson"), crs=32606, key="id")
     return dict(
         xyz=np.reshape(geo['features'][station]['geometry']['coordinates'], -1),
         viewdir=geo['features'][station]['properties']['viewdir'],
@@ -50,7 +42,7 @@ def station_eop(station):
 def svg_controls(img, svg_markup, keys=None, correction=True):
     controls = []
     if isinstance(svg_markup, str):
-        svg_markup = svg.parse_svg(svg_markup, imgsz=img.cam.imgsz)
+        svg_markup = glimpse.svg.parse_svg(svg_markup, imgsz=img.cam.imgsz)
     if keys is None:
         keys = svg_markup.keys()
     for key, markup in svg_markup.iteritems():
@@ -69,45 +61,45 @@ def svg_controls(img, svg_markup, keys=None, correction=True):
 
 def gcp_points(img, markup, correction=True):
     uv = np.vstack(markup.values())
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "gcp.geojson"), key="id", crs=32606)
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "gcp.geojson"), key="id", crs=32606)
     xyz = np.vstack((geo['features'][key]['geometry']['coordinates']
         for key in markup.iterkeys()))
-    return optimize.Points(img.cam, uv, xyz, correction=correction)
+    return glimpse.optimize.Points(img.cam, uv, xyz, correction=correction)
 
 def coast_lines(img, markup, correction=True):
     luv = markup.values()
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "coast.geojson"), crs=32606)
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "coast.geojson"), crs=32606)
     lxy = [feature['geometry']['coordinates'] for feature in geo['features']]
     lxyz = [np.hstack((xy, sea_height(xy, t=img.datetime))) for xy in lxy]
-    return optimize.Lines(img.cam, luv, lxyz, correction=correction)
+    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
 def terminus_lines(img, markup, correction=True):
     luv = markup.values()
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "termini.geojson"), key="date", crs=32606)
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "termini.geojson"), key="date", crs=32606)
     date_str = img.datetime.strftime("%Y-%m-%d")
     xy = geo['features'][date_str]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))
-    return optimize.Lines(img.cam, luv, [xyz], correction=correction)
+    return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction)
 
 def horizon_lines(img, markup, correction=True):
     luv = markup.values()
     station = parse_image_path(img.path)['station']
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "horizons", station + ".geojson"), crs=32606)
-    lxyz = [coords for coords in helper.geojson_itercoords(geo)]
-    return optimize.Lines(img.cam, luv, lxyz, correction=correction)
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "horizons", station + ".geojson"), crs=32606)
+    lxyz = [coords for coords in glimpse.helpers.geojson_itercoords(geo)]
+    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
 def moraines_mlines(img, markup, correction=True):
     date_str = img.datetime.strftime("%Y%m%d")
-    geo = helper.read_geojson(os.path.join(DIR, "geojson", "moraines", date_str + ".geojson"), key="id", crs=32606)
+    geo = glimpse.helpers.read_geojson(os.path.join(DIR, "geojson", "moraines", date_str + ".geojson"), key="id", crs=32606)
     mlines = []
     for key, moraine in markup.iteritems():
         luv = moraine.values()
         xyz = geo['features'][key]['geometry']['coordinates']
-        mlines.append(optimize.Lines(img.cam, luv, [xyz], correction=correction))
+        mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction))
     return mlines
 
 def sea_height(xy, t=None):
-    egm2008 = DEM.DEM.read(os.path.join(DIR, "egm2008.tif"))
+    egm2008 = glimpse.DEM.read(os.path.join(DIR, "egm2008.tif"))
     geoid_height = egm2008.sample(xy).reshape(-1, 1)
     if t:
         t_begin = t.replace(minute=0, second=0, microsecond=0)
@@ -138,35 +130,35 @@ def load_calibration(path=None, station=False, camera=False, image=False, **kwar
         if camera is True:
             camera = ids['camera']
     if isinstance(station, str):
-        calibration = helper.merge_dicts(calibration, load_station(station))
+        calibration = glimpse.helpers.merge_dicts(calibration, load_station(station))
     elif path and not station:
         eop = station_eop(ids['station'])
         station_dict = dict(xyz=eop['xyz'], viewdir=eop['viewdir'])
-        calibration = helper.merge_dicts(calibration, station_dict)
+        calibration = glimpse.helpers.merge_dicts(calibration, station_dict)
     if isinstance(camera, str):
-        calibration = helper.merge_dicts(calibration, load_camera(camera))
+        calibration = glimpse.helpers.merge_dicts(calibration, load_camera(camera))
     if image:
         if path is None and isinstance(image, str):
             path = image
-        calibration = helper.merge_dicts(calibration, load_image(path))
-    return helper.merge_dicts(calibration, kwargs)
+        calibration = glimpse.helpers.merge_dicts(calibration, load_image(path))
+    return glimpse.helpers.merge_dicts(calibration, kwargs)
 
 def load_station(station):
     station_path = os.path.join(DIR, "stations", station + ".json")
-    return helper.read_json(station_path)
+    return glimpse.helpers.read_json(station_path)
 
 def load_camera(camera):
     camera_path = os.path.join(DIR, "cameras", camera + ".json")
-    return helper.read_json(camera_path)
+    return glimpse.helpers.read_json(camera_path)
 
 def load_image(image):
     basename = os.path.splitext(os.path.basename(image))[0]
     image_path = os.path.join(DIR, "images", basename + ".json")
-    return helper.read_json(image_path)
+    return glimpse.helpers.read_json(image_path)
 
 def camera_motion_matches(camera, root=".", size=1, force_size=False, method="sift",
     station_calib=False, camera_calib=False, **kwargs):
-    motion = helper.read_json(os.path.join(DIR, "motion.json"))
+    motion = glimpse.helpers.read_json(os.path.join(DIR, "motion.json"))
     sequences = [item['paths'] for item in motion
         if parse_image_path(item['paths'][0])['camera'] == camera]
     images, matches, cam_params = [], [], []
@@ -175,15 +167,15 @@ def camera_motion_matches(camera, root=".", size=1, force_size=False, method="si
         sys.stdout.flush()
         idx = slice(-len(sequence), None)
         paths = [find_image(path, root=root) for path in sequence]
-        images.extend([image.Image(path,
+        images.extend([glimpse.Image(path,
             cam=load_calibration(path, station=station_calib, camera=camera_calib))
             for path in paths])
         for img in images[idx]:
             img.cam.resize(size, force=force_size)
         if method == "sift":
-            matches.extend(optimize.sift_matches(images[idx], **kwargs))
+            matches.extend(glimpse.optimize.sift_matches(images[idx], **kwargs))
         elif method == "surf":
-            matches.extend(optimize.surf_matches(images[idx], **kwargs))
+            matches.extend(glimpse.optimize.surf_matches(images[idx], **kwargs))
         cam_params.extend([dict()] + [dict(viewdir=True)] * (len(sequence) - 1))
     return images, matches, cam_params
 
@@ -197,7 +189,7 @@ def camera_svg_controls(camera, root=".", size=1, force_size=False, fixed=True, 
             calibration = load_calibration(svg_path,
                 station=station_calib, camera=camera_calib)
             img_path = find_image(svg_path, root=root)
-            images.append(image.Image(img_path, cam=calibration))
+            images.append(glimpse.Image(img_path, cam=calibration))
             images[-1].cam.resize(size, force=force_size)
             controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
             params = dict(viewdir=True)
@@ -214,7 +206,7 @@ def station_svg_controls(station, root=".", size=1, force_size=False, keys=None,
         calibration = load_calibration(svg_path,
             station=station_calib, camera=camera_calib)
         img_path = find_image(svg_path, root=root)
-        images.append(image.Image(img_path, cam=calibration))
+        images.append(glimpse.Image(img_path, cam=calibration))
         images[-1].cam.resize(size, force=force_size)
         controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
         cam_params.append(dict(viewdir=True))

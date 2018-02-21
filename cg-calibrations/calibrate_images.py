@@ -6,16 +6,17 @@ import glob
 import cgcalib
 
 IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
-IMG_SIZE = 0.5
+IMG_SIZE = 1
 SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 
 # ---- Batch calibrate and orient cameras ---- #
 
 # STATION = 'AKJNC'
 # SVG_KEYS = ['gcp', 'horizon', 'coast', 'moraines']
-STATION = 'AK04'
+STATION = 'AK01b'
+SVG_KEYS = ['gcp', 'horizon', 'terminus', 'moraines']
 
-svg_paths = glob.glob("svg/" + STATION + "_*.svg")
+svg_paths = glob.glob(os.path.join('svg', STATION + '_*.svg'))
 for path in svg_paths:
     for suffix in ['']:
         ids = cgcalib.parse_image_path(path)
@@ -35,17 +36,19 @@ for path in svg_paths:
             cam_params=dict(viewdir=True))
         image_fit = image_model.fit(full=True)
         image_model.set_cameras(image_fit.params)
-        basename = os.path.splitext(os.path.basename(img.path))[0]
-        img.cam.write("images/" + basename + suffix + ".json",
+        img.cam.write(os.path.join('images', ids['basename'] + suffix + '.json'),
             attributes=['xyz', 'viewdir', 'fmm', 'cmm', 'k', 'p', 'sensorsz'])
-        fig = matplotlib.pyplot.figure(figsize=tuple(img.cam.imgsz / 72), frameon=False)
-        ax = matplotlib.pyplot.Axes(fig, [0., 0., 1., 1.])
-        ax.set_axis_off()
-        fig.add_axes(ax)
+        # Plot image with markup
+        dpi = 100
+        fig = matplotlib.pyplot.figure(figsize=tuple(img.cam.imgsz / dpi), dpi=dpi * 0.25, frameon=False)
+        ax = fig.add_axes((0, 0, 1, 1))
+        ax.axis('off')
         img.plot()
-        image_model.plot()
+        image_model.plot(
+            lines_observed=dict(color='yellow', linewidth=3),
+            lines_predicted=dict(color='red', linewidth=2))
         img.set_plot_limits()
-        matplotlib.pyplot.savefig("images/" + basename + suffix + "-markup.jpg", dpi=72)
+        matplotlib.pyplot.savefig(os.path.join('images', ids['basename'] + suffix + '-markup.jpg'), dpi=dpi)
         matplotlib.pyplot.close()
 
 # ---- Ortho projections ---- #

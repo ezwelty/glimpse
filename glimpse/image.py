@@ -1,6 +1,6 @@
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem, gdal)
+    sharedmem, gdal, cPickle, cv2)
 from . import (helpers, svg)
 
 class Camera(object):
@@ -194,6 +194,23 @@ class Camera(object):
             [C[2] * S[0] * S[1] - C[0] * S[2],  S[0] * S[2] + C[0] * C[2] * S[1], -C[1] * C[2]],
             [C[1] * S[0]                     ,  C[0] * C[1]                     ,  S[1]       ]
         ])
+
+    @property
+    def Rprime(self):
+        radians = np.deg2rad(self.viewdir)
+        C = np.cos(radians)
+        S = np.sin(radians)
+        Rprime = np.zeros((3,3,3))
+        Rprime[:,0,:] = np.array([[C[0]*S[1]*S[2] - S[0]*C[2],-S[0]*S[1]*S[2] - C[0]*C[2],0],
+                                  [S[0]*S[2] + C[0]*S[1]*C[2], C[0]*S[2] - S[0]*S[1]*C[2],0],
+                                  [C[0]*C[1]                 ,-S[0]*C[1]                 ,0]]).T
+        Rprime[:,1,:] = np.array([[S[0]*C[1]*S[2]            , C[0]*C[1]*S[2]            ,S[1]*S[2]],
+                                  [S[0]*C[1]*C[2]            , C[0]*C[1]*C[2]            ,S[1]*C[2]],
+                                 [-S[0]*S[1]                 ,-C[0]*S[1]                 ,C[1]]]).T
+        Rprime[:,2,:] = np.array([[S[0]*S[1]*C[2] - C[0]*S[2],S[0]*S[2] + C[0]*S[1]*C[2],-C[1]*C[2]],
+                                 [-S[0]*S[1]*S[2] - C[0]*C[2],S[0]*C[2] - C[0]*S[1]*S[2],C[1]*S[2]],
+                                 [0,0,0]]).T
+        return Rprime*np.pi/180   
 
     @property
     def cameraMatrix(self):
@@ -1006,8 +1023,9 @@ class Image(object):
         cam (Camera): Camera object
     """
 
-    def __init__(self, path, cam=None, datetime=None):
+    def __init__(self, path, cam=None, datetime=None, siftpath=None):
         self.path = path
+        self.siftpath = siftpath
         self.exif = Exif(path=path)
         # NOTE: Namespace conflict with datetime (package)
         if datetime:
@@ -1034,6 +1052,7 @@ class Image(object):
                         cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
             self.cam = Camera(**cam)
         self.I = None
+        self.sift_descriptors = None
 
     def copy(self):
         """
@@ -1135,6 +1154,31 @@ class Image(object):
             else:
                 warnings.warn("Writing EXIF to non-JPEG file is not supported.")
                 im.save(path, **params)
+
+    def read_sift(self):
+        if self.sift_descriptors is not None:
+            return self.sift_descriptors
+
+        elif self.siftpath is not None:
+            try:
+                sift_descriptors_txt = cPickle.load(open(self.siftpath))
+                
+                kps = [cv2.KeyPoint(x=point[0][0],y=point[0][1],_size=point[1], _angle=point[2], _response=point[3], _octave=point[4], _class_id=point[5]) for point in sift_descriptors_txt[0]]
+                self.sift_descriptors = [kps,sift_descriptors_txt[1]]
+                return self.sift_descriptors
+            except IOError:
+                warnings.warn("No descriptor found at specified path")
+                return None
+        else:
+            warnings.warn("SIFT descriptor directory not specified")
+            return None
+
+    def write_sift(self):
+        if self.sift_descriptors is not None and self.siftpath is not None:
+            kps_txt = [(point.pt, point.size, point.angle, point.response, point.octave, point.class_id) for point in self.sift_descriptors[0]]
+            cPickle.dump([kps_txt,self.sift_descriptors[1]],open(self.siftpath,'w'))
+        else:
+            warnings.warn("Could not write SIFT descriptor to file")
 
     def plot(self, origin='upper', extent=None, **params):
         """

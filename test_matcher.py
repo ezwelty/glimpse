@@ -34,19 +34,23 @@ mask = np.load(camera_directory+'mask/mask.npy')
 anchor_image_name = 'AK01b_20130615_220325'
 anchor_image = glimpse.Image(raw_image_directory+anchor_image_name+'.JPG',cam='cg-calibrations/images/'+anchor_image_name+'.json')
 
-img_names = np.sort(os.listdir(raw_image_directory))[:15]
+img_names = np.sort(os.listdir(raw_image_directory))[:7]
 images = []
 
 for img_name in img_names:
     basename = img_name[:-4]
-    images.append(glimpse.Image(raw_image_directory+basename+'.JPG',cam=anchor_image.cam.copy(),siftpath=sift_directory+basename+'.p'))
+    if anchor_image_name==basename:
+        images.append(glimpse.Image(raw_image_directory+basename+'.JPG',cam=anchor_image.cam.copy(),siftpath=sift_directory+basename+'.p',anchor_image=True))
+    else:
+        images.append(glimpse.Image(raw_image_directory+basename+'.JPG',cam=anchor_image.cam.copy(),siftpath=sift_directory+basename+'.p'))
 
 observer_ = glimpse.Observer(images)
 
-ms = glimpse.optimize.CameraMotionSolver(observer_,anchor_image_name,anchor_image)
+ms = glimpse.optimize.CameraMotionSolver(observer_)
 
-ms.generate_image_kp_and_des(masks=mask)
-matches = ms.generate_matches()
+ms.generate_image_kp_and_des(masks=mask,contrastThreshold=0.02,overwrite_cached_kp_and_des=False)
+matches = ms.generate_matches(match_bandwidth=10,match_path='./data/AK01b/matches/',overwrite_matches=False)
+w00 = observer_.images[0].cam.viewdir.copy()
 out = ms.align()
 
 

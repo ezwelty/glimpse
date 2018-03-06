@@ -1023,10 +1023,11 @@ class Image(object):
         cam (Camera): Camera object
     """
 
-    def __init__(self, path, cam=None, datetime=None, siftpath=None):
+    def __init__(self, path, cam=None, datetime=None, siftpath=None, anchor_image=False):
         self.path = path
         self.siftpath = siftpath
         self.exif = Exif(path=path)
+        self.anchor_image = anchor_image
         # NOTE: Namespace conflict with datetime (package)
         if datetime:
             self.datetime = datetime

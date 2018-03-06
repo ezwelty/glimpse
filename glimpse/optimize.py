@@ -1,4 +1,4 @@
-from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy)
+from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, cPickle)
 from . import (helpers)
 
 # ---- Controls ----
@@ -1290,16 +1290,52 @@ def model_criteria(fit):
     )
 
 class CameraMotionSolver(object):
-    
-    def __init__(self,observer,anchor_image_base_name,anchor_image):
-        self.observer = observer
-        self.anchor_image_base_name = anchor_image_base_name
-        self.anchor_image = anchor_image
-     
-        self.anchor_image.read()
-        self.hist_template = np.mean(anchor_image.I,axis=2)
+    """
+    Class for finding optimal camera view directions 
 
-    def generate_image_kp_and_des(self,masks=None,overwrite_cached_kp_and_des=False,descriptor_dir=None,nfeatures=0,**params):
+    Works in three stages: first, generates (and caches) SIFT descriptors for an arbitrary number of images.
+    Second, generates matches between an image and an arbitrary number of other images, 
+    typically utilizing a banded structure; matches are made between an image and others falling within
+    a certain timespan relative to the image.  Third, simultaneously finds the optimal view directions for 
+    all the cameras at once according to an L1 minimization via bfgs.  
+
+    """
+    
+    def __init__(self,observer):
+        """
+        Initialize the solver.
+
+        Arguments:
+            observer (`glimpse.Observer'): an observer object which contains all the desired cameras to align
+            anchor_image_base_name (str): 
+        """
+
+        self.observer = observer
+        self.anchor_images = []
+        for img in self.observer.images:
+            if img.anchor_image:
+                self.anchor_images.append(img)
+
+        if not self.anchor_images:
+            print "Warning: no anchor image found, using first image as anchor"
+            self.observer.images[0].anchor_image=True
+            self.anchor_images.append(self.observer.images[0])
+
+        self.anchor_images[0].read()
+        self.hist_template = np.mean(self.anchor_images[0].I,axis=2)
+
+    def generate_image_kp_and_des(self,masks=None,overwrite_cached_kp_and_des=False,nfeatures=0,**params):
+        """
+        Generate or import keypoints and descriptions
+
+        Arguments:
+            masks (list or array): A (list of) boolean numpy arrays encoding image locations to consider for SIFT
+                                   descriptors
+            overwrite_cached_kp_and_des: Overrides default behavior of using existing SIFT descriptors if possible
+            nfeatures             : number of SIFT descriptors to generate (0 means as many as possible)
+            params                : parameters to cv2.SIFT   
+
+        """
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks, ) * len(self.observer.images)
         sift = cv2.SIFT(nfeatures=nfeatures, **params)
@@ -1308,9 +1344,10 @@ class CameraMotionSolver(object):
         for (img,mask) in zip(self.observer.images,masks):
             print img.path
             img.read_sift()
-            if img.sift_descriptors is None:
+            if img.sift_descriptors is None or overwrite_cached_kp_and_des:
                 I = img.read()
-                I = helpers.match_histogram(I.copy(),self.hist_template).astype('uint8')
+                if self.hist_template is not None:
+                    I = helpers.match_histogram(I.copy(),self.hist_template).astype('uint8')
                 kp,des = sift.detectAndCompute(I, mask=mask)
                 eps = 1e-7
                 des /= des.sum(axis=1,keepdims=True) + eps
@@ -1319,7 +1356,20 @@ class CameraMotionSolver(object):
                 if img.siftpath is not None:
                     img.write_sift()
 
-    def generate_matches(self,match_bandwidth=1,ratio=0.6,d_tol=10):
+    def generate_matches(self,match_bandwidth=1,ratio=0.6,d_tol=10,match_path=None,overwrite_matches=False):
+        """
+        Produce a matrix of SIFT matche objects
+
+        Arguments:
+            mask_bandwidth: How many indices away should matches be computed for?  i.e. mask_bandwidth=10 
+                            produces matches between an image and its twenty nearest neighbors in time.
+            ratio: ratio for accepting SIFT matches, lower equals stricter quality control
+            d_tol: pixel distance above which matches are rejected (this solver is only for small motion)
+
+        Returns:
+            matches : N_image x N_image matrix of augmented match objects
+  
+        """
         index_params = dict(algorithm=1, trees=5)
         search_params = dict(checks=50)
         flann = cv2.FlannBasedMatcher(index_params, search_params)
@@ -1327,34 +1377,76 @@ class CameraMotionSolver(object):
         matches = np.zeros((n,n)).astype(object)
         for i,img_1 in enumerate(self.observer.images):
             for j,img_2 in enumerate(self.observer.images):
-                if i<j:
-                    M = flann.knnMatch(img_1.sift_descriptors[1], img_2.sift_descriptors[1], k=2)
-                    is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
-                    A = np.array([img_1.sift_descriptors[0][m.queryIdx].pt for m, n in M])[is_good, :]
-                    B = np.array([img_2.sift_descriptors[0][m.trainIdx].pt for m, n in M])[is_good, :]
-                    d = np.sqrt(np.sum((A-B)**2,axis=1))
-                    valid_dist = d<d_tol
-                    match = Matches((img_1.cam, img_2.cam), (A[valid_dist], B[valid_dist]))
-                    match.cuvs = [match.cams[0]._image2camera(match.uvs[0]),match.cams[1]._image2camera(match.uvs[1])]
-                    matches[i,j] = match
-                    m_v = copy.copy(match)
-                    m_v.uvs = m_v.uvs[::-1]
-                    m_v.cuvs = m_v.cuvs[::-1]
-                    m_v.cams = m_v.cams[::-1]
-                    matches[j,i] = m_v
+                print "Matching images: ",img_1.path.rsplit('/',1)[1][:-4],img_2.path.rsplit('/',1)[1][:-4]
+                if match_path is not None and not overwrite_matches:
+                    try:
+                        if i!=j:
+                            m   = cPickle.load(open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p'))
+                            m_v = cPickle.load(open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p'))
+                            matches[i,j] = m
+                            matches[j,i] = m_v
+                    except IOError:
+                        print "Failed to find match file, generating new one"
+                        if i<j and (i-j)<=match_bandwidth:
+                            M = flann.knnMatch(img_1.sift_descriptors[1], img_2.sift_descriptors[1], k=2)
+                            is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
+                            A = np.array([img_1.sift_descriptors[0][m.queryIdx].pt for m, n in M])[is_good, :]
+                            B = np.array([img_2.sift_descriptors[0][m.trainIdx].pt for m, n in M])[is_good, :]
+                            d = np.sqrt(np.sum((A-B)**2,axis=1))
+                            valid_dist = d<d_tol
+                            match = Matches((img_1.cam, img_2.cam), (A[valid_dist], B[valid_dist]))
+                            match.cuvs = [match.cams[0]._image2camera(match.uvs[0]),match.cams[1]._image2camera(match.uvs[1])]
+                            matches[i,j] = match
+                            m_v = copy.copy(match)
+                            m_v.uvs = m_v.uvs[::-1]
+                            m_v.cuvs = m_v.cuvs[::-1]
+                            m_v.cams = m_v.cams[::-1]
+                            matches[j,i] = m_v
+                            cPickle.dump(match,open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p','w'))
+                            cPickle.dump(m_v  ,open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p','w'))
+                else:
+                    print "Overwriting previous match file"
+                    if i<j and (i-j)<=match_bandwidth:
+                        M = flann.knnMatch(img_1.sift_descriptors[1], img_2.sift_descriptors[1], k=2)
+                        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
+                        A = np.array([img_1.sift_descriptors[0][m.queryIdx].pt for m, n in M])[is_good, :]
+                        B = np.array([img_2.sift_descriptors[0][m.trainIdx].pt for m, n in M])[is_good, :]
+                        d = np.sqrt(np.sum((A-B)**2,axis=1))
+                        valid_dist = d<d_tol
+                        match = Matches((img_1.cam, img_2.cam), (A[valid_dist], B[valid_dist]))
+                        match.cuvs = [match.cams[0]._image2camera(match.uvs[0]),match.cams[1]._image2camera(match.uvs[1])]
+                        matches[i,j] = match
+                        m_v = copy.copy(match)
+                        m_v.uvs = m_v.uvs[::-1]
+                        m_v.cuvs = m_v.cuvs[::-1]
+                        m_v.cams = m_v.cams[::-1]
+                        matches[j,i] = m_v
+                        if match_path is not None:
+                            cPickle.dump(match,open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p','w'))
+                            cPickle.dump(m_v  ,open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p','w'))
         self.matches = matches
         return self.matches
 
-    def align(self,gamma=10000,anchor_index=0):
+    def align(self,gamma=1e6):
+        """
+        Construct and solve a large optimization problem for the view directions of all cameras in observer
+
+        Arguments:
+            gamma: Strength of constraint on anchor image values being correct
+
+        Returns:
+            out: the output of bfgs which contains optimal values, Hessian approximation, etc.
+        """
+ 
         n_f = len(self.observer.images)
-        cam = self.anchor_image.cam
-        w_0 = np.tile(cam.viewdir,n_f).reshape((n_f,-1))
+        w_0 = np.row_stack([i.cam.viewdir for i in self.observer.images])
         w_hat = w_0.copy()
         def _J_fun(w):
             w = np.reshape(w,(n_f,3))
             J = 0
-            J_r = gamma/2.*sum((w[anchor_index,:] - w_hat[anchor_index,:])**2) 
             for i,img_1 in enumerate(self.observer.images):
+                if img_1.anchor_image:
+                    J += gamma/2.*sum((w[i,:] - w_hat[i,:])**2) 
                 for j,img_2 in enumerate(self.observer.images):
                     m = self.matches[i,j]
                     if m!=0 and i<j:
@@ -1364,14 +1456,15 @@ class CameraMotionSolver(object):
                         d_1 = m.cams[1]._camera2world(m.cuvs[1].copy())
                         D = np.sum(abs(d_0 - d_1))
                         J += D
-            print J+J_r
-            return J + J_r
+            print J
+            return J
 
         def _G_fun(w):
             w = np.reshape(w,(n_f,3))
             G = np.zeros(w.shape)
-            G[anchor_index,:] += gamma*(w[anchor_index,:] - w_hat[anchor_index,:])
             for i,img_1 in enumerate(self.observer.images):
+                if img_1.anchor_image:
+                    G[i,:] += gamma*(w[i,:] - w_hat[i,:])
                 for j,img_2 in enumerate(self.observer.images):
                     m = self.matches[i,j]
                     if m!=0:

@@ -34,7 +34,7 @@ mask = np.load(camera_directory+'mask/mask.npy')
 anchor_image_name = 'AK01b_20130615_220325'
 anchor_image = glimpse.Image(raw_image_directory+anchor_image_name+'.JPG',cam='cg-calibrations/images/'+anchor_image_name+'.json')
 
-img_names = np.sort(os.listdir(raw_image_directory))[:7]
+img_names = np.sort(os.listdir(raw_image_directory))
 images = []
 
 for img_name in img_names:

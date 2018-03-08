@@ -1,8 +1,6 @@
 import glimpse
-from glimpse.imports import (datetime, np, os, re)
+from glimpse.imports import (datetime, np, os, re, matplotlib, sharedmem)
 import glob
-import matplotlib
-import sharedmem
 import itertools
 
 # ---- Constants ----

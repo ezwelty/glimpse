@@ -1,6 +1,5 @@
 import glimpse
 from glimpse.imports import (datetime, np, os, cv2, sys, datetime, matplotlib, sharedmem)
-import time
 sys.path.append('cg-calibrations')
 import cgcalib
 import glob
@@ -9,38 +8,38 @@ import glob
 
 STATION_DIR = os.path.join('data', 'AK01b')
 IMG_DIR = os.path.join(STATION_DIR, 'images')
-SIFT_DIR = os.path.join(STATION_DIR, 'keypoints')
-MATCH_DIR = os.path.join(STATION_DIR, 'matches/')
+KEYPOINT_DIR = os.path.join(STATION_DIR, 'keypoints')
+MATCH_DIR = os.path.join(STATION_DIR, 'matches')
 MASK_PATH = os.path.join(STATION_DIR, 'mask', 'mask.npy')
 START_TIME = datetime.datetime(2013, 6, 13, 0)
 END_TIME = datetime.datetime(2013, 6, 16, 0)
-ANCHOR_IMAGE_NAME = 'AK01b_20130615_220325'
+ANCHOR_BASENAME = 'AK01b_20130615_220325'
 
 # ---- Prepare Observer ----
 
-cam_args = cgcalib.load_calibration(image=ANCHOR_IMAGE_NAME)
-img_paths = glob.glob(os.path.join(IMG_DIR, "*.JPG"))
-images = []
-for img_path in img_paths:
-    basename = cgcalib.parse_image_path(img_path)['basename']
-    is_anchor = basename == ANCHOR_IMAGE_NAME
-    images.append(glimpse.Image(
-        path=img_path, cam=cam_args,
-        siftpath=os.path.join(SIFT_DIR, basename + '.p'), anchor_image=is_anchor))
-datetimes = np.array([img.datetime for img in images])
+all_img_paths = glob.glob(os.path.join(IMG_DIR, "*.JPG"))
+datetimes = np.array([glimpse.Exif(path).datetime
+    for path in all_img_paths])
 inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)
-observer = glimpse.Observer(
-    [images[i] for i in np.where(inrange)[0]])
+img_paths = [all_img_paths[i] for i in np.where(inrange)[0]]
+basenames = [os.path.splitext(os.path.basename(path))[0]
+    for path in img_paths]
+cam_args = cgcalib.load_calibration(image=ANCHOR_BASENAME)
+images = [glimpse.Image(
+    path, cam=cam_args, anchor=(basename == ANCHOR_BASENAME),
+    keypoints_path=os.path.join(KEYPOINT_DIR, basename + '.pkl'))
+    for path, basename in zip(img_paths, basenames)]
+observer = glimpse.Observer(images)
 
 # ---- Align Observer ----
 
 mask = np.load(MASK_PATH)
-ms = glimpse.optimize.CameraMotionSolver(observer)
-ms.generate_image_kp_and_des(masks=mask, contrastThreshold=0.02, overwrite_cached_kp_and_des=False)
-matches = ms.generate_matches(match_bandwidth=10, match_path=MATCH_DIR, overwrite_matches=False)
-out = ms.align()
-viewdirs = np.split(out.x, len(out.x) / 3)
-for i in range(len(viewdirs)):
+model = glimpse.optimize.ObserverCameras(observer)
+model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
+model.build_matches(neighbors=10, max_distance=10, path=MATCH_DIR, overwrite=False)
+fit = model.fit(tol = 1e-3)
+viewdirs = np.split(fit.x, len(fit.x) / 3)
+for i, img in enumerate(observer.images):
     observer.images[i].cam.viewdir = viewdirs[i]
 
 # ---- Plot results ----

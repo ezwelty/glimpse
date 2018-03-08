@@ -1,4 +1,5 @@
-from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, cPickle)
+from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, cPickle,
+    warnings)
 from . import (helpers)
 
 # ---- Controls ----
@@ -759,198 +760,187 @@ class Cameras(object):
         matplotlib.pyplot.colorbar()
         matplotlib.pyplot.gca().invert_yaxis()
 
-class CameraMotionSolver(object):
+class ObserverCameras(object):
     """
-    Class for finding optimal camera view directions
+    `ObserverCameras` finds the optimal view directions of the cameras in an `Observer`.
 
-    Works in three stages: first, generates (and caches) SIFT descriptors for an arbitrary number of images.
-    Second, generates matches between an image and an arbitrary number of other images,
-    typically utilizing a banded structure; matches are made between an image and others falling within
-    a certain timespan relative to the image.  Third, simultaneously finds the optimal view directions for
-    all the cameras at once according to an L1 minimization via bfgs.
+    Optimization proceeds in stages:
 
+        - Build (and save to file) keypoint descriptors for each image with `self.build_keypoints()`.
+        - Build (and save to file) keypoints matches between image pairs with `self.build_matches()`.
+        Matches are made between an image and all others falling within a certain distance in time.
+        - Solve for the optimal view directions of all the cameras with `self.align()`.
+
+    Attributes:
+        observer (`glimpse.Observer`): Observer with the cameras to orient (images to align)
+        anchor_images (list)
+        histogram (tuple):
+        matches (array):
     """
 
-    def __init__(self,observer):
-        """
-        Initialize the solver.
-
-        Arguments:
-            observer (`glimpse.Observer'): an observer object which contains all the desired cameras to align
-            anchor_image_base_name (str):
-        """
-
+    def __init__(self, observer):
         self.observer = observer
-        self.anchor_images = []
-        for img in self.observer.images:
-            if img.anchor_image:
-                self.anchor_images.append(img)
+        is_anchor = [img.anchor for img in self.observer.images]
+        anchors = np.where(is_anchor)[0]
+        if len(anchors) == 0:
+            warnings.warn('No anchor image found, using first image as anchor')
+            anchors = (0, )
+        self.anchor_images = [self.observer.images[i] for i in anchors]
+        self.histogram = helpers.compute_cdf(
+            self.read_image(self.anchor_images[0]), return_inverse=False)
 
-        if not self.anchor_images:
-            print "Warning: no anchor image found, using first image as anchor"
-            self.observer.images[0].anchor_image=True
-            self.anchor_images.append(self.observer.images[0])
+    def read_image(self, img, histogram=None):
+        I = img.read()
+        if I.ndim > 2:
+            I = helpers.rgb_to_gray(I, method='average', weights=None)
+        if histogram:
+            I = helpers.match_histogram(I, template=histogram)
+        return I.astype(np.uint8)
 
-        self.anchor_images[0].read()
-        self.hist_template = np.mean(self.anchor_images[0].I,axis=2)
-
-    def generate_image_kp_and_des(self,masks=None,overwrite_cached_kp_and_des=False,nfeatures=0,**params):
+    def build_keypoints(self, masks=None, overwrite=False,
+        clear_images=True, clear_keypoints=False, **params):
         """
-        Generate or import keypoints and descriptions
+        Build image keypoints and their descriptors.
+
+        The result for each `Image` is stored in `Image.keypoints`
+        and optionally written to a file.
 
         Arguments:
-            masks (list or array): A (list of) boolean numpy arrays encoding image locations to consider for SIFT
-                                   descriptors
-            overwrite_cached_kp_and_des: Overrides default behavior of using existing SIFT descriptors if possible
-            nfeatures             : number of SIFT descriptors to generate (0 means as many as possible)
-            params                : parameters to cv2.SIFT
-
+            masks (list or array): Boolean array(s) (uint8) indicating regions in which to detect keypoints
+            overwrite (bool): Whether to recompute and overwrite existing keypoint files
+            clear_images (bool)
+            clear_keypoints (bool)
+            **params: Additional arguments to `optimize.detect_keypoints()`
         """
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks, ) * len(self.observer.images)
-        sift = cv2.SIFT(nfeatures=nfeatures, **params)
-        # Extract keypoints (keypoints, descriptors)
-        keypoints = []
-        for (img,mask) in zip(self.observer.images,masks):
+        for img, mask in zip(self.observer.images, masks):
             print img.path
-            img.read_sift()
-            if img.sift_descriptors is None or overwrite_cached_kp_and_des:
-                I = img.read()
-                if self.hist_template is not None:
-                    I = helpers.match_histogram(I.copy(),self.hist_template).astype('uint8')
-                kp,des = sift.detectAndCompute(I, mask=mask)
-                eps = 1e-7
-                des /= des.sum(axis=1,keepdims=True) + eps
-                des = np.sqrt(des)
-                img.sift_descriptors = (kp,des)
-                if img.siftpath is not None:
-                    img.write_sift()
+            if img.read_keypoints() is None or overwrite:
+                I = self.read_image(img, histogram=self.histogram)
+                img.keypoints = detect_keypoints(I, mask=mask, **params)
+                if img.keypoints_path:
+                    img.write_keypoints()
+                    if clear_keypoints:
+                        img.keypoints = None
+                if clear_images:
+                    img.I = None
 
-    def generate_matches(self,match_bandwidth=1,ratio=0.6,d_tol=10,match_path=None,overwrite_matches=False):
+    def build_matches(self, neighbors=1, path=None, overwrite=False, **params):
         """
-        Produce a matrix of SIFT matche objects
+        Build matches between each image and its nearest neighbors.
+
+        Results are stored in `self.matches` as an (n, n) array of augmented `Matches`,
+        and the result for each `Image` pair optionally written to a file.
 
         Arguments:
-            mask_bandwidth: How many indices away should matches be computed for?  i.e. mask_bandwidth=10
-                            produces matches between an image and its twenty nearest neighbors in time.
-            ratio: ratio for accepting SIFT matches, lower equals stricter quality control
-            d_tol: pixel distance above which matches are rejected (this solver is only for small motion)
-
-        Returns:
-            matches : N_image x N_image matrix of augmented match objects
-
+            neighbors (int): Number of nearest neighbors in each direction
+                to match each image against
+            path (str):
+            overwrite (bool):
+            **params: Additional arguments to `optimize.match_keypoints()`
         """
-        index_params = dict(algorithm=1, trees=5)
-        search_params = dict(checks=50)
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
         n = len(self.observer.images)
-        matches = np.zeros((n,n)).astype(object)
-        for i,img_1 in enumerate(self.observer.images):
-            for j,img_2 in enumerate(self.observer.images):
-                print "Matching images: ",img_1.path.rsplit('/',1)[1][:-4],img_2.path.rsplit('/',1)[1][:-4]
-                if match_path is not None and not overwrite_matches:
-                    try:
-                        if i!=j:
-                            m   = cPickle.load(open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p'))
-                            m_v = cPickle.load(open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p'))
-                            matches[i,j] = m
-                            matches[j,i] = m_v
-                    except IOError:
-                        print "Failed to find match file, generating new one"
-                        if i<j and (i-j)<=match_bandwidth:
-                            M = flann.knnMatch(img_1.sift_descriptors[1], img_2.sift_descriptors[1], k=2)
-                            is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
-                            A = np.array([img_1.sift_descriptors[0][m.queryIdx].pt for m, n in M])[is_good, :]
-                            B = np.array([img_2.sift_descriptors[0][m.trainIdx].pt for m, n in M])[is_good, :]
-                            d = np.sqrt(np.sum((A-B)**2,axis=1))
-                            valid_dist = d<d_tol
-                            match = Matches((img_1.cam, img_2.cam), (A[valid_dist], B[valid_dist]))
-                            match.cuvs = [match.cams[0]._image2camera(match.uvs[0]),match.cams[1]._image2camera(match.uvs[1])]
-                            matches[i,j] = match
-                            m_v = copy.copy(match)
-                            m_v.uvs = m_v.uvs[::-1]
-                            m_v.cuvs = m_v.cuvs[::-1]
-                            m_v.cams = m_v.cams[::-1]
-                            matches[j,i] = m_v
-                            cPickle.dump(match,open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p','w'))
-                            cPickle.dump(m_v  ,open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p','w'))
+        matches = np.zeros((n, n)).astype(object)
+        if path:
+            basenames = [os.path.splitext(os.path.basename(img.path))[0]
+                for img in self.observer.images]
+            if len(basenames) != len(set(basenames)):
+                raise ValueError("Image basenames are not unique")
+        for i, imgA in enumerate(self.observer.images):
+            for j, imgB in enumerate(self.observer.images[(i + 1):]):
+                if (j - i) > neighbors:
+                    continue
+                print "Matching images:", basenames[i], basenames[j]
+                if path:
+                    outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
+                if path and not overwrite and os.path.exists(outfile):
+                    matches[i, j] = helpers.read_pickle(outfile)
+                    # matches[j, i] = m_v
                 else:
-                    print "Overwriting previous match file"
-                    if i<j and (i-j)<=match_bandwidth:
-                        M = flann.knnMatch(img_1.sift_descriptors[1], img_2.sift_descriptors[1], k=2)
-                        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
-                        A = np.array([img_1.sift_descriptors[0][m.queryIdx].pt for m, n in M])[is_good, :]
-                        B = np.array([img_2.sift_descriptors[0][m.trainIdx].pt for m, n in M])[is_good, :]
-                        d = np.sqrt(np.sum((A-B)**2,axis=1))
-                        valid_dist = d<d_tol
-                        match = Matches((img_1.cam, img_2.cam), (A[valid_dist], B[valid_dist]))
-                        match.cuvs = [match.cams[0]._image2camera(match.uvs[0]),match.cams[1]._image2camera(match.uvs[1])]
-                        matches[i,j] = match
-                        m_v = copy.copy(match)
-                        m_v.uvs = m_v.uvs[::-1]
-                        m_v.cuvs = m_v.cuvs[::-1]
-                        m_v.cams = m_v.cams[::-1]
-                        matches[j,i] = m_v
-                        if match_path is not None:
-                            cPickle.dump(match,open(match_path+img_1.path.rsplit('/',1)[1][:-4]+'_'+img_2.path.rsplit('/',1)[1][:-4]+'.p','w'))
-                            cPickle.dump(m_v  ,open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p','w'))
+                    Xa, Xb = match_keypoints(imgA.keypoints, imgB.keypoints, **params)
+                    match = Matches(cams=(imgA.cam, imgB.cam), uvs=(Xa, Xb))
+                    match.xys = (
+                        match.cams[0]._image2camera(Xa),
+                        match.cams[1]._image2camera(Xb))
+                    matches[i, j] = match
+                    # m_v = copy.copy(match)
+                    # m_v.uvs = m_v.uvs[::-1]
+                    # m_v.cuvs = m_v.cuvs[::-1]
+                    # m_v.cams = m_v.cams[::-1]
+                    # matches[j, i] = m_v
+                    if path:
+                        helpers.write_pickle(match, path=outfile)
+                        # cPickle.dump(m_v  , open(match_path+img_2.path.rsplit('/',1)[1][:-4]+'_'+img_1.path.rsplit('/',1)[1][:-4]+'.p','w'))
         self.matches = matches
-        return self.matches
 
-    def align(self,gamma=1e6):
+    def fit(self, anchor_weight=1e6, **params):
         """
-        Construct and solve a large optimization problem for the view directions of all cameras in observer
+        Return optimal camera view directions.
+
+        The Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm is used to find
+        the camera view directions that minimize the sum of the absolute differences (L1-norm).
+        See `scipy.optimize.minimize(method='bfgs')`.
 
         Arguments:
-            gamma: Strength of constraint on anchor image values being correct
+            anchor_weight (float): Weight on anchor images values being correct
+            full (bool): Whether to return the full result of `scipy.optimize.minimize()`
 
         Returns:
-            out: the output of bfgs which contains optimal values, Hessian approximation, etc.
+            `scipy.optimize.OptimizeResult` (`full=True`): The optimization result.
+                Attributes include solution array `x`, boolean `success`, and `message`.
+            array (`full=False`): The solution array, whose rows are the
+                `Camera.viewdir` for each
         """
-
-        n_f = len(self.observer.images)
-        w_0 = np.row_stack([i.cam.viewdir for i in self.observer.images])
+        n = len(self.observer.images)
+        w_0 = np.row_stack([img.cam.viewdir for img in self.observer.images])
         w_hat = w_0.copy()
         def _J_fun(w):
-            w = np.reshape(w,(n_f,3))
+            w = np.reshape(w, (n, 3))
             J = 0
-            for i,img_1 in enumerate(self.observer.images):
-                if img_1.anchor_image:
-                    J += gamma/2.*sum((w[i,:] - w_hat[i,:])**2)
-                for j,img_2 in enumerate(self.observer.images):
-                    m = self.matches[i,j]
-                    if m!=0 and i<j:
+            for i, imgA in enumerate(self.observer.images):
+                if imgA.anchor:
+                    J += anchor_weight / 2.0 * sum((w[i, :] - w_hat[i, :])**2)
+                for j, imgB in enumerate(self.observer.images[(i + 1):]):
+                    m = self.matches[i, j]
+                    if m != 0:
                         m.cams[0].viewdir = w[i]
-                        d_0 = m.cams[0]._camera2world(m.cuvs[0].copy())
+                        d_0 = m.cams[0]._camera2world(m.xys[0].copy())
                         m.cams[1].viewdir = w[j]
-                        d_1 = m.cams[1]._camera2world(m.cuvs[1].copy())
+                        d_1 = m.cams[1]._camera2world(m.xys[1].copy())
                         D = np.sum(abs(d_0 - d_1))
                         J += D
             print J
             return J
-
         def _G_fun(w):
-            w = np.reshape(w,(n_f,3))
+            w = np.reshape(w, (n, 3))
             G = np.zeros(w.shape)
-            for i,img_1 in enumerate(self.observer.images):
-                if img_1.anchor_image:
-                    G[i,:] += gamma*(w[i,:] - w_hat[i,:])
-                for j,img_2 in enumerate(self.observer.images):
-                    m = self.matches[i,j]
-                    if m!=0:
-                        m.cams[0].viewdir = w[i]
-                        uv_0 = m.cuvs[0].copy()
-                        uvhat = np.column_stack((uv_0,np.ones(len(uv_0))))
-                        dDdw = np.matmul(m.cams[0].Rprime,uvhat.T)
-                        d_0 = m.cams[0]._camera2world(uv_0)
-                        m.cams[1].viewdir = w[j]
-                        uv_1 = m.cuvs[1].copy()
-                        d_1 = m.cams[1]._camera2world(uv_1)
-                        delta = np.sign(d_0-d_1).reshape((-1,3,1))
-                        G[i] += np.sum(np.matmul(dDdw.T,delta).T,axis=2).squeeze()
+            for i, imgA in enumerate(self.observer.images):
+                if imgA.anchor:
+                    G[i, :] += anchor_weight * (w[i, :] - w_hat[i, :])
+                for j, imgB in enumerate(self.observer.images):
+                    m = self.matches[i, j]
+                    if m == 0:
+                        continue
+                    if i > j:
+                        m = copy.copy(m)
+                        m.xys = m.xys[::-1]
+                        m.cams = m.cams[::-1]
+                    m.cams[0].viewdir = w[i]
+                    xy_0 = m.xys[0].copy()
+                    xy_hat = np.column_stack((xy_0, np.ones(len(xy_0))))
+                    dDdw = np.matmul(m.cams[0].Rprime, xy_hat.T)
+                    d_0 = m.cams[0]._camera2world(xy_0)
+                    m.cams[1].viewdir = w[j]
+                    xy_1 = m.xys[1].copy()
+                    d_1 = m.cams[1]._camera2world(xy_1)
+                    delta = np.sign(d_0 - d_1).reshape((-1, 3, 1))
+                    G[i] += np.sum(np.matmul(dDdw.T, delta).T, axis=2).squeeze()
             return G.ravel()
-        out = scipy.optimize.minimize(_J_fun,w_0,jac=_G_fun,method='bfgs',tol=1e-3)
-        return out
+        result = scipy.optimize.minimize(fun=_J_fun, x0=w_0, jac=_G_fun, method='bfgs', **params)
+        if not result.success:
+            print result.message
+        return result
 
 # ---- RANSAC ----
 
@@ -1026,149 +1016,100 @@ def ransac_sample(sample_size, data_size):
 
 # ---- Build matches ----
 
-def sift_matches(images, masks=None, ratio=0.7, nfeatures=0, d_tol=np.inf, **params):
+def detect_keypoints(I, mask=None, method='sift', root=True, **params):
     """
-    Return `Matches` constructed from SIFT matches between sequential images.
+    Return keypoints and descriptors for an image.
 
     Arguments:
-        images (list): Image objects.
-            Matches are computed between each sequential pair.
-        masks (list or array): Regions in which to detect features (uint8) -
-            either in all images (if array) or in each image (if list)
-        ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
-            calculated as the ratio between the distance of the nearest and second nearest match.
-            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
-        nfeatures (int): The number of best features (ranked by local contrast) to retain
-            from each image for matching, or `0` for all
-        **params: Additional arguments passed to `cv2.SIFT()`.
-            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
+        I (array): 2 or 3-dimensional image array (uint8)
+        mask (array): Regions in which to detect keypoints (uint8)
+        root (bool): Whether to return square root L1-normalized descriptors.
+            See https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf.
+        **params: Additional arguments passed to `cv2.SIFT()` or `cv2.SURF()`.
+            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html.
 
     Returns:
-        list: Matches objects
+        list: Keypoints as cv2.KeyPoint objects
+        array: Descriptors as array rows
     """
-    if masks is None or isinstance(masks, np.ndarray):
-        masks = (masks, ) * len(images)
-    sift = cv2.SIFT(nfeatures=nfeatures, **params)
-    # Extract keypoints (keypoints, descriptors)
-    keypoints = []
-    for img,mask in zip(images,masks):
-        kp,des = sift.detectAndCompute(img.read(), mask=mask)
-        eps = 1e-7
-        des /= des.sum(axis=1,keepdims=True) + eps
-        des = np.sqrt(des)
-        keypoints.append((kp,des))
-    # Match keypoints
-    # TODO: Find algorithm definitions for FlannBasedMatcher index parameters
-    index_params = dict(algorithm=1, trees=5)
-    search_params = dict(checks=50)
-    flann = cv2.FlannBasedMatcher(index_params, search_params)
-    controls = list()
-    for i in range(len(images) - 1):
-        M = flann.knnMatch(keypoints[i][1], keypoints[i + 1][1], k=2)
-        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
-        A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
-        B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
-        d = np.sqrt(np.sum((A-B)**2,axis=1))
-        valid_dist = d<d_tol
-        controls.append(Matches((images[i].cam, images[i + 1].cam), (A[valid_dist], B[valid_dist])))
-    return controls
+    if method == 'sift':
+        detector = cv2.SIFT(**params)
+    elif method == 'surf':
+        detector = cv2.SURF(**params)
+    keypoints, descriptors = detector.detectAndCompute(I, mask=mask)
+    # Empty result: ([], None)
+    if root and descriptors is not None:
+        descriptors *= 1 / (descriptors.sum(axis=1, keepdims=True) + 1e-7)
+        descriptors = np.sqrt(descriptors)
+    return keypoints, descriptors
 
-def surf_matches(images, masks=None, ratio=0.7, hessianThreshold=1e3, d_tol=np.inf, **params):
+def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
+    indexParams=dict(algorithm=1, trees=5), searchParams=dict(checks=50)):
     """
-    Return `Matches` constructed from SURF matches between sequential images.
+    Return the coordinates of matched keypoint pairs.
 
     Arguments:
-        images (list): Image objects.
-            Matches are computed between each sequential pair.
-        masks (list or array): Regions in which to detect features (uint8) -
-            either in all images (if array) or in each image (if list)
-        ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
-            calculated as the ratio between the distance of the nearest and second nearest match.
-            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
-        hessianThreshold (float): Threshold for the hessian keypoint detector used in SURF
-        **params: Additional arguments passed to `cv2.SURF()`.
-            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#surf-surf
+        ka (tuple): Keypoints of image A (keypoints, descriptors)
+        kb (tuple): Keypoints of image B (keypoints, descriptors)
+        mask (array): Region in which to retain keypoints (uint8)
+        max_ratio (float): Maximum descriptor-distance ratio between the best
+            and second best match. See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20.
+        max_distance (float): Maximum coordinate-distance of matched keypoints
+        indexParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
+        searchParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
 
     Returns:
-        list: Matches objects
+        array: Coordinates of matches in image A
+        array: Coordinates of matches in image B
     """
-    if masks is None or isinstance(masks, np.ndarray):
-        masks = (masks, ) * len(images)
-    surf = cv2.SURF(hessianThreshold=hessianThreshold, **params)
-    # Extract keypoints (keypoints, descriptors)
-    keypoints = [(surf.detectAndCompute(img.read(), mask=mask)) for img, mask in zip(images, masks)]
-    # Match keypoints
-    # TODO: Find algorithm definitions for FlannBasedMatcher index parameters
-    index_params = dict(algorithm=1, trees=5)
-    search_params = dict(checks=50)
-    flann = cv2.FlannBasedMatcher(index_params, search_params)
-    controls = list()
-    for i in range(len(images) - 1):
-        M = flann.knnMatch(keypoints[i][1], keypoints[i + 1][1], k=2)
-        is_good = np.array([m.distance / n.distance for m, n in M]) < ratio
-        A = np.array([keypoints[i][0][m.queryIdx].pt for m, n in M])[is_good, :]
-        B = np.array([keypoints[i + 1][0][m.trainIdx].pt for m, n in M])[is_good, :]
-        d = np.sqrt(np.sum((A-B)**2,axis=1))
-        valid_dist = d<d_tol
-        controls.append(Matches((images[i].cam, images[i + 1].cam), (A[valid_dist], B[valid_dist])))
-    return controls
+    flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
+    n_nearest = 2 if max_ratio else 1
+    matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
+    Xa = np.array([ka[0][m[0].queryIdx].pt for m in matches])
+    Xb = np.array([kb[0][m[0].trainIdx].pt for m in matches])
+    if max_ratio:
+        is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
+        Xa = Xa[is_valid]
+        Xb = Xb[is_valid]
+    if max_distance:
+        is_valid = np.linalg.norm(Xa - Xb, axis=1) < max_distance
+        Xa = Xa[is_valid]
+        Xb = Xb[is_valid]
+    return Xa, Xb
 
-def corr_matches(images, masks=None, hw=25, sd=35, do_hist_match=True, do_highpass=True, n_points=100):
-    if masks is None or isinstance(masks, np.ndarray):
-        masks = (masks, ) * len(images)
-
-    image_0 = images[0].read()
-    image_1 = images[1].read()
-    gray = cv2.cvtColor(image_0,cv2.COLOR_RGB2GRAY)
-    corners = cv2.goodFeaturesToTrack(gray, n_points, 0.01, 10,mask=masks[0])
-    corners = np.int0(corners).squeeze()
-    corners = corners[corners[:,0]>sd]
-    corners = corners[corners[:,0]<image_0.shape[1]-sd]
-    corners = corners[corners[:,1]>sd]
-    corners = corners[corners[:,1]<image_0.shape[0]-sd]
-
-    def get_chip(image,row,col,hw,ref_template,median_filter_size=(5,5)):
-        chip = image[row-hw:1+row+hw,col-hw:1+col+hw].copy()
-        if do_hist_match:
-            chip[:,:,0] = helpers.hist_match(chip[:,:,0],ref_template[:,:,0])
-            chip[:,:,1] = helpers.hist_match(chip[:,:,1],ref_template[:,:,1])
-            chip[:,:,2] = helpers.hist_match(chip[:,:,2],ref_template[:,:,2])
-        pca = sklearn.decomposition.PCA(n_components=1,svd_solver='arpack',whiten=True)
-        m,n,q = chip.shape
-        Q = chip.reshape((m*n,q))
-        pca.fit(Q)
-        pca.components_ = np.sign(pca.components_[0])*pca.components_
-        Qp = pca.transform(Q)
-        chip = Qp.reshape((m,n))
-        if do_highpass:
-            chip_lowpass = scipy.ndimage.filters.median_filter(
-                chip,(median_filter_size[0],median_filter_size[1]))
-            chip -= chip_lowpass
-        return chip
-
-    A = []
-    B = []
-
-    for col,row in corners:
-        ref_template = image_0[row-sd:1+row+sd,col-sd:1+col+sd,:]
-        ref_chip = get_chip(image_0,row,col,hw,ref_template)
-        test_chip = get_chip(image_1,row,col,sd,ref_template)
-        rhos = cv2.matchTemplate(test_chip.astype('float32'),ref_chip.astype('float32'),method=cv2.TM_SQDIFF)
-        rhos/=(ref_chip.shape[0]*ref_chip.shape[1])
-        row_n0,col_n0 = np.unravel_index(rhos.argmin(),rhos.shape)
-
-        local_interp = scipy.interpolate.RectBivariateSpline(
-            range(rhos.shape[0]),range(rhos.shape[1]),rhos,kx=3,ky=3)
-
-        xopt = scipy.optimize.fmin_cg(lambda x:local_interp(x[0],x[1])[0][0],(row_n0,col_n0),fprime=lambda x:np.array([local_interp(x[0],x[1],dx=1)[0][0],local_interp(x[0],x[1],dy=1)[0][0]]),disp=0)
-        rho_opt = max(local_interp(xopt[0],xopt[1])[0][0],1e-3)
-        col_m = col - (sd-hw) + xopt[0]
-        row_m = row - (sd-hw) + xopt[1]
-        B.append([col,row])
-        A.append([col_m,row_m])
-
-    controls = [Matches((images[0].cam, images[1].cam), (np.array(A), np.array(B)))]
-    return controls
+# def build_matches(img, imgs, masks=None, method='sift', max_ratio=None, max_distance=None, **params):
+#     """
+#     Return `Matches` constructed from SIFT matches between sequential images.
+#
+#     Arguments:
+#         images (list): Image objects.
+#             Matches are computed between each sequential pair.
+#         masks (list or array): Regions in which to detect features (uint8) -
+#             either in all images (if array) or in each image (if list)
+#         ratio (float): Maximum distance ratio of preserved matches (lower ratio ~ better match),
+#             calculated as the ratio between the distance of the nearest and second nearest match.
+#             See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20
+#         nfeatures (int): The number of best features (ranked by local contrast) to retain
+#             from each image for matching, or `0` for all
+#         **params: Additional arguments passed to `cv2.SIFT()`.
+#             See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html#sift-sift
+#
+#     Returns:
+#         list: Matches objects
+#     """
+#     if masks is None or isinstance(masks, np.ndarray):
+#         masks = (masks, ) * len(images)
+#     # Extract keypoints (keypoints, descriptors)
+#     keypoints = []
+#     for img, mask in zip(images, masks):
+#
+#         keypoints.append((kp, des))
+#     # Match keypoints
+#     controls = list()
+#     for i in range(len(images) - 1):
+#
+#         controls.append(Matches((images[i].cam, images[i + 1].cam), (A[valid_dist], B[valid_dist])))
+#     return controls
 
 # ---- Helpers ----
 

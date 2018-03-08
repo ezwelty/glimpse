@@ -1,5 +1,6 @@
 from .imports import (
-    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL, sklearn)
+    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
+        sklearn, cv2, copy_reg)
 
 # ---- General ---- #
 
@@ -53,19 +54,36 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
 
 # ---- Pickles ---- #
 
-def save_zipped_pickle(obj, path, protocol=-1):
+def write_pickle(obj, path, gz=False, binary=True, protocol=cPickle.HIGHEST_PROTOCOL):
     """
-    Save object to compressed pickle file.
+    Write object to pickle file.
     """
-    with gzip.open(path, 'wb') as fp:
-        cPickle.dump(obj=obj, file=fp, protocol=protocol)
+    mode = 'wb' if binary else 'w'
+    if gz:
+        fp = gzip.open(path, mode=mode)
+    else:
+        fp = open(path, mode=mode)
+    cPickle.dump(obj, file=fp, protocol=protocol)
+    fp.close()
 
-def load_zipped_pickle(path):
+def read_pickle(path, gz=False, binary=True):
     """
-    Load object from compressed pickle file.
+    Read object from pickle file.
     """
-    with gzip.open(path, 'rb') as fp:
-        return cPickle.load(fp)
+    mode = 'rb' if binary else 'r'
+    if gz:
+        fp = gzip.open(path, mode=mode)
+    else:
+        fp = open(path, mode=mode)
+    obj = cPickle.load(fp)
+    fp.close()
+    return obj
+
+# Register Pickle method for cv2.KeyPoint
+# https://stackoverflow.com/questions/10045363/pickling-cv2-keypoint-causes-picklingerror
+def _pickle_cv2_keypoints(k):
+    return cv2.KeyPoint, (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id)
+copy_reg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
 
 # ---- Arrays: General ---- #
 

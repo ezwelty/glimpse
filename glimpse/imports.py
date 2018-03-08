@@ -1,5 +1,6 @@
 import collections
 import copy
+import copy_reg
 import cPickle
 import cv2
 import datetime

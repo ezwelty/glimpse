@@ -45,9 +45,9 @@ dem.fill_crevasses_simple()
 
 # ---- Run Tracker ----
 
-xy0 = np.array([4.988e5, 6.78186e6])
-xys = np.vstack([np.array(xy)+xy0 for xy in itertools.product(
-                [-300,-200.,-100,0.,100.,200.,300.],[-300.,-200.,-100.,0.,100.,200.,300.])])
+xy0 = np.array((4.988e5, 6.78186e6))
+xys = xy0 + np.vstack([xy for xy in
+    itertools.product(range(-300, 400, 100), range(-300, 400, 100))])
 time_unit = datetime.timedelta(days=1).total_seconds()
 tracker = glimpse.Tracker(
     observers=observers, dem=dem,
@@ -58,13 +58,13 @@ def run_tracker(xy):
         vxy=(0, 0), vxy_sigma=(10, 10))
     tracker.track(datetimes=None, maxdt=0, tile_size=(15,15),
         axy=(0, 0), axy_sigma=(2, 2))
-    means = np.vstack(tracker.means)
-    return means
+    return np.vstack(tracker.means)
 
 with sharedmem.MapReduce() as pool:
-    results = pool.map(run_tracker,xys)
+    results = pool.map(run_tracker, xys)
 
 # ---- Plot track ----
+
 for means in results:
     matplotlib.pyplot.plot(means[:, 0], means[:, 1], marker='.', color='red')
     matplotlib.pyplot.plot(means[0, 0], means[0, 1], marker='.', color='green')

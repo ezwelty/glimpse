@@ -931,27 +931,26 @@ class ObserverCameras(object):
         def gradient_fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
             gradients = np.zeros(viewdirs.shape)
-            for i, img_0 in enumerate(self.observer.images):
-                if i in self.anchors:
-                    gradients[i] += anchor_weight * (viewdirs[i] - viewdirs_0[i])
-                for j, img_1 in enumerate(self.observer.images):
-                    if i < j:
-                        m = self.matches[i, j]
-                        a = 0
-                        b = 1
-                    else:
-                        m = self.matches[j, i]
-                        a = 1
-                        b = 0
+            for i in self.anchors:
+                gradients[i] += anchor_weight * (viewdirs[i] - viewdirs_0[i])
+            for i, img_0 in enumerate(self.observer.images[:-1]):
+                for j, img_1 in enumerate(self.observer.images[(i + 1):], i + 1):
+                    m = self.matches[i, j]
                     if m:
-                        m.cams[a].viewdir = viewdirs[i]
-                        xy_hat = np.column_stack((m.xys[a], np.ones(m.size())))
-                        dD_dw = np.matmul(m.cams[a].Rprime, xy_hat.T)
-                        xyz_0 = m.cams[a]._camera2world(m.xys[a])
-                        m.cams[b].viewdir = viewdirs[j]
-                        xyz_1 = m.cams[b]._camera2world(m.xys[b])
+                        # Update cameras
+                        m.cams[0].viewdir = viewdirs[i]
+                        m.cams[1].viewdir = viewdirs[j]
+                        # Project matches
+                        xyz_0 = m.cams[0]._camera2world(m.xys[0])
+                        xyz_1 = m.cams[1]._camera2world(m.xys[1])
+                        # i -> j
+                        xy_hat = np.column_stack((m.xys[0], np.ones(m.size())))
+                        dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
                         delta = np.sign(xyz_0 - xyz_1).reshape(-1, 3, 1)
-                        gradients[i] += np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
+                        gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
+                        gradients[i] += gradient
+                        # j -> i
+                        gradients[j] -= gradient
             return gradients.ravel()
         result = scipy.optimize.minimize(
             fun=error_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)

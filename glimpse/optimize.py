@@ -910,12 +910,12 @@ class ObserverCameras(object):
                 Attributes include solution array `x`, boolean `success`, and `message`.
         """
         viewdirs_0 = np.row_stack([img.cam.viewdir for img in self.observer.images])
-        def objective_fun(viewdirs):
+        def error_fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
-            J = 0
+            error = 0
             for i, img_0 in enumerate(self.observer.images[:-1]):
                 if i in self.anchors:
-                    J += (anchor_weight / 2.0) * sum((viewdirs[i, :] - viewdirs_0[i, :])**2)
+                    error += (anchor_weight / 2.0) * sum((viewdirs[i] - viewdirs_0[i])**2)
                 for j, img_1 in enumerate(self.observer.images[(i + 1):], i + 1):
                     m = self.matches[i, j]
                     if m:
@@ -923,15 +923,17 @@ class ObserverCameras(object):
                         xyz_0 = m.cams[0]._camera2world(m.xys[0])
                         m.cams[1].viewdir = viewdirs[j]
                         xyz_1 = m.cams[1]._camera2world(m.xys[1])
-                        J += np.sum(abs(xyz_0 - xyz_1))
-            print J
-            return J
+                        error += np.sum(abs(xyz_0 - xyz_1))
+            # Update console output
+            sys.stdout.write("\r" + str(error))
+            sys.stdout.flush()
+            return error
         def gradient_fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
-            G = np.zeros(viewdirs.shape)
+            gradients = np.zeros(viewdirs.shape)
             for i, img_0 in enumerate(self.observer.images):
                 if i in self.anchors:
-                    G[i, :] += anchor_weight * (viewdirs[i,:] - viewdirs_0[i,:])
+                    gradients[i] += anchor_weight * (viewdirs[i] - viewdirs_0[i])
                 for j, img_1 in enumerate(self.observer.images):
                     if i < j:
                         m = self.matches[i, j]
@@ -949,11 +951,12 @@ class ObserverCameras(object):
                         m.cams[b].viewdir = viewdirs[j]
                         xyz_1 = m.cams[b]._camera2world(m.xys[b])
                         delta = np.sign(xyz_0 - xyz_1).reshape(-1, 3, 1)
-                        G[i] += np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
-            return G.ravel()
+                        gradients[i] += np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
+            return gradients.ravel()
         result = scipy.optimize.minimize(
-            fun=objective_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)
+            fun=error_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)
         if not result.success:
+            print '' # new line
             print result.message
         return result
 

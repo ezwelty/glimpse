@@ -1161,6 +1161,14 @@ class Image(object):
                 im.save(path, **params)
 
     def read_keypoints(self):
+        """
+        Return cached keypoints.
+
+        Returns `self.keypoints` or reads them from `self.keypoints_path` with
+        `helpers.read_pickle()`.
+        Keypoints are expected to be in the form produced by
+        `optimize.detect_keypoints()`.
+        """
         if self.keypoints is None:
             if self.keypoints_path is None:
                 warnings.warn("Keypoints path not specified")
@@ -1173,6 +1181,12 @@ class Image(object):
         return self.keypoints
 
     def write_keypoints(self):
+        """
+        Write keypoints to file.
+
+        Writes `self.keypoints` to `self.keypoints_path` with
+        `helpers.write_pickle()`.
+        """
         if self.keypoints is not None and self.keypoints_path is not None:
             helpers.write_pickle(self.keypoints, path=self.keypoints_path)
         else:

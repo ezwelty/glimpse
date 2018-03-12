@@ -36,8 +36,8 @@ observer = glimpse.Observer(images)
 mask = np.load(MASK_PATH)
 model = glimpse.optimize.ObserverCameras(observer)
 model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
-model.build_matches(neighbors=10, max_distance=10, path=MATCH_DIR, overwrite=False)
-fit = model.fit(tol = 1e-3)
+model.build_matches(neighbors=10, max_ratio=0.6, max_distance=10, path=MATCH_DIR, overwrite=False)
+fit = model.fit(tol=1e-3)
 viewdirs = np.split(fit.x, len(fit.x) / 3)
 for i, img in enumerate(observer.images):
     observer.images[i].cam.viewdir = viewdirs[i]

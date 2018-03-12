@@ -1,5 +1,5 @@
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, cPickle,
-    warnings)
+    warnings, datetime)
 from . import (helpers)
 
 # ---- Controls ----
@@ -771,12 +771,14 @@ class ObserverCameras(object):
         Matches are made between an image and all others falling within a certain distance in time.
         - Solve for the optimal view directions of all the cameras with `self.fit()`.
 
+    Arguments:
+        template: Template for histogram matching (see `helpers.match_histogram()`).
+            If `None`, the first anchor image is used, converted to grayscale.
+
     Attributes:
         observer (`glimpse.Observer`): Observer with the cameras to orient (images to align)
         anchors (iterable): Integer indices of `observer.images` to use as anchors
-        template (tuple): Template for histogram matching (see `helpers.match_histogram()`).
-            If `None`, the first anchor image is used, converted to grayscale.
-            For speed, a histogram (values, quantiles) is precomputed from array input.
+        template (tuple): Template histogram (values, quantiles) for histogram matching
         matches (array): Grid of `Matches` objects (see `self.build_matches`)
     """
 
@@ -847,7 +849,7 @@ class ObserverCameras(object):
                 if clear_images:
                     img.I = None
 
-    def build_matches(self, neighbors=1, path=None, overwrite=False, **params):
+    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None, overwrite=False, **params):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -856,8 +858,8 @@ class ObserverCameras(object):
         file with name `basenames[i]_basenames[j].pkl`.
 
         Arguments:
-            neighbors (int): Number of nearest neighbors in each direction
-                to match each image against
+            max_dt (`datetime.timedelta`): Maximum time seperation between
+                pairs of images to match
             path (str): Directory for match files.
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
@@ -875,7 +877,7 @@ class ObserverCameras(object):
                 print "" # new line
             print "Matching", i, "->",
             for j, imgB in enumerate(self.observer.images[(i + 1):], i + 1):
-                if (j - i) > neighbors:
+                if (imgB.datetime - imgA.datetime) > max_dt:
                     continue
                 print j,
                 if path:

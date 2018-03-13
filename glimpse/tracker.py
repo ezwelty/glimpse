@@ -23,9 +23,13 @@ class Tracker(object):
         weights (array): Particle likelihoods (n, )
         particle_mean (array): Weighted mean of `particles` (1, 5) [[x, y, z, vx, vy]]
         particle_covariance (array): Weighted covariance matrix of `particles` (5, 5)
-        datetimes (array): Date and times at which particle positions were estimated.
+        datetimes (array): Date and times at which particle positions were estimated
         means (list): `particle_mean` at each `datetimes`
         covariances (list): `particle_covariance` at each `datetimes`
+        tiles (list): For each Observer, a tile extracted from the first
+            Image matching a `datetimes` centered around the `particle_mean`
+        histograms (list): Histogram (values, quantiles) of each `tiles`
+            for histogram matching
     """
     def __init__(self, observers, dem, time_unit=1, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):

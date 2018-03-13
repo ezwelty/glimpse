@@ -38,9 +38,8 @@ model = glimpse.optimize.ObserverCameras(observer)
 model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
 model.build_matches(max_dt=datetime.timedelta(days=1), path=MATCH_DIR, overwrite=False, max_ratio=0.6, max_distance=10)
 fit = model.fit(tol=1e-3)
-viewdirs = np.split(fit.x, len(fit.x) / 3)
-for i, img in enumerate(observer.images):
-    observer.images[i].cam.viewdir = viewdirs[i]
+viewdirs = fit.x.reshape(-1, 3)
+model.set_cameras(viewdirs=viewdirs)
 
 # ---- Plot results ----
 

@@ -277,7 +277,7 @@ def read_json(path, **kwargs):
 
     Arguments:
         path (str): Path to file
-        kwargs: Additional arguments passed to `json.load()`
+        **kwargs: Additional arguments passed to `json.load()`
     """
     with open(path, "r") as fp:
         return json.load(fp, **kwargs)
@@ -292,8 +292,7 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
         flat_arrays (bool): Whether to flatten json arrays to a single line.
             By default, `json.dumps` puts each array element on a new line if
             `indent` is `0` or greater.
-            See https://github.com/nlohmann/json/issues/229.
-        kwargs: Additional arguments passed to `json.dump()` or `json.dumps()`
+        **kwargs: Additional arguments passed to `json.dumps()`
     """
     txt = json.dumps(obj, **kwargs)
     if flat_arrays and kwargs.get('indent') >= 0:

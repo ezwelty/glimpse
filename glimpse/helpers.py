@@ -52,12 +52,24 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
         obj = ltype(obj)
     return obj
 
+def make_path_directories(path, is_file=True):
+    # https://stackoverflow.com/a/14364249
+    if is_file:
+        path = os.path.dirname(path)
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path)
+        except OSError:
+            if not os.path.isdir(path):
+                raise
+
 # ---- Pickles ---- #
 
 def write_pickle(obj, path, gz=False, binary=True, protocol=cPickle.HIGHEST_PROTOCOL):
     """
     Write object to pickle file.
     """
+    make_path_directories(path, is_file=True)
     mode = 'wb' if binary else 'w'
     if gz:
         fp = gzip.open(path, mode=mode)
@@ -280,6 +292,7 @@ def write_json(obj, path=None, **kwargs):
         kwargs (dict): Additional arguments passed to `json.dump()` or `json.dumps()`
     """
     if path:
+        make_path_directories(path, is_file=True)
         with open(path, "w") as fp:
             json.dump(obj, fp, **kwargs)
         return None

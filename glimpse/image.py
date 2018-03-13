@@ -1,6 +1,6 @@
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem, gdal, cPickle, cv2)
+    sharedmem, gdal, cPickle, cv2, collections)
 from . import (helpers, svg, optimize)
 
 class Camera(object):
@@ -76,8 +76,9 @@ class Camera(object):
         """
         json_args = helpers.read_json(path)
         for key in json_args.keys():
-            value = [np.nan if item is None else item for item in json_args[key]]
-            if all([item is np.nan for item in value]):
+            # Conversion to float converts None to nan
+            value = np.array(json_args[key], dtype=float)
+            if np.isnan(value).all():
                 value = None
             json_args[key] = value
         args = helpers.merge_dicts(json_args, kwargs)
@@ -307,7 +308,7 @@ class Camera(object):
         """
         self.vector = self.original_vector.copy()
 
-    def write(self, path=None, attributes=None):
+    def write(self, path=None, attributes=None, **kwargs):
         """
         Write or return Camera as JSON.
 
@@ -317,18 +318,12 @@ class Camera(object):
             attributes (list): Camera attributes to include.
                 If `None` (default), all arguments to `Camera()` are included
                 other than `self` and `vector`.
+            **kwargs: Additional arguments to `helpers.write_json()`
         """
         if attributes is None:
             attributes = Camera.__init__.__code__.co_varnames[2:]
-        lines = ['    "' + name + '": ' + str(list(getattr(self, name))).replace("nan", "null") for name in attributes]
-        json_string = "{\n" + ",\n".join(lines) + "\n}"
-        if path:
-            helpers.make_path_directories(path, is_file=True)
-            with open(path, "w") as fp:
-                fp.write(json_string)
-            return None
-        else:
-            return json_string
+        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes)
+        return helpers.write_json(obj, path=path, **kwargs)
 
     def idealize(self):
         """

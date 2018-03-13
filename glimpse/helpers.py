@@ -1,6 +1,6 @@
 from .imports import (
     np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-        sklearn, cv2, copy_reg)
+        sklearn, cv2, copy_reg, os, re)
 
 # ---- General ---- #
 
@@ -56,7 +56,7 @@ def make_path_directories(path, is_file=True):
     # https://stackoverflow.com/a/14364249
     if is_file:
         path = os.path.dirname(path)
-    if not os.path.isdir(path):
+    if path and not os.path.isdir(path):
         try:
             os.makedirs(path)
         except OSError:
@@ -277,27 +277,39 @@ def read_json(path, **kwargs):
 
     Arguments:
         path (str): Path to file
-        kwargs (dict): Additional arguments passed to `json.load()`
+        kwargs: Additional arguments passed to `json.load()`
     """
     with open(path, "r") as fp:
         return json.load(fp, **kwargs)
 
-def write_json(obj, path=None, **kwargs):
+def write_json(obj, path=None, flat_arrays=False, **kwargs):
     """
     Write object to JSON.
 
     Arguments:
         obj: Object to write as JSON
         path (str): Path to file. If `None`, result is returned as a string.
-        kwargs (dict): Additional arguments passed to `json.dump()` or `json.dumps()`
+        flat_arrays (bool): Whether to flatten json arrays to a single line.
+            By default, `json.dumps` puts each array element on a new line if
+            `indent` is `0` or greater.
+            See https://github.com/nlohmann/json/issues/229.
+        kwargs: Additional arguments passed to `json.dump()` or `json.dumps()`
     """
+    txt = json.dumps(obj, **kwargs)
+    if flat_arrays and kwargs.get('indent') >= 0:
+        separators = kwargs.get('separators')
+        sep = separators[0] if separators else ', '
+        squished_sep = re.sub(r'\s', '', sep)
+        def flatten(match):
+            return re.sub(squished_sep, sep, re.sub(r'\s', '', match.group(0)))
+        txt = re.sub(r'(\[\s*)+[^\]\{]*(\s*\])+', flatten, txt)
     if path:
         make_path_directories(path, is_file=True)
         with open(path, "w") as fp:
-            json.dump(obj, fp, **kwargs)
+            fp.write(txt)
         return None
     else:
-        return json.dumps(obj, **kwargs)
+        return txt
 
 def geojson_iterfeatures(obj):
     features = obj['features']

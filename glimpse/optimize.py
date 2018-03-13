@@ -392,6 +392,219 @@ class Matches(object):
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
+class RotationMatches(Matches):
+    """
+    `RotationMatches` store image-image point correspondences for cameras seperated
+    only by a pure rotation.
+
+    Normalized camera coordinates are pre-computed for speed. Therefore,
+    the cameras must always have equal `xyz` (as for `Matches`)
+    and no internal parameters can change after initialization.
+
+    Attributes:
+        cams (list): Pair of Camera objects
+        uvs (list): Pair of image coordinate arrays (Nx2)
+        xys (list): Pair of normalized coordinate arrays (Nx2)
+        original_internals (array): Original camera internal parameters
+            (imgsz, f, c, k, p)
+    """
+
+    def __init__(self, cams, uvs):
+        if len(cams) != 2 or len(uvs) != 2:
+            raise ValueError("`cams` and `uvs` must each have two elements")
+        if cams[0] is cams[1]:
+            raise ValueError("Both cameras are the same object")
+        if uvs[0].shape != uvs[1].shape:
+            raise ValueError("Image coordinate arrays have different shapes")
+        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+        self.cams = cams
+        self.uvs = uvs
+        self.xys = (
+            self.cams[0]._image2camera(self.uvs[0]),
+            self.cams[1]._image2camera(self.uvs[1]))
+        # [imgsz, f, c, k, p]
+        self.original_internals = self.cams[0].vector.copy()[6:]
+
+    def predicted(self, index=None, cam=0):
+        """
+        Predict image coordinates for a camera from the coordinates of the other camera.
+
+        Arguments:
+            index (array_like or slice): Indices of points to project from other camera
+            cam (Camera or int): Camera to project points into
+        """
+        if not self.is_static():
+            raise ValueError("Cameras have different positions ('xyz')")
+        if not self.is_original_internals():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+        if index is None:
+            index = slice(None)
+        cam_in = self.cam_index(cam)
+        cam_out = 0 if cam_in else 1
+        dxyz = self.cams[cam_out]._camera2world(self.xys[cam_out][index])
+        return self.cams[cam_in].project(dxyz, directions=True)
+
+    def is_original_internals(self):
+        """
+        Test whether camera internal parameters are unchanged.
+        """
+        return (
+            (self.cams[0].vector[6:] == self.original_internals) &
+            (self.cams[1].vector[6:] == self.original_internals)).all()
+
+class RotationMatchesXY(RotationMatches):
+    """
+    `RotationMatchesXY` store image-image point correspondences for cameras seperated
+    only by a pure rotation.
+
+    Normalized camera coordinates are pre-computed for speed,
+    and image coordinates are discarded to save memory.
+    Unlike `RotationMatches`, `self.predicted()` and `self.observed()` return
+    normalized camera coordinates.
+
+    Arguments:
+        uvs (list): Pair of image coordinate arrays (Nx2)
+
+    Attributes:
+        cams (list): Pair of Camera objects
+        xys (list): Pair of normalized coordinate arrays (Nx2)
+        original_internals (array): Original camera internal parameters
+            (imgsz, f, c, k, p)
+        normalized (bool): Whether to normalize ray directions to unit length
+    """
+
+    def __init__(self, cams, uvs, normalized=False):
+        if len(cams) != 2 or len(uvs) != 2:
+            raise ValueError("`cams` and `uvs` must each have two elements")
+        if cams[0] is cams[1]:
+            raise ValueError("Both cameras are the same object")
+        if uvs[0].shape != uvs[1].shape:
+            raise ValueError("Image coordinate arrays have different shapes")
+        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+        self.cams = cams
+        self.xys = (
+            self.cams[0]._image2camera(uvs[0]),
+            self.cams[1]._image2camera(uvs[1]))
+        # [imgsz, f, c, k, p]
+        self.original_internals = self.cams[0].vector.copy()[6:]
+        self.normalized = normalized
+
+    def size(self):
+        """
+        Return the number of point pairs.
+        """
+        return len(self.xys[0])
+
+    def observed(self, index=None, cam=0):
+        """
+        Return observed camera coordinates.
+
+        Arguments:
+            index (array_like or slice): Indices of points to return, or all if `None`
+            cam (Camera or int): Camera of points to return
+        """
+        if index is None:
+            index = slice(None)
+        cam_idx = self.cam_index(cam)
+        return self.xys[cam_idx][index]
+
+    def predicted(self, index=None, cam=0):
+        """
+        Predict camera coordinates for a camera from the coordinates of the other camera.
+
+        Arguments:
+            index (array_like or slice): Indices of points to project from other camera
+            cam (Camera or int): Camera to project points into
+        """
+        if not self.is_static():
+            raise ValueError("Cameras have different positions ('xyz')")
+        if not self.is_original_internals():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+        if index is None:
+            index = slice(None)
+        cam_in = self.cam_index(cam)
+        cam_out = 0 if cam_in else 1
+        dxyz = self.cams[cam_out]._camera2world(self.xys[cam_out][index])
+        return self.cams[cam_in]._world2camera(dxyz, directions=True)
+
+    def plot(self, *args, **kwargs):
+        raise AttributeError("plot() not supported by RotationMatchesXY")
+
+class RotationMatchesXYZ(RotationMatches):
+    """
+    `RotationMatches3D` store image-image point correspondences for cameras seperated
+    only by a pure rotation.
+
+    Normalized camera coordinates are pre-computed for speed,
+    and image coordinates are discarded to save memory.
+    Unlike `RotationMatches`, `self.predicted()` returns
+    world ray directions and `self.observed()` is disabled.
+
+    Arguments:
+        uvs (list): Pair of image coordinate arrays (Nx2)
+
+    Attributes:
+        cams (list): Pair of Camera objects
+        xys (list): Pair of normalized coordinate arrays (Nx2)
+        original_internals (array): Original camera internal parameters
+            (imgsz, f, c, k, p)
+        normalized (bool): Whether to normalize ray directions to unit length
+    """
+
+    def __init__(self, cams, uvs, normalized=False):
+        if len(cams) != 2 or len(uvs) != 2:
+            raise ValueError("`cams` and `uvs` must each have two elements")
+        if cams[0] is cams[1]:
+            raise ValueError("Both cameras are the same object")
+        if uvs[0].shape != uvs[1].shape:
+            raise ValueError("Image coordinate arrays have different shapes")
+        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+        self.cams = cams
+        self.xys = (
+            self.cams[0]._image2camera(uvs[0]),
+            self.cams[1]._image2camera(uvs[1]))
+        # [imgsz, f, c, k, p]
+        self.original_internals = self.cams[0].vector.copy()[6:]
+        self.normalized = normalized
+
+    def size(self):
+        """
+        Return the number of point pairs.
+        """
+        return len(self.xys[0])
+
+    def observed(self, *args, **kwargs):
+        raise AttributeError("observed() not supported by RotationMatchesXYZ")
+
+    def predicted(self, index=None, cam=0):
+        """
+        Predict world coordinates for a camera.
+
+        Tests that the cameras are at the same position (`xyz`) and their
+        internal parameters are unchanged.
+
+        Arguments:
+            index (array_like or slice): Indices of points to project from other camera
+            cam (Camera or int): Camera to project points into
+        """
+        if not self.is_static():
+            raise ValueError("Cameras have different positions ('xyz')")
+        if not self.is_original_internals():
+            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+        if index is None:
+            index = slice(None)
+        cam_idx = self.cam_index(cam)
+        dxyz = self.cams[cam_idx]._camera2world(self.xys[cam_idx][index])
+        if self.normalized:
+            dxyz *= 1 / np.linalg.norm(dxyz, axis=1).reshape(-1, 1)
+        return dxyz
+
+    def plot(self, *args, **kwargs):
+        raise AttributeError("plot() not supported by RotationMatchesXY")
+
 # ---- Models ----
 
 # Models support RANSAC with the following API:

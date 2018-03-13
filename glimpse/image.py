@@ -323,6 +323,7 @@ class Camera(object):
         lines = ['    "' + name + '": ' + str(list(getattr(self, name))).replace("nan", "null") for name in attributes]
         json_string = "{\n" + ",\n".join(lines) + "\n}"
         if path:
+            helpers.make_path_directories(path, is_file=True)
             with open(path, "w") as fp:
                 fp.write(json_string)
             return None

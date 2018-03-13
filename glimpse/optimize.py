@@ -1147,8 +1147,9 @@ class ObserverCameras(object):
                         # j -> i
                         gradients[j] -= gradient
             return gradients.ravel()
+        viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
         result = scipy.optimize.minimize(
-            fun=error_fun, x0=self.viewdirs, jac=gradient_fun, method='bfgs', **params)
+            fun=error_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)
         self.reset_cameras()
         if not result.success:
             print '' # new line

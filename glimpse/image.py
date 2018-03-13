@@ -33,6 +33,8 @@ class Camera(object):
         cmm (array_like): Principal point offset from center in millimiters [dx, dy]
         R (array): Rotation matrix equivalent of `viewdir`.
             Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
+        Rprime (array): Derivative of `R` with respect to `viewdir`.
+            Used for fast Jacobian (gradient) calculations in `optimize.ObserverCameras`.
         cameraMatrix (array): Camera matrix in OpenCV format
         distCoeffs (array): Distortion coefficients (k, p) in OpenCV format
         original_vector (array): Original value of `vector`
@@ -201,17 +203,18 @@ class Camera(object):
         radians = np.deg2rad(self.viewdir)
         C = np.cos(radians)
         S = np.sin(radians)
-        Rprime = np.zeros((3, 3, 3))
-        Rprime[:,0,:] = np.array([[C[0]*S[1]*S[2] - S[0]*C[2],-S[0]*S[1]*S[2] - C[0]*C[2],0],
-                                  [S[0]*S[2] + C[0]*S[1]*C[2], C[0]*S[2] - S[0]*S[1]*C[2],0],
-                                  [C[0]*C[1]                 ,-S[0]*C[1]                 ,0]]).T
-        Rprime[:,1,:] = np.array([[S[0]*C[1]*S[2]            , C[0]*C[1]*S[2]            ,S[1]*S[2]],
-                                  [S[0]*C[1]*C[2]            , C[0]*C[1]*C[2]            ,S[1]*C[2]],
-                                 [-S[0]*S[1]                 ,-C[0]*S[1]                 ,C[1]]]).T
-        Rprime[:,2,:] = np.array([[S[0]*S[1]*C[2] - C[0]*S[2],S[0]*S[2] + C[0]*S[1]*C[2],-C[1]*C[2]],
-                                 [-S[0]*S[1]*S[2] - C[0]*C[2],S[0]*C[2] - C[0]*S[1]*S[2],C[1]*S[2]],
-                                 [0,0,0]]).T
-        return Rprime*np.pi/180
+        Rprime = np.stack((
+            [[ C[0] * S[1] * S[2] - S[0] * C[2],  S[0] * S[2] + C[0] * S[1] * C[2],  C[0] * C[1]],
+             [-S[0] * S[1] * S[2] - C[0] * C[2],  C[0] * S[2] - S[0] * S[1] * C[2], -S[0] * C[1]],
+             [ 0                               ,  0                               ,  0]],
+            [[ S[0] * C[1] * S[2]              ,  S[0] * C[1] * C[2]              , -S[0] * S[1]],
+             [ C[0] * C[1] * S[2]              ,  C[0] * C[1] * C[2]              , -C[0] * S[1]],
+             [ S[1] * S[2]                     ,  S[1] * C[2]                     ,  C[1]]],
+            [[ S[0] * S[1] * C[2] - C[0] * S[2], -S[0] * S[1] * S[2] - C[0] * C[2],  0],
+             [ S[0] * S[2] + C[0] * S[1] * C[2],  S[0] * C[2] - C[0] * S[1] * S[2],  0],
+             [-C[1] * C[2]                     ,  C[1] * S[2]                     ,  0]]
+        ), axis=1)
+        return Rprime * (np.pi / 180)
 
     @property
     def cameraMatrix(self):

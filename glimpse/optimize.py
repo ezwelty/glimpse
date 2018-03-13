@@ -1078,7 +1078,10 @@ class ObserverCameras(object):
                 if path:
                     outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
                 if path and not overwrite and os.path.exists(outfile):
-                    matches[i, j] = helpers.read_pickle(outfile)
+                    match = helpers.read_pickle(outfile)
+                    # Point matches to existing Camera objects
+                    match.cams = (imgA.cam, imgB.cam)
+                    matches[i, j] = match
                 else:
                     uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
                     match = RotationMatchesXYZ(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))

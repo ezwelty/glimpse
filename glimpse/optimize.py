@@ -5,7 +5,7 @@ from . import (helpers)
 # ---- Controls ----
 
 # Controls (within Cameras) support RANSAC with the following API:
-# .size()
+# .size
 # .observed(index)
 # .predicted(index)
 
@@ -23,6 +23,7 @@ class Points(object):
         directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
         original_cam_xyz (array): Original camera position (`cam.xyz`)
         correction (dict or bool): See `cam.project()`
+        size (int): Number of point pairs
     """
 
     def __init__(self, cam, uv, xyz, directions=False, correction=False):
@@ -34,12 +35,7 @@ class Points(object):
         self.directions = directions
         self.correction = correction
         self.original_cam_xyz = cam.xyz.copy()
-
-    def size(self):
-        """
-        Return the total number of point pairs.
-        """
-        return len(self.uv)
+        self.size = len(self.uv)
 
     def observed(self, index=None):
         """
@@ -91,7 +87,7 @@ class Points(object):
             index = slice(None)
             other_index = slice(0)
         else:
-            other_index = np.delete(np.arange(self.size()), index)
+            other_index = np.delete(np.arange(self.size), index)
         uv = self.observed()
         puv = self.predicted()
         duv = scale * (puv - uv)
@@ -126,6 +122,7 @@ class Lines(object):
         correction (dict or bool): See `cam.project()`
         step (float): Along-line distance between image points interpolated from lines `uvs`
         original_cam_xyz (array): Original camera position (`cam.xyz`)
+        size (int): Number of image points
     """
 
     def __init__(self, cam, uvs, xyzs, directions=False, correction=False, step=None):
@@ -141,12 +138,7 @@ class Lines(object):
         self.directions = directions
         self.correction = correction
         self.original_cam_xyz = cam.xyz.copy()
-
-    def size(self):
-        """
-        Return the number of image points.
-        """
-        return len(self.uvi)
+        self.size = len(self.uvi)
 
     def observed(self, index=None):
         """
@@ -254,7 +246,7 @@ class Lines(object):
                 index = slice(None)
                 other_index = slice(0)
             else:
-                other_index = np.delete(np.arange(self.size()), index)
+                other_index = np.delete(np.arange(self.size), index)
             uv = self.observed()
             if not predicted:
                 puvs = self.project()
@@ -285,6 +277,7 @@ class Matches(object):
     Attributes:
         cams (list): Pair of Camera objects
         uvs (list): Pair of image coordinate arrays (Nx2)
+        size (int): Number of point pairs
     """
 
     def __init__(self, cams, uvs):
@@ -296,12 +289,7 @@ class Matches(object):
             raise ValueError("Image coordinate arrays have different shapes")
         self.cams = cams
         self.uvs = uvs
-
-    def size(self):
-        """
-        Return the number of point pairs.
-        """
-        return len(self.uvs[0])
+        self.size = len(self.uvs[0])
 
     def observed(self, index=None, cam=0):
         """
@@ -374,7 +362,7 @@ class Matches(object):
             index = slice(None)
             other_index = slice(0)
         else:
-            other_index = np.delete(np.arange(self.size()), index)
+            other_index = np.delete(np.arange(self.size), index)
         uv = self.observed(cam=cam)
         puv = self.predicted(cam=cam)
         duv = scale * (puv - uv)
@@ -407,6 +395,7 @@ class RotationMatches(Matches):
         xys (list): Pair of normalized coordinate arrays (Nx2)
         original_internals (array): Original camera internal parameters
             (imgsz, f, c, k, p)
+        size (int): Number of point pairs
     """
 
     def __init__(self, cams, uvs):
@@ -425,6 +414,7 @@ class RotationMatches(Matches):
             self.cams[1]._image2camera(self.uvs[1]))
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
+        self.size = len(self.uvs[0])
 
     def predicted(self, index=None, cam=0):
         """
@@ -472,6 +462,7 @@ class RotationMatchesXY(RotationMatches):
         original_internals (array): Original camera internal parameters
             (imgsz, f, c, k, p)
         normalized (bool): Whether to normalize ray directions to unit length
+        size (int): Number of point pairs
     """
 
     def __init__(self, cams, uvs, normalized=False):
@@ -490,12 +481,7 @@ class RotationMatchesXY(RotationMatches):
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
         self.normalized = normalized
-
-    def size(self):
-        """
-        Return the number of point pairs.
-        """
-        return len(self.xys[0])
+        self.size = len(self.xys[0])
 
     def observed(self, index=None, cam=0):
         """
@@ -551,6 +537,7 @@ class RotationMatchesXYZ(RotationMatches):
         original_internals (array): Original camera internal parameters
             (imgsz, f, c, k, p)
         normalized (bool): Whether to normalize ray directions to unit length
+        size (int): Number of point pairs
     """
 
     def __init__(self, cams, uvs, normalized=False):
@@ -569,12 +556,7 @@ class RotationMatchesXYZ(RotationMatches):
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
         self.normalized = normalized
-
-    def size(self):
-        """
-        Return the number of point pairs.
-        """
-        return len(self.xys[0])
+        self.size = len(self.xys[0])
 
     def observed(self, *args, **kwargs):
         raise AttributeError("observed() not supported by RotationMatchesXYZ")
@@ -796,7 +778,7 @@ class Cameras(object):
         """
         Return the total number of data points.
         """
-        return np.array([control.size() for control in self.controls]).sum()
+        return np.array([control.size for control in self.controls]).sum()
 
     def observed(self, index=None):
         """
@@ -1156,7 +1138,7 @@ class ObserverCameras(object):
                         dxyz_0 = m.predicted(cam=0)
                         dxyz_1 = m.predicted(cam=1)
                         # i -> j
-                        xy_hat = np.column_stack((m.xys[0], np.ones(m.size())))
+                        xy_hat = np.column_stack((m.xys[0], np.ones(m.size)))
                         dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
                         delta = np.sign(dxyz_0 - dxyz_1).reshape(-1, 3, 1)
                         gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
@@ -1453,7 +1435,7 @@ def camera_scale_factors(cam, controls=None):
         weights = []
         for control in controls:
             if isinstance(control, (Points, Lines)) and cam is control.cam and not control.directions:
-                weights.append(control.size())
+                weights.append(control.size)
                 if isinstance(control, Points):
                     means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
                 elif isinstance(control, Lines):

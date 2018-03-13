@@ -1099,10 +1099,7 @@ class ObserverCameras(object):
                     matches[i, j] = helpers.read_pickle(outfile)
                 else:
                     uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
-                    match = Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
-                    match.xys = (
-                        match.cams[0]._image2camera(uvA),
-                        match.cams[1]._image2camera(uvB))
+                    match = RotationMatchesXYZ(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
                     matches[i, j] = match
                     if path is not None:
                         helpers.write_pickle(match, outfile)
@@ -1135,10 +1132,10 @@ class ObserverCameras(object):
                     m = self.matches[i, j]
                     if m:
                         m.cams[0].viewdir = viewdirs[i]
-                        xyz_0 = m.cams[0]._camera2world(m.xys[0])
+                        dxyz_0 = m.predicted(cam=0)
                         m.cams[1].viewdir = viewdirs[j]
-                        xyz_1 = m.cams[1]._camera2world(m.xys[1])
-                        error += np.sum(abs(xyz_0 - xyz_1))
+                        dxyz_1 = m.predicted(cam=1)
+                        error += np.sum(abs(dxyz_0 - dxyz_1))
             # Update console output
             sys.stdout.write("\r" + str(error))
             sys.stdout.flush()
@@ -1156,12 +1153,12 @@ class ObserverCameras(object):
                         m.cams[0].viewdir = viewdirs[i]
                         m.cams[1].viewdir = viewdirs[j]
                         # Project matches
-                        xyz_0 = m.cams[0]._camera2world(m.xys[0])
-                        xyz_1 = m.cams[1]._camera2world(m.xys[1])
+                        dxyz_0 = m.predicted(cam=0)
+                        dxyz_1 = m.predicted(cam=1)
                         # i -> j
                         xy_hat = np.column_stack((m.xys[0], np.ones(m.size())))
                         dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
-                        delta = np.sign(xyz_0 - xyz_1).reshape(-1, 3, 1)
+                        delta = np.sign(dxyz_0 - dxyz_1).reshape(-1, 3, 1)
                         gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
                         gradients[i] += gradient
                         # j -> i

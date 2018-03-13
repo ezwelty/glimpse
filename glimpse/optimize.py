@@ -993,6 +993,15 @@ class ObserverCameras(object):
         self.template = template
         # Placeholders
         self.matches = None
+        self.viewdirs = [img.cam.viewdir.copy() for img in self.observer.images]
+
+    def set_cameras(self, viewdirs):
+        for i, img in enumerate(self.observer.images):
+            img.cam.viewdir = viewdirs[i]
+
+    def reset_cameras(self):
+        for i, img in enumerate(self.observer.images):
+            img.cam.viewdir = self.viewdirs[i]
 
     def read_image(self, img):
         """
@@ -1106,51 +1115,41 @@ class ObserverCameras(object):
             `scipy.optimize.OptimizeResult`: The optimization result.
                 Attributes include solution array `x`, boolean `success`, and `message`.
         """
-        viewdirs_0 = np.row_stack([img.cam.viewdir for img in self.observer.images])
         def error_fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
-            error = 0
-            for i, img_0 in enumerate(self.observer.images[:-1]):
-                if i in self.anchors:
-                    error += (anchor_weight / 2.0) * sum((viewdirs[i] - viewdirs_0[i])**2)
-                for j, img_1 in enumerate(self.observer.images[(i + 1):], i + 1):
-                    m = self.matches[i, j]
-                    if m:
-                        m.cams[0].viewdir = viewdirs[i]
-                        dxyz_0 = m.predicted(cam=0)
-                        m.cams[1].viewdir = viewdirs[j]
-                        dxyz_1 = m.predicted(cam=1)
-                        error += np.sum(abs(dxyz_0 - dxyz_1))
+            self.set_cameras(viewdirs=viewdirs)
+            residuals = [m.predicted(cam=0) - m.predicted(cam=1) for m in self.matches.ravel() if m]
+            error = np.sum(np.abs(np.vstack(residuals)))
+            for i in self.anchors:
+                error += (anchor_weight / 2.0) * np.sum((viewdirs[i] - self.viewdirs[i])**2)
             # Update console output
             sys.stdout.write("\r" + str(error))
             sys.stdout.flush()
             return error
         def gradient_fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
+            self.set_cameras(viewdirs=viewdirs)
             gradients = np.zeros(viewdirs.shape)
             for i in self.anchors:
-                gradients[i] += anchor_weight * (viewdirs[i] - viewdirs_0[i])
+                gradients[i] += anchor_weight * (viewdirs[i] - self.viewdirs[i])
             for i, img_0 in enumerate(self.observer.images[:-1]):
                 for j, img_1 in enumerate(self.observer.images[(i + 1):], i + 1):
                     m = self.matches[i, j]
                     if m:
-                        # Update cameras
-                        m.cams[0].viewdir = viewdirs[i]
-                        m.cams[1].viewdir = viewdirs[j]
                         # Project matches
-                        dxyz_0 = m.predicted(cam=0)
-                        dxyz_1 = m.predicted(cam=1)
+                        dxyz = m.predicted(cam=0) - m.predicted(cam=1)
                         # i -> j
                         xy_hat = np.column_stack((m.xys[0], np.ones(m.size)))
                         dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
-                        delta = np.sign(dxyz_0 - dxyz_1).reshape(-1, 3, 1)
+                        delta = np.sign(dxyz).reshape(-1, 3, 1)
                         gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
                         gradients[i] += gradient
                         # j -> i
                         gradients[j] -= gradient
             return gradients.ravel()
         result = scipy.optimize.minimize(
-            fun=error_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)
+            fun=error_fun, x0=self.viewdirs, jac=gradient_fun, method='bfgs', **params)
+        self.reset_cameras()
         if not result.success:
             print '' # new line
             print result.message

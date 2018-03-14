@@ -992,15 +992,15 @@ class ObserverCameras(object):
         self.template = template
         # Placeholders
         self.matches = None
-        self.viewdirs = [img.cam.viewdir.copy() for img in self.observer.images]
+        self.viewdirs = np.vstack([img.cam.viewdir.copy()
+            for img in self.observer.images])
 
     def set_cameras(self, viewdirs):
         for i, img in enumerate(self.observer.images):
             img.cam.viewdir = viewdirs[i]
 
     def reset_cameras(self):
-        for i, img in enumerate(self.observer.images):
-            img.cam.viewdir = self.viewdirs[i]
+        self.set_cameras(viewdirs=self.viewdirs.copy())
 
     def read_image(self, img):
         """

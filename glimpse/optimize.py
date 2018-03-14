@@ -677,27 +677,28 @@ class Cameras(object):
 
         - image-world point coordinates (Points)
         - image-world line coordinates (Lines)
-        - image-image point coordinates (Matches)
+        - image-image point coordinates (Matches, RotationMatches)
 
     If used with RANSAC (see `optimize.ransac`) with multiple control objects,
     results may be unstable since samples are drawn randomly from all observations,
     and computation will be slow since errors are calculated for all points then subset.
 
-    Arguments:
-        cam_params (list): Parameters to optimize for each camera seperately (see `parse_params()`)
-        group_params (dict): Parameters to optimize for all cameras (see `parse_params()`)
-        nan_policy (str): Action taken by `lmfit.Minimizer` for NaN values
-            (https://lmfit.github.io/lmfit-py/fitting.html#lmfit.minimizer.Minimizer)
-
     Attributes:
         cams (list): Camera objects
         controls (list): Camera control (Points, Lines, and Matches objects)
+        cam_params (list): Parameters to optimize for each camera seperately (see `parse_params()`)
+        group_params (dict): Parameters to optimize for all cameras (see `parse_params()`)
+        weights (array): Weights for each control point
         vectors (list): Original camera vectors (for resetting camera parameters)
         params (`lmfit.Parameters`): Parameter initial values and bounds
-        options (dict): Additional arguments passed to `lmfit.Minimizer`
+        diag (array): Scale factors for each parameter computed analytically
+        cam_masks (list): Boolean masks of parameters being optimized for each camera
+        cam_bounds (list): Bounds of parameters optimized for each camera
+        group_mask (array): Boolean mask of parameters optimized for all cameras
+        group_bounds (array): Bounds of parameters optimized for all cameras
     """
 
-    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None, nan_policy="omit", **options):
+    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None):
         self.cams = cams if isinstance(cams, list) else [cams]
         self.vectors = [cam.vector.copy() for cam in self.cams]
         controls = controls if isinstance(controls, list) else [controls]
@@ -712,15 +713,12 @@ class Cameras(object):
         # TODO: Avoid computing masks and bounds twice
         self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, group_params)
         self.weights = weights
-        self.options = options
-        self.options['nan_policy'] = nan_policy
-        if not self.options.has_key('diag'):
-            # Compute optimal variable scale factors
-            scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
-            # TODO: Weigh each camera by number of control points
-            group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
-            cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
-            self.options['diag'] = np.hstack((group_scale, cam_scales))
+        # Compute optimal variable scale factors
+        scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
+        # TODO: Weigh each camera by number of control points
+        group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
+        cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
+        self.diag = np.hstack((group_scale, cam_scales))
 
     @property
     def weights(self):
@@ -848,12 +846,13 @@ class Cameras(object):
         """
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
 
-    def fit(self, index=None, cam_params=None, group_params=None, full=False):
+    def fit(self, index=None, cam_params=None, group_params=None, full=False,
+        method='leastsq', nan_policy='omit', reduce_fcn=None, **kwargs):
         """
         Return optimal camera parameter values.
 
-        The Levenberg-Marquardt algorithm is used to find the camera parameter values
-        that minimize the reprojection residuals (`.residuals()`) across all control.
+        Find the camera parameter values that minimize the reprojection residuals
+        or a derivative objective function across all control.
         See `lmfit.minimize()` (https://lmfit.github.io/lmfit-py/fitting.html).
 
         Unless `.update_params()` is called first, `.fit()` will use the
@@ -866,14 +865,19 @@ class Cameras(object):
             group_params (list): Sequence of group camera properties to fit (see `Cameras`)
                 iteratively before final run. Must be `None` or same length as `cam_params`.
             full (bool): Whether to return the full result of `lmfit.Minimize()`
+            **kwargs: Additional arguments to `lmfit.minimize()`.
+                If `method='leastsq'` and `diag` is not specified, the latter is
+                set equal to `self.diag`.
 
         Returns:
             array or `lmfit.Parameters` (`full=True`): Parameter values ordered first
                 by group or camera (group, cam0, cam1, ...),
                 then ordered by position in `Camera.vector`.
         """
+        if method == 'leastsq' and getattr(kwargs, 'diag', None) is None:
+            kwargs['diag'] = self.diag
         def callback(params, iter, resid, *args, **kwargs):
-            err = np.sqrt(np.sum(resid.reshape(-1, 2)**2, axis=1)).mean()
+            err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
             sys.stdout.write("\r" + str(err))
             sys.stdout.flush()
         iterations = max(
@@ -883,17 +887,15 @@ class Cameras(object):
             for n in range(iterations):
                 iter_cam_params = cam_params[n] if cam_params else self.cam_params
                 iter_group_params = group_params[n] if group_params else self.group_params
-                options = self.options.copy()
-                options.pop('diag', None)
-                model = Cameras(self.cams, self.controls, iter_cam_params, iter_group_params, **options)
-                values = model.fit(index=index)
+                model = Cameras(cams=self.cams, controls=self.controls,
+                    cam_params=iter_cam_params, group_params=iter_group_params)
+                values = model.fit(index=index, method=method, nan_policy=nan_policy, reduce_fcn=reduce_fcn, **kwargs)
                 if values is not None:
                     model.set_cameras(params=values)
             self.update_params()
-        minimizer = lmfit.Minimizer(self.residuals, self.params, iter_cb=callback, fcn_kws=dict(index=index), **self.options)
-        result = minimizer.leastsq()
+        result = lmfit.minimize(params=self.params, fcn=self.residuals, kws=dict(index=index), iter_cb=callback,
+            method=method, nan_policy=nan_policy, reduce_fcn=reduce_fcn, **kwargs)
         sys.stdout.write("\n")
-        values = np.array(result.params.valuesdict().values())
         if iterations:
             self.reset_cameras()
             self.update_params()

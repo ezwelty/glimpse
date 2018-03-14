@@ -325,7 +325,7 @@ class Camera(object):
         """
         if attributes is None:
             attributes = Camera.__init__.__code__.co_varnames[2:]
-        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes)
+        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes if hasattr(self, name))
         return helpers.write_json(obj, path=path, **kwargs)
 
     def idealize(self):

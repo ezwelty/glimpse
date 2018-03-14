@@ -1083,7 +1083,8 @@ class ObserverCameras(object):
                 if clear_images:
                     img.I = None
 
-    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None, overwrite=False, **params):
+    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None, overwrite=False,
+        clear_keypoints=True, **params):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -1097,6 +1098,7 @@ class ObserverCameras(object):
             path (str): Directory for match files.
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
+            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
             **params: Additional arguments to `optimize.match_keypoints()`
         """
         n = len(self.observer.images)
@@ -1127,6 +1129,9 @@ class ObserverCameras(object):
                     matches[i, j] = match
                     if path is not None:
                         helpers.write_pickle(match, outfile)
+                if clear_keypoints:
+                    imgA.keypoints = None
+                    imgB.keypoints = None
         self.matches = matches
 
     def fit(self, anchor_weight=1e6, method='bfgs', **params):

@@ -536,7 +536,6 @@ class RotationMatchesXYZ(RotationMatches):
         xys (list): Pair of normalized coordinate arrays (Nx2)
         original_internals (array): Original camera internal parameters
             (imgsz, f, c, k, p)
-        normalized (bool): Whether to normalize ray directions to unit length
         size (int): Number of point pairs
     """
 
@@ -555,7 +554,6 @@ class RotationMatchesXYZ(RotationMatches):
             self.cams[1]._image2camera(uvs[1]))
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
-        self.normalized = normalized
         self.size = len(self.xys[0])
 
     def observed(self, *args, **kwargs):
@@ -565,8 +563,7 @@ class RotationMatchesXYZ(RotationMatches):
         """
         Predict world coordinates for a camera.
 
-        Tests that the cameras are at the same position (`xyz`) and their
-        internal parameters are unchanged.
+        Returns world coordinates as ray directions normalized with unit length.
 
         Arguments:
             index (array_like or slice): Indices of points to project from other camera
@@ -580,8 +577,8 @@ class RotationMatchesXYZ(RotationMatches):
             index = slice(None)
         cam_idx = self.cam_index(cam)
         dxyz = self.cams[cam_idx]._camera2world(self.xys[cam_idx][index])
-        if self.normalized:
-            dxyz *= 1 / np.linalg.norm(dxyz, axis=1).reshape(-1, 1)
+        # Normalize world coordinates to unit sphere
+        dxyz *= 1 / np.linalg.norm(dxyz, ord=2, axis=1).reshape(-1, 1)
         return dxyz
 
     def plot(self, *args, **kwargs):

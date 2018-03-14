@@ -900,12 +900,12 @@ class Cameras(object):
                 by group or camera (group, cam0, cam1, ...),
                 then ordered by position in `Camera.vector`.
         """
-        if method == 'leastsq' and getattr(kwargs, 'diag', None) is None:
+        if method == 'leastsq' and not hasattr(kwargs, 'diag'):
             kwargs['diag'] = self.scales
         if method == 'least_squares':
-            if getattr(kwargs, 'x_scale', None) is None:
+            if not hasattr(kwargs, 'x_scale'):
                 kwargs['x_scale'] = self.scales
-            if getattr(kwargs, 'jac_sparsity', None) is None:
+            if not hasattr(kwargs, 'jac_sparsity'):
                 kwargs['jac_sparsity'] = self.sparsity
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()

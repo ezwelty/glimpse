@@ -1098,7 +1098,7 @@ class ObserverCameras(object):
                         helpers.write_pickle(match, outfile)
         self.matches = matches
 
-    def fit(self, anchor_weight=1e6, **params):
+    def fit(self, anchor_weight=1e6, method='bfgs', **params):
         """
         Return optimal camera view directions.
 
@@ -1114,29 +1114,22 @@ class ObserverCameras(object):
             `scipy.optimize.OptimizeResult`: The optimization result.
                 Attributes include solution array `x`, boolean `success`, and `message`.
         """
-        def error_fun(viewdirs):
+        def fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
             self.set_cameras(viewdirs=viewdirs)
-            residuals = [m.predicted(cam=0) - m.predicted(cam=1) for m in self.matches.ravel() if m]
-            error = np.sum(np.abs(np.vstack(residuals)))
-            for i in self.anchors:
-                error += (anchor_weight / 2.0) * np.sum((viewdirs[i] - self.viewdirs[i])**2)
-            # Update console output
-            sys.stdout.write("\r" + str(error))
-            sys.stdout.flush()
-            return error
-        def gradient_fun(viewdirs):
-            viewdirs = viewdirs.reshape(-1, 3)
-            self.set_cameras(viewdirs=viewdirs)
+            objective = 0
             gradients = np.zeros(viewdirs.shape)
             for i in self.anchors:
+                objective += (anchor_weight / 2.0) * np.sum((viewdirs[i] - self.viewdirs[i])**2)
                 gradients[i] += anchor_weight * (viewdirs[i] - self.viewdirs[i])
-            for i, img_0 in enumerate(self.observer.images[:-1]):
-                for j, img_1 in enumerate(self.observer.images[(i + 1):], i + 1):
+            n = len(self.observer.images)
+            for i in range(n - 1):
+                for j in range(i + 1, n):
                     m = self.matches[i, j]
                     if m:
                         # Project matches
                         dxyz = m.predicted(cam=0) - m.predicted(cam=1)
+                        objective += np.sum(np.abs(dxyz))
                         # i -> j
                         xy_hat = np.column_stack((m.xys[0], np.ones(m.size)))
                         dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
@@ -1145,13 +1138,16 @@ class ObserverCameras(object):
                         gradients[i] += gradient
                         # j -> i
                         gradients[j] -= gradient
-            return gradients.ravel()
+            # Update console output
+            sys.stdout.write("\r" + str(objective))
+            sys.stdout.flush()
+            return objective, gradients.ravel()
         viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
         result = scipy.optimize.minimize(
-            fun=error_fun, x0=viewdirs_0, jac=gradient_fun, method='bfgs', **params)
+            fun=fun, x0=viewdirs_0, jac=True, method=method, **params)
         self.reset_cameras()
         if not result.success:
-            print '' # new line
+            sys.stdout.write('\n') # new line
             print result.message
         return result
 

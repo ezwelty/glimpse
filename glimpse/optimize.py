@@ -691,7 +691,8 @@ class Cameras(object):
         weights (array): Weights for each control point
         vectors (list): Original camera vectors (for resetting camera parameters)
         params (`lmfit.Parameters`): Parameter initial values and bounds
-        diag (array): Scale factors for each parameter computed analytically
+        scales (array): Scale factors for each parameter computed analytically
+        sparsity (sparse matrix): Sparsity structure for the estimation of the Jacobian matrix
         cam_masks (list): Boolean masks of parameters being optimized for each camera
         cam_bounds (list): Bounds of parameters optimized for each camera
         group_mask (array): Boolean mask of parameters optimized for all cameras
@@ -718,7 +719,8 @@ class Cameras(object):
         # TODO: Weigh each camera by number of control points
         group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
         cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
-        self.diag = np.hstack((group_scale, cam_scales))
+        self.scales = np.hstack((group_scale, cam_scales))
+        self.sparsity = self.build_sparsity()
 
     @property
     def weights(self):
@@ -774,6 +776,30 @@ class Cameras(object):
         Return the total number of data points.
         """
         return np.array([control.size for control in self.controls]).sum()
+
+    def build_sparsity(self):
+        # Number of parameters
+        n_group = np.count_nonzero(self.group_mask)
+        n_cams = [np.count_nonzero(mask) for mask in self.cam_masks]
+        n = n_group + sum(n_cams)
+        # Number of observations
+        m_control = [2 * control.size for control in self.controls]
+        m = sum(m_control)
+        # Initialize sparse matrix with zeros
+        S = scipy.sparse.lil_matrix((m, n), dtype=int)
+        # Group parameters
+        S[:, 0:n_group] = 1
+        # Camera parameters
+        ctrl_ends = np.cumsum([0] + m_control)
+        cam_ends = np.cumsum([0] + n_cams) + n_group
+        for i, control in enumerate(self.controls):
+            ctrl_cams = getattr(control, 'cam', getattr(control, 'cams'))
+            if not isinstance(ctrl_cams, (tuple, list)):
+                ctrl_cams = (ctrl_cams, )
+            for cam in ctrl_cams:
+                j = self.cams.index(cam)
+                S[ctrl_ends[i]:ctrl_ends[i + 1], cam_ends[j]:cam_ends[j + 1]] = 1
+        return S
 
     def observed(self, index=None):
         """
@@ -847,7 +873,7 @@ class Cameras(object):
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
 
     def fit(self, index=None, cam_params=None, group_params=None, full=False,
-        method='leastsq', nan_policy='omit', reduce_fcn=None, **kwargs):
+        method='least_squares', nan_policy='omit', reduce_fcn=None, **kwargs):
         """
         Return optimal camera parameter values.
 
@@ -875,7 +901,12 @@ class Cameras(object):
                 then ordered by position in `Camera.vector`.
         """
         if method == 'leastsq' and getattr(kwargs, 'diag', None) is None:
-            kwargs['diag'] = self.diag
+            kwargs['diag'] = self.scales
+        if method == 'least_squares':
+            if getattr(kwargs, 'x_scale', None) is None:
+                kwargs['x_scale'] = self.scales
+            if getattr(kwargs, 'jac_sparsity', None) is None:
+                kwargs['jac_sparsity'] = self.sparsity
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
             sys.stdout.write("\r" + str(err))

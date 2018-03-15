@@ -570,10 +570,21 @@ class Camera(object):
         """
         # dr = (1 + k1 * r^2 + k2 * r^4 + k3 * r^6) / (1 + k4 * r^2 + k5 * r^4 + k6 * r^6)
         dr = 1
-        if any(self.k[0:3]):
-            dr += self.k[0] * r2 + self.k[1] * r2**2 + self.k[2] * r2**3
+        if self.k[0]:
+            dr += self.k[0] * r2
+        if self.k[1]:
+            dr += self.k[1] * r2 * r2
+        if self.k[2]:
+            dr += self.k[2] * r2 * r2 * r2
         if any(self.k[3:6]):
-            dr /= 1 + self.k[3] * r2 + self.k[4] * r2**2 + self.k[5] * r2**3
+            temp = 1
+            if self.k[3]:
+                temp += self.k[3] * r2
+            if self.k[4]:
+                temp += self.k[4] * r2 * r2
+            if self.k[5]:
+                temp += self.k[5] * r2 * r2 * r2
+            dr /= temp
         return dr[:, None] # column
 
     def _tangential_distortion(self, xy, r2):
@@ -642,7 +653,6 @@ class Camera(object):
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
-        # If only k1 is nonzero, use closed form solution.
         # Cubic roots solution from Numerical Recipes in C 2nd Edition:
         # http://apps.nrbook.com/c/index.html (pages 183-185)
         # Solve for undistorted radius in polar coordinates
@@ -653,7 +663,7 @@ class Camera(object):
         has_three_roots = R**2 < Q**3
         r = np.full(len(xy), np.nan)
         if np.any(has_three_roots):
-          th = np.arccos(R[has_three_roots] / Q**1.5)
+          th = np.arccos(R[has_three_roots] * Q**-1.5)
           r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
         has_one_root = ~has_three_roots
         if np.any(has_one_root):
@@ -721,9 +731,9 @@ class Camera(object):
             if any(self.p) and not any(self.k):
                 uxy = xy - self._tangential_distortion(uxy, r2)
             elif any(self.k) and not any(self.k):
-                uxy = xy / self._radial_distortion(r2)
+                uxy = xy * (1 / self._radial_distortion(r2))
             else:
-                uxy = (xy - self._tangential_distortion(uxy, r2)) / self._radial_distortion(r2)
+                uxy = (xy - self._tangential_distortion(uxy, r2)) * (1 / self._radial_distortion(r2))
             if tolerance > 0 and np.all((np.abs(self._distort(uxy) - xy)) < tolerance / self.f.mean()):
                 break
         return uxy
@@ -812,18 +822,18 @@ class Camera(object):
             dxyz = xyz
         else:
             dxyz = xyz - self.xyz
-        if correction or correction == dict():
-            # Apply elevation correction
             if correction is True:
                 correction = dict()
-            dxyz[:, 2] += self.elevation_corrections(xyz, **correction)
+            if isinstance(correction, dict):
+                # Apply elevation correction
+                dxyz[:, 2] += self.elevation_corrections(xyz, **correction)
         # Convert coordinates to ray directions
-        xyz_c = np.dot(dxyz, self.R.T)
-        # Normalize by perspective division
-        xy = xyz_c[:, 0:2] / xyz_c[:, 2][:, None]
+        xyz_c = np.matmul(self.R, dxyz.T).T
         # Set points behind camera to NaN
         behind = xyz_c[:, 2] <= 0
-        xy[behind, :] = np.nan
+        xyz_c[behind, 2] = np.nan
+        # Normalize by perspective division
+        xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
         return xy
 
     def _camera2world(self, xy):
@@ -833,10 +843,11 @@ class Camera(object):
         Arguments:
             xy (array): Camera coordinates (Nx2)
         """
-        ones = np.ones((xy.shape[0], 1))
-        xy_z = np.c_[xy, ones]
-        dxyz = np.dot(xy_z, self.R)
-        return dxyz
+        # Multiply 2-d coordinates
+        xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
+        # Simulate z = 1 by adding 3rd column of rotation matrix
+        xyz += self.R.T[:, 2]
+        return xyz
 
     def _camera2image(self, xy):
         """
@@ -856,7 +867,7 @@ class Camera(object):
         Arguments:
             uv (array): Image coordinates (Nx2)
         """
-        xy = (uv - (self.imgsz / 2 + self.c)) / self.f
+        xy = (uv - (self.imgsz * 0.5 + self.c)) * (1 / self.f)
         xy = self._undistort(xy)
         return xy
 

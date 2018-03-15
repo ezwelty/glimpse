@@ -1,4 +1,4 @@
-from .imports import (np, scipy, datetime, matplotlib)
+from .imports import (np, scipy, datetime, matplotlib, os)
 from . import (helpers, dem)
 
 class Observer(object):
@@ -157,7 +157,7 @@ class Observer(object):
         else:
             return f(uv[:, 1], uv[:, 0], grid=grid)
 
-    def plot_tile(self, tile, box=None, **kwargs):
+    def plot_tile(self, tile, box=None, axes=None, **kwargs):
         """
         Draw tile on current matplotlib axes.
 
@@ -165,24 +165,35 @@ class Observer(object):
             tile (array): 2-d or 3-d array
             box (array-like): Boundaries of tile in image coordinates (left, top, right, bottom).
                 If `None`, the upper-left corner of the upper-left pixel is placed at (0, 0).
+            axes (`matplotlib.axes.Axes`): Matplotlib axes to plot on
             **kwargs: Optional arguments to matplotlib.pyplot.imshow
+
+        Returns:
+            `matplotlib.image.AxesImage`
         """
         if box is None:
             box = (0, 0, tile.shape[0], tile.shape[1])
-        extent = (box[0], box[2], box[1], box[3])
-        matplotlib.pyplot.imshow(tile, origin='upper', extent=extent, **kwargs)
+        extent = (box[0], box[2], box[3], box[1])
+        if axes is None:
+            axes = matplotlib.pyplot
+        return axes.imshow(tile, origin='upper', extent=extent, **kwargs)
 
-    def plot_box(self, box, fill=False, **kwargs):
+    def plot_box(self, box, fill=False, axes=None, **kwargs):
         """
         Draw box on current matplotlib axes.
 
         Arguments:
             box (array-like): Box in image coordinates (left, top, right, bottom)
             fill (bool): Whether to fill the box
+            axes (`matplotlib.axes.Axes`): Matplotlib axes to plot on
             **kwargs: Optional arguments to matplotlib.patches.Rectangle
+
+        Returns:
+            `matplotlib.patches.Rectangle`
         """
-        axis = matplotlib.pyplot.gca()
-        axis.add_patch(matplotlib.patches.Rectangle(
+        if axes is None:
+            axes = matplotlib.pyplot.gca()
+        return axes.add_patch(matplotlib.patches.Rectangle(
             xy=box[0:2], width=box[2] - box[0], height=box[3] - box[1],
             fill=fill, **kwargs))
 
@@ -205,3 +216,56 @@ class Observer(object):
         """
         for img in self.images:
             img.I = None
+
+    def animate(self, uv, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
+        """
+        Animate image tiles centered around a target point.
+
+        The left subplot shifts tiles based on the projected position of the
+        point (marked as a red dot); this represents the corrected image alignment.
+        The right subplot does not shift tiles; this represents the original
+        uncorrected image alignment.
+
+        NOTE: The frame label (index, image basenmae) is drawn inside the axes
+        due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
+        See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
+
+        Arguments:
+            uv (iterable): Image coordinate (u, v) of the center of the tile in
+                in the first image (`frames[0]`)
+            frames (iterable): Integer indices of the images to include
+            size (iterable): Size of the image tiles to plot
+            interval (number): Delay between frames in milliseconds
+            subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
+            animation (dict): Additional arguments to 'matplotlib.animation.FuncAnimation()'
+
+        Returns:
+            `matplotlib.animation.FuncAnimation`
+        """
+        if frames is None:
+            frames = range(len(self.images))
+        dxyz = self.images[frames[0]].cam.invproject(np.atleast_2d(uv))
+        halfsize = (size[0] * 0.5, size[1] * 0.5)
+        # Initialize plot
+        fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
+        box = self.tile_box(uv, size=size)
+        tile = self.extract_tile(img=frames[0], box=box)
+        im = [self.plot_tile(tile=tile, box=box, axes=axes) for axes in ax]
+        pt = [axis.plot(uv[0], uv[1], marker='.', color='red')[0] for axis in ax]
+        txt = ax[1].text(uv[0], uv[1] - (halfsize[1] - 10), '', color='white',
+            horizontalalignment='center')
+        # Update plot
+        def update_plot(i):
+            puv = self.images[i].cam.project(dxyz, directions=True)[0]
+            tile = self.extract_tile(img=i, box=box)
+            for j in range(2):
+                im[j].set_array(tile)
+                pt[j].set_xdata(puv[0])
+                pt[j].set_ydata(puv[1])
+            ax[0].set_xlim(puv[0] - halfsize[0], puv[0] + halfsize[0])
+            ax[0].set_ylim(puv[1] + halfsize[1], puv[1] - halfsize[0])
+            basename = os.path.splitext(os.path.basename(self.images[i].path))[0]
+            txt.set_text(str(i) + ' : ' + basename)
+            return im + pt + [txt]
+        # Build animation
+        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)

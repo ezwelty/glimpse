@@ -10,6 +10,7 @@ import json
 import lmfit
 import lxml.etree
 import matplotlib
+import matplotlib.animation
 import numpy as np
 import os
 import pandas

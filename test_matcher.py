@@ -37,26 +37,10 @@ mask = np.load(MASK_PATH)
 model = glimpse.optimize.ObserverCameras(observer)
 model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
 model.build_matches(max_dt=datetime.timedelta(days=1), path=MATCH_DIR, overwrite=False, max_ratio=0.6, max_distance=10)
-fit = model.fit(tol=1e-3)
+fit = model.fit(tol=1)
 viewdirs = fit.x.reshape(-1, 3)
 model.set_cameras(viewdirs=viewdirs)
 
 # ---- Plot results ----
 
-xyz = np.atleast_2d([499211.00725947437, 6783756.0918104537, 479.33179419876853])
-fig, axs = matplotlib.pyplot.subplots(nrows=1, ncols=2, figsize=(16, 8))
-for i, img in enumerate(observer.images):
-    uv = img.cam.project(xyz)[0]
-    if i == 0:
-        uv0 = uv.copy()
-    axs[0].imshow(img.read())
-    axs[0].plot(uv[0], uv[1], 'r.')
-    axs[0].set_xlim(uv[0] - 50, uv[0] + 50)
-    axs[0].set_ylim(uv[1] + 50, uv[1] - 50)
-    axs[1].imshow(img.read())
-    axs[1].plot(uv[0], uv[1], 'r.')
-    axs[1].set_xlim(uv0[0] - 50, uv0[0] + 50)
-    axs[1].set_ylim(uv0[1] + 50, uv0[1] - 50)
-    fig.savefig(os.path.join(STATION_DIR, 'anims', 'anim_{0:03}.jpg'.format(i)), dpi=300)
-    axs[0].cla()
-    axs[1].cla()
+observer.animate(uv=(303, 695), size=(100, 100), interval=200, subplots=dict(figsize=(16, 8), tight_layout=True))

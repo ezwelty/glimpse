@@ -539,7 +539,7 @@ class RotationMatchesXYZ(RotationMatches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs, normalized=False):
+    def __init__(self, cams, uvs):
         if len(cams) != 2 or len(uvs) != 2:
             raise ValueError("`cams` and `uvs` must each have two elements")
         if cams[0] is cams[1]:
@@ -691,20 +691,23 @@ class Cameras(object):
         weights (array): Weights for each control point
         vectors (list): Original camera vectors (for resetting camera parameters)
         params (`lmfit.Parameters`): Parameter initial values and bounds
-        scales (array): Scale factors for each parameter computed analytically
-        sparsity (sparse matrix): Sparsity structure for the estimation of the Jacobian matrix
+        scales (array): Scale factors for each parameter.
+            Pre-computed if `True`, skipped if `False`.
+        sparsity (sparse matrix): Sparsity structure for the estimation of the Jacobian matrix.
+            Pre-computed if `True`, skipped if `False`.
         cam_masks (list): Boolean masks of parameters being optimized for each camera
         cam_bounds (list): Bounds of parameters optimized for each camera
         group_mask (array): Boolean mask of parameters optimized for all cameras
         group_bounds (array): Bounds of parameters optimized for all cameras
     """
 
-    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None):
-        self.cams = cams if isinstance(cams, list) else [cams]
+    def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None,
+        scales=True, sparsity=True):
+        self.cams = cams if isinstance(cams, (list, tuple)) else [cams]
         self.vectors = [cam.vector.copy() for cam in self.cams]
-        controls = controls if isinstance(controls, list) else [controls]
+        controls = controls if isinstance(controls, (list, tuple)) else [controls]
         self.controls = prune_controls(self.cams, controls)
-        self.cam_params = cam_params if isinstance(cam_params, list) else [cam_params]
+        self.cam_params = cam_params if isinstance(cam_params, (list, tuple)) else [cam_params]
         self.group_params = group_params
         test_cameras(self)
         temp = [parse_params(params) for params in self.cam_params]
@@ -715,12 +718,22 @@ class Cameras(object):
         self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, group_params)
         self.weights = weights
         # Compute optimal variable scale factors
-        scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
-        # TODO: Weigh each camera by number of control points
-        group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
-        cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
-        self.scales = np.hstack((group_scale, cam_scales))
-        self.sparsity = self.build_sparsity()
+        if scales is True:
+            scales = [camera_scale_factors(cam, self.controls) for cam in self.cams]
+            # TODO: Weigh each camera by number of control points
+            group_scale = np.vstack((scale[self.group_mask] for scale in scales)).mean(axis=0)
+            cam_scales = np.hstack((scale[mask] for scale, mask in zip(scales, self.cam_masks)))
+            self.scales = np.hstack((group_scale, cam_scales))
+        elif scales is not False:
+            self.scales = scales
+        else:
+            self.scales = None
+        if sparsity is True:
+            self.sparsity = self.build_sparsity()
+        elif scales is not False:
+            self.sparsity = sparsity
+        else:
+            self.sparsity = None
 
     @property
     def weights(self):
@@ -892,21 +905,32 @@ class Cameras(object):
                 iteratively before final run. Must be `None` or same length as `cam_params`.
             full (bool): Whether to return the full result of `lmfit.Minimize()`
             **kwargs: Additional arguments to `lmfit.minimize()`.
-                If `method='leastsq'` and `diag` is not specified, the latter is
-                set equal to `self.diag`.
+                `self.scales` and `self.jac_sparsity` (if computed) are applied
+                to the following arguments if not provided:
+
+                    - `diag=self.scales` for `method='leastsq'`
+                    - `x_scale=self.scales` and `jac_sparsity=self.sparsity` for
+                    `method='least_squares'`
 
         Returns:
             array or `lmfit.Parameters` (`full=True`): Parameter values ordered first
                 by group or camera (group, cam0, cam1, ...),
                 then ordered by position in `Camera.vector`.
         """
-        if method == 'leastsq' and not hasattr(kwargs, 'diag'):
-            kwargs['diag'] = self.scales
+        if method == 'leastsq':
+            if self.scales is not None and not hasattr(kwargs, 'diag'):
+                kwargs['diag'] = self.scales
         if method == 'least_squares':
-            if not hasattr(kwargs, 'x_scale'):
+            if self.scales is not None and not hasattr(kwargs, 'x_scale'):
                 kwargs['x_scale'] = self.scales
-            if not hasattr(kwargs, 'jac_sparsity'):
-                kwargs['jac_sparsity'] = self.sparsity
+            if self.sparsity is not None and not hasattr(kwargs, 'jac_sparsity'):
+                if index is None:
+                    kwargs['jac_sparsity'] = self.sparsity
+                else:
+                    if isinstance(index, slice):
+                        index = np.arange(self.data_size())[index]
+                    index = np.dstack((2 * index, 2 * index + 1)).ravel()
+                    kwargs['jac_sparsity'] = self.sparsity[index]
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
             sys.stdout.write("\r" + str(err))

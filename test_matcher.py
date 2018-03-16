@@ -103,7 +103,7 @@ ransac_model = glimpse.optimize.Cameras(
 rvalues, rindex = glimpse.optimize.ransac(ransac_model, sample_size=30, max_error=0.5, min_inliers=30, iterations=100)
 
 # Plot matches
-image_index = [cams.index(cam) for cam in matches[m].cams]
+image_index = [cams.index(cam) for cam in matches[i].cams]
 fig, ax = matplotlib.pyplot.subplots(ncols=2, sharex=True, sharey=True, figsize=(16, 8), tight_layout=True)
 for j in (0, 1):
     fig.sca(ax[j])

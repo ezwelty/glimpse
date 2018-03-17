@@ -552,12 +552,28 @@ class DEM(Grid):
         Z_fmax = max_interpolant(self.X.ravel(), self.Y.ravel()).reshape(self.Z.shape)
         self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
 
-    def visible(self, xyz):
+    def visible(self, xyz, correction=False):
+        """
+        Return the binary viewshed from a point within the DEM.
+
+        Arguments:
+            xyz (iterable): World coordinates of viewing position (x, y, z)
+            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+                `True` for default arguments, or `None` or `False` to skip.
+        """
         assert abs(self.d).all()
+        assert self.inbounds(np.atleast_2d(xyz[0:2]))
         # Compute distance to all cell centers
         dx = np.tile(self.x - xyz[0], self.n[1])
         dy = np.repeat(self.y - xyz[1], self.n[0])
         dz = self.Z.ravel() - xyz[2]
+        if correction is True:
+            correction = dict()
+        if isinstance(correction, dict):
+            xy = np.column_stack((
+                np.tile(self.x, self.n[1]),
+                np.repeat(self.y, self.n[0])))
+            dz += helpers.elevation_corrections(origin=xyz, xyz=xy, **correction)
         dxy =  np.sqrt(dx**2 + dy**2)
         # NOTE: Assumes square grid
         dxy_cell = (dxy * (1 / abs(self.d[0])) + 0.5).astype(int)

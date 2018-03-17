@@ -552,7 +552,7 @@ class DEM(Grid):
         Z_fmax = max_interpolant(self.X.ravel(), self.Y.ravel()).reshape(self.Z.shape)
         self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
 
-    def visible(self, origin, correction=False):
+    def viewshed(self, origin, correction=False):
         """
         Return the binary viewshed from a point within the DEM.
 

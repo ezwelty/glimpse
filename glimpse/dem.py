@@ -552,30 +552,32 @@ class DEM(Grid):
         Z_fmax = max_interpolant(self.X.ravel(), self.Y.ravel()).reshape(self.Z.shape)
         self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
 
-    def visible(self, xyz, correction=False):
+    def visible(self, origin, correction=False):
         """
         Return the binary viewshed from a point within the DEM.
 
         Arguments:
-            xyz (iterable): World coordinates of viewing position (x, y, z)
+            origin (iterable): World coordinates of viewing position (x, y, z)
             correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
                 `True` for default arguments, or `None` or `False` to skip.
+
+        Returns:
+            array: Boolean array of the same shape as `self.Z`
+                with visible cells tagged as `True`
         """
         assert abs(self.d).all()
-        assert self.inbounds(np.atleast_2d(xyz[0:2]))
+        assert self.inbounds(np.atleast_2d(origin[0:2]))
         # Compute distance to all cell centers
-        dx = np.tile(self.x - xyz[0], self.n[1])
-        dy = np.repeat(self.y - xyz[1], self.n[0])
-        dz = self.Z.ravel() - xyz[2]
+        dx = np.tile(self.x - origin[0], self.n[1])
+        dy = np.repeat(self.y - origin[1], self.n[0])
+        dz = self.Z.ravel() - origin[2]
+        dxy = dx**2 + dy**2 # wait to square root
         if correction is True:
             correction = dict()
         if isinstance(correction, dict):
-            xy = np.column_stack((
-                np.tile(self.x, self.n[1]),
-                np.repeat(self.y, self.n[0])))
-            dz += helpers.elevation_corrections(origin=xyz, xyz=xy, **correction)
-        dxy =  np.sqrt(dx**2 + dy**2)
-        # NOTE: Assumes square grid
+            dz += helpers.elevation_corrections(
+                squared_distances=dxy, **correction)
+        dxy = np.sqrt(dxy)
         dxy_cell = (dxy * (1 / abs(self.d[0])) + 0.5).astype(int)
         # Compute heading (-pi to pi CW from -y axis)
         heading = np.arctan2(dy, dx)
@@ -624,11 +626,29 @@ class DEM(Grid):
             previous_headings = rheading
         return vis.reshape(self.Z.shape)
 
-    def horizon(self, origin, headings=np.arange(360)):
-        # TODO: Radius min, max (by slicing bresenham line)
+    def horizon(self, origin, headings=range(360), correction=False):
+        """
+        Return the horizon from an arbitrary viewing position.
+
+        Missing values (`numpy.nan`) are ignored. A cell which is the last
+        non-missing cell along a sighting is not considered part of the horizon.
+
+        Arguments:
+            origin (iterable): World coordinates of viewing position (x, y, z)
+            headings (iterable):
+            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+                `True` for default arguments, or `None` or `False` to skip.
+
+        Returns:
+            list: List of world coordinate arrays (n, 3) each tracing an unbroken
+                segment of the horizon
+        """
         n = len(headings)
+        if correction is True:
+            correction = dict()
         # Compute ray directions (2d)
-        thetas = - (headings - 90) * np.pi / 180
+        headings = np.array(headings, dtype=float)
+        thetas = - (headings - 90) * (np.pi / 180)
         directions = np.column_stack((np.cos(thetas), np.sin(thetas)))
         # Intersect with box (2d)
         box = np.concatenate((self.min[0:2], self.max[0:2]))
@@ -655,9 +675,14 @@ class DEM(Grid):
             # TODO: Precompute Z.flatten()?
             dz = self.Z.flat[idx] - origin[2]
             xy = self.rowcol_to_xy(rowcol)
-            dxy = np.sqrt(np.sum((xy - origin[0:2])**2, axis=1))
-            maxi = np.nanargmax(dz / dxy)
-            # Save point it not last non-nan value
+            dxy = np.sum((xy - origin[0:2])**2, axis=1) # wait to take square root
+            if isinstance(correction, dict):
+                delta = helpers.elevation_corrections(
+                    squared_distances=dxy, **correction)
+                maxi = np.nanargmax((dz + delta) / np.sqrt(dxy))
+            else:
+                maxi = np.nanargmax(dz / np.sqrt(dxy))
+            # Save point if not last non-nan value
             if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1:])):
                 hxyz[i, 0:2] = xy[maxi, :]
                 hxyz[i, 2] = dz[maxi]

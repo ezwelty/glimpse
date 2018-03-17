@@ -553,48 +553,14 @@ class DEM(Grid):
         self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
 
     def visible(self, xyz):
-        X = self.X.flatten() - xyz[0]
-        Y = self.Y.flatten() - xyz[1]
-        Z = self.Z.flatten() - xyz[2]
-        # NOTE: Compute dx, dz, then elevation angle instead?
-        d = np.sqrt(X**2 + Y**2 + Z**2)
-        x = (np.arctan2(Y, X) + np.pi) / (np.pi * 2) # ???
-        y = Z / d
-        # Slow:
-        ix = np.lexsort((x,
-            np.round(((X / abs(self.d[0])) ** 2 + (Y / abs(self.d[1])) ** 2) ** 0.5)))
-        loopix = np.argwhere(np.diff(x[ix]) < 0).flatten()
-        vis = np.ones(len(x), dtype=bool)
-        maxd = np.nanmax(d)
-        # Number of points in voxel horizon:
-        N = np.ceil(2 * np.pi / (abs(self.d[0]) / maxd))
-        voxx = np.linspace(0, 1, int(N) + 1)
-        voxy = np.zeros(len(voxx)) - np.inf
-        for k in range(len(loopix) - 1):
-            lp = ix[(loopix[k] + 1):(loopix[k + 1] + 1)]
-            lp = np.hstack(([lp[-1]], lp, [lp[0]]))
-            yy = y[lp]
-            xx = x[lp]
-            # Why?:
-            xx[0] -= 1
-            xx[-1] += 1
-            # ---
-            end = len(lp) - 1
-            if k: # Skip on first iteration (all visible)
-                vis[lp[1:end]] = np.interp(xx[1:end], voxx, voxy) < yy[1:end]
-            voxy = np.maximum(voxy, np.interp(voxx, xx, yy))
-        return vis.reshape(self.Z.shape)
-
-    def visible2(self, xyz):
-        # NOTE: Assumes square grid
+        assert abs(self.d).all()
         # Compute distance to all cell centers
-        dx = self.X.flatten() - xyz[0]
-        dy = self.Y.flatten() - xyz[1]
-        dz = self.Z.flatten() - xyz[2]
-        dxy2 = (dx**2 + dy**2)
-        dxy =  np.sqrt(dxy2)
-        # dxyz = np.sqrt((dxy2 + dz**2))
-        dxy_cell = (dxy / abs(self.d[0]) + 0.5).astype(int)
+        dx = np.tile(self.x - xyz[0], self.n[1])
+        dy = np.repeat(self.y - xyz[1], self.n[0])
+        dz = self.Z.ravel() - xyz[2]
+        dxy =  np.sqrt(dx**2 + dy**2)
+        # NOTE: Assumes square grid
+        dxy_cell = (dxy * (1 / abs(self.d[0])) + 0.5).astype(int)
         # Compute heading (-pi to pi CW from -y axis)
         heading = np.arctan2(dy, dx)
         # Sort cells by distance, then heading
@@ -613,37 +579,33 @@ class DEM(Grid):
             else:
                 # Single co-located pixel, return all visible
                 return np.ones(self.Z.shape, dtype=bool)
-        rings = np.hstack((rings, len(ix)))
-        # Compute elevation
+        rings = np.append(rings, len(ix))
+        # Compute elevation ratio
         dxy[dxy == 0] = np.nan
-        # NOTE: Arctan necessary?
-        elevation = np.arctan(dz / dxy)
+        elevation = dz / dxy
         # Compute max number of points on most distant ring
-        # N = np.ceil(2 * np.pi * (dxy[ix[-1]] / abs(self.d[0]))).astype(int)
         N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
-        # Initialize loop
-        # NOTE: N or N + 1 ?
+        # Initialize result raster
         vis = np.zeros(self.Z.size, dtype=bool)
-        headings = np.linspace(-np.pi, np.pi, N)
-        headings_f = scipy.interpolate.interp1d(headings, np.arange(N), kind='nearest', assume_sorted=True)
-        max_elevations = np.full(N, -np.inf)
-        max_elevation_ix = np.full(N, np.nan)
         # Loop through rings
-        # NOTE: Why len(rings) - 1 ?
         period = 2 * np.pi
         for k in range(len(rings) - 1):
             rix = ix[rings[k]:rings[k + 1]]
             rheading = heading[rix]
             relev = elevation[rix]
-            # Visibility
+            # Test visibility
             if k > 0:
+                # Interpolate max_elevations to current headings
+                max_elevations = np.interp(rheading, previous_headings, max_elevations, period=period)
                 # NOTE: Throws warning if np.nan in relev
-                is_visible = relev >= np.interp(rheading, headings, max_elevations, period=period)
+                is_visible = relev > max_elevations
+                max_elevations[is_visible] = relev[is_visible]
             else:
                 # First ring is always visible
-                is_visible = np.ones(relev.shape, dtype=bool)
+                is_visible = True
+                max_elevations = relev
             vis[rix] = is_visible
-            max_elevations = np.fmax(max_elevations, np.interp(headings, rheading, relev, period=period)) # ignores nan
+            previous_headings = rheading
         return vis.reshape(self.Z.shape)
 
     def horizon(self, origin, headings=np.arange(360)):

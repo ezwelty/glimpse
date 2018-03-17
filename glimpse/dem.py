@@ -1,4 +1,4 @@
-from .imports import (np, scipy, gdal, matplotlib)
+from .imports import (np, scipy, gdal, matplotlib, datetime)
 from . import (helpers)
 
 class Grid(object):
@@ -62,6 +62,37 @@ class Grid(object):
         if self._Y is None:
             self._Y = np.tile(self.y, [self.n[0], 1]).transpose()
         return self._Y
+
+    @classmethod
+    def read(cls, path, d=None, xlim=None, ylim=None):
+        """
+        Read Grid from raster file.
+
+        Arguments:
+            path (str): Path to file
+            d (float): Target grid cell size
+            xlim (array-like): Crop bounds in x.
+                If `None` (default), read from file.
+            ylim (array-like): Crop bounds in y.
+                If `None` (default), read from file.
+        """
+        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        transform = raster.GetGeoTransform()
+        grid = cls(n=(raster.RasterXSize, raster.RasterYSize),
+            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+        xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
+        win_xsize = (cols[1] - cols[0]) + 1
+        win_ysize = (rows[1] - rows[0]) + 1
+        if d:
+            buf_xsize = int(np.ceil(abs(win_xsize * grid.d[0] / d)))
+            buf_ysize = int(np.ceil(abs(win_ysize * grid.d[1] / d)))
+        else:
+            buf_xsize = win_xsize
+            buf_ysize = win_ysize
+        grid.xlim, grid.ylim = xlim, ylim
+        grid.n = (buf_xsize, buf_ysize)
+        return grid
 
     # ---- Methods (private) ----
 
@@ -289,6 +320,10 @@ class DEM(Grid):
     """
     A `DEM` describes elevations on a regular 2-dimensional grid.
 
+    Arguments:
+        x (object): Either `xlim`, `x`, or `X`
+        y (object): Either `ylim`, `y`, or `Y`
+
     Attributes:
         Z (array): Grid of values on a regular xy grid
         zlim (array): Limits of `Z` [min, max]
@@ -303,15 +338,6 @@ class DEM(Grid):
     """
 
     def __init__(self, Z, x=None, y=None, datetime=None):
-        """
-        Create a `DEM`.
-
-        Arguments:
-            Z (array): Grid of values on a regular xy grid
-            x (object): Either `xlim`, `x`, or `X`
-            y (object): Either `ylim`, `y`, or `Y`
-            datetime (datetime): Capture date and time
-        """
         self.Z = Z
         self._Zf = None
         self.xlim, self._x, self._X = self._parse_x(x)
@@ -325,7 +351,7 @@ class DEM(Grid):
 
         See `gdal.Open()` for details.
         If raster is float and has a defined no-data value,
-        no-data values are replaced with NaN.
+        no-data values are replaced with `np.nan`.
         Otherwise, the raster data is unchanged.
 
         Arguments:
@@ -357,10 +383,8 @@ class DEM(Grid):
         Z = band.ReadAsArray(
             xoff=cols[0], yoff=rows[0],
             win_xsize=win_xsize, win_ysize=win_ysize,
-            buf_xsize=buf_xsize, buf_ysize=buf_ysize
-        )
+            buf_xsize=buf_xsize, buf_ysize=buf_ysize)
         # FIXME: band.GetNoDataValue() not equal to read values due to rounding
-        # HACK: Use < -9998 since most common are -9999 and -3.4e38
         nan_value = band.GetNoDataValue()
         if np.issubdtype(Z.dtype, float) and nan_value:
             Z[Z == nan_value] = np.nan
@@ -476,10 +500,10 @@ class DEM(Grid):
         Crop a `DEM`.
 
         Arguments:
-            xlim (array_like): Cropping bounds in x
-            ylim (array_like): Cropping bounds in y
-            zlim (array_like): Cropping bounds in z.
-                Values outside range are set to `nan`.
+            xlim (array_like): Crop bounds in x
+            ylim (array_like): Crop bounds in y
+            zlim (array_like): Crop bounds in z.
+                Values outside range are set to `np.nan`.
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
@@ -687,3 +711,93 @@ class DEM(Grid):
                 ind.extend(self.rowcol_to_idx(rowcols))
         # Apply
         self.Z.flat[ind] = value
+
+class DEMInterpolant(object):
+    """
+    A `DEMInterpolant` predicts DEMs for arbitrary times by interpolating between observed DEMs.
+
+    Attributes:
+        paths (iterable): Paths to DEM files
+        datetimes (iterable): Capture datetimes
+    """
+
+    def __init__(self, paths, datetimes):
+        assert len(paths) == len(datetimes)
+        assert len(paths) > 1
+        assert len(paths) == len(set(paths))
+        assert len(datetimes) == len(set(datetimes))
+        self.paths = paths
+        self.datetimes = datetimes
+
+    def __call__(self, t, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
+        """
+        Return a DEM time-interpolated from two nearby DEM.
+
+        Arguments:
+            t (datetime.datetime): Datetime of interpolated DEM
+            d (float): Target grid cell size.
+                If `None`, the largest DEM cell size is used.
+            xlim (iterable): Crop bounds in x.
+                If `None`, the intersection of the DEMs is used.
+            ylim (iterable): Crop bounds in y.
+                If `None`, the intersection of the DEMs is used.
+            extrapolate (bool): Whether to interpolate from the two nearest DEMs (True)
+                or only from DEMs on either side of `t`
+            zlim (iterable): Crop bounds in z.
+                Values outside range are set to `np.nan`.
+            fun (callable): Function to apply to each DEM before interpolation,
+                with signature `fun(dem, **kwargs)`. Must modify DEM in place.
+            **kwargs (dict): Additional arguments passed to `fun`
+
+        Returns:
+            DEM: An interpolated DEM for time `t`
+        """
+        dt = np.atleast_1d(self.datetimes) - t
+        if extrapolate:
+            # Get two nearest DEMs
+            i, j = abs(dt).argsort()[:2]
+        else:
+            # Get nearest DEM on either side of t
+            i = np.argmin(abs(dt))
+            i_sign = np.sign(dt[i].total_seconds())
+            if i_sign == 0:
+                j = i
+            else:
+                on_j_side = int(i_sign) * dt < datetime.timedelta()
+                if np.count_nonzero(on_j_side):
+                    j_side_nearest = np.argmin(abs(dt[on_j_side]))
+                    j = np.arange(len(dt))[on_j_side][j_side_nearest]
+                else:
+                    raise ValueError("Sample time not bounded on both sides by a DEM")
+        if self.datetimes[i] < self.datetimes[j]:
+            ij = i, j
+        elif self.datetimes[i] > self.datetimes[j]:
+            ij = j, i
+        else:
+            ij = i,
+        if d is None or xlim is None or ylim is None:
+            grids = [Grid.read(self.paths[k]) for k in ij]
+        if d is None:
+            d = np.max(np.abs(np.stack([grid.d for grid in grids])))
+        if xlim is None:
+            xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
+        if ylim is None:
+            ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
+        dems = [DEM.read(self.paths[k], d=d, xlim=xlim, ylim=ylim) for k in ij]
+        if zlim is not None:
+            for dem in dems:
+                dem.crop(zlim=zlim)
+        if fun:
+            for dem in dems:
+                fun(dem, **kwargs)
+        if len(dems) > 1:
+            different_grids = (any(dems[0].d != dems[1].d) or any(dems[0].n != dems[1].n)
+                or any(dems[0].xlim != dems[1].xlim) or any(dems[0].ylim != dems[1].ylim))
+            if different_grids:
+                dems[1].resample(dems[0], method='linear')
+            total_seconds = np.sum(abs(dt[list(ij)])).total_seconds()
+            i_ratio = abs(dt[i]).total_seconds() / total_seconds
+            j_ratio = abs(dt[j]).total_seconds() / total_seconds
+            dems[0].Z = i_ratio * dems[0].Z + j_ratio * dems[1].Z
+        dems[0].datetime = t
+        return dems[0]

@@ -14,7 +14,7 @@ class Observer(object):
         datetimes (array): Image capture times
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
-        correction: Curvature and refraction correction (see `glimpse.Camera.project()`)
+        correction: Curvature and refraction correction (see `Camera.project()`)
         cache (bool): Whether to cache images on read
         grid (glimpse.dem.Grid): Grid object for operations on image coordinates
     """

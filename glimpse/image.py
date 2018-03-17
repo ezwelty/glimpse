@@ -372,8 +372,8 @@ class Camera(object):
         Arguments:
             xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
             directions (bool): Whether absolute coordinates (False) or ray directions (True)
-            correction (dict or bool): Either arguments to `self.elevation_corrections`,
-                `True` for default arguments, or `None` (default) or `False` to skip.
+            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+                `True` for default arguments, or `None` or `False` to skip.
                 Only applies if `directions` is `False`.
         Returns:
             array: Image coordinates (Nx2)
@@ -541,23 +541,6 @@ class Camera(object):
         if not directions:
             angles = np.column_stack((angles, r))
         return angles
-
-    def elevation_corrections(self, xyz, earth_radius=6.3781e6, refraction=0.13):
-        """
-        Return elevation corrections for earth curvature and refraction.
-
-        Arguments:
-            xyz (array): World coordinates (Nx2+)
-            earth_radius (float): Radius of the earth in the same units as `xyz`.
-                Default is the equatorial radius in meters.
-            refraction (float): Coefficient of refraction of light.
-                Default is an average for standard atmospheric conditions.
-        """
-        # http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
-        # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
-        # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
-        square_distance = np.sum((xyz[:, 0:2] - self.xyz[0:2])**2, axis=1)
-        return (refraction - 1) * square_distance / (2 * earth_radius)
 
     # ---- Methods (private) ----
 
@@ -814,8 +797,8 @@ class Camera(object):
         Arguments:
             xyz (array): World coordinates (Nx3)
             directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
-            correction (dict or bool): Either arguments to `self.elevation_corrections`,
-                `True` for default arguments, or `None` (default) or `False` to skip.
+            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+                `True` for default arguments, or `None` or `False` to skip.
                 Only applies if `directions` is `False`.
         """
         if directions:
@@ -826,7 +809,7 @@ class Camera(object):
                 correction = dict()
             if isinstance(correction, dict):
                 # Apply elevation correction
-                dxyz[:, 2] += self.elevation_corrections(xyz, **correction)
+                dxyz[:, 2] += helpers.elevation_corrections(self.xyz, xyz, **correction)
         # Convert coordinates to ray directions
         xyz_c = np.matmul(self.R, dxyz.T).T
         # Set points behind camera to NaN

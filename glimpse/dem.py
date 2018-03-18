@@ -523,34 +523,21 @@ class DEM(Grid):
         """
         self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
 
-    def fill_crevasses_simple(self, maximum_filter_size=5, gaussian_filter_sigma=5):
+    def fill_crevasses(self, maximum_filter_size=5, gaussian_filter_sigma=5,
+        mask=None, fill=False):
         """
-        Apply a maximum filter to `Z`, then perform Gaussian smoothing (fast).
+        Apply a maximum filter to `Z`, then perform Gaussian smoothing.
 
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
+            mask (array): Boolean mask of cells to include (True) or exclude (False).
+                If `None`, all cells are included.
+            fill (bool): Whether to fill cells excluded by `mask` with interpolated values
         """
-        self.Z = scipy.ndimage.filters.gaussian_filter(
-            scipy.ndimage.filters.maximum_filter(self.Z, size=maximum_filter_size),
-            sigma=gaussian_filter_sigma)
-
-    def fill_crevasses_complex(self, maximum_filter_size=5, gaussian_filter_sigma=5):
-        """
-        Find the local maxima of `Z`, fit a surface through them, then perform Gaussian smoothing (slow).
-
-        Arguments:
-            maximum_filter_size (int): Kernel size of maximum filter in pixels
-            gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-        """
-        Z_maxima = scipy.ndimage.filters.maximum_filter(self.Z, size=maximum_filter_size)
-        is_max = (Z_maxima == self.Z).ravel()
-        Xmax = self.X.ravel()[is_max]
-        Ymax = self.Y.ravel()[is_max]
-        Zmax = self.Z.ravel()[is_max]
-        max_interpolant = scipy.interpolate.LinearNDInterpolator(np.vstack((Xmax, Ymax)).T, Zmax)
-        Z_fmax = max_interpolant(self.X.ravel(), self.Y.ravel()).reshape(self.Z.shape)
-        self.Z = scipy.ndimage.filters.gaussian_filter(Z_fmax, sigma=gaussian_filter_sigma)
+        self.Z = helpers.gaussian_filter(
+            helpers.maximum_filter(self.Z, size=maximum_filter_size, mask=mask, fill=fill),
+            sigma=gaussian_filter_sigma, mask=mask, fill=fill)
 
     def viewshed(self, origin, correction=False):
         """

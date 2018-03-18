@@ -53,6 +53,14 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
     return obj
 
 def make_path_directories(path, is_file=True):
+    """
+    Make directories as needed to build a path.
+
+    Arguments:
+        path (str): Directory or file path
+        is_file (bool): Whether `path` is a file, in which case
+            `path` is reduced to `os.path.dirname(path)`
+    """
     # https://stackoverflow.com/a/14364249
     if is_file:
         path = os.path.dirname(path)
@@ -62,6 +70,31 @@ def make_path_directories(path, is_file=True):
         except OSError:
             if not os.path.isdir(path):
                 raise
+
+def numpy_dtype_minmax(obj):
+    """
+    Return min, max allowable values for a numpy datatype.
+
+    Arguments:
+        obj: Either `numpy.ndarray`, `numpy.dtype`, or `type`
+
+    Returns:
+        tuple: Minimum and maximum values
+    """
+    if isinstance(obj, np.ndarray):
+        obj = obj.dtype
+    if isinstance(obj, np.dtype):
+        obj = obj.type
+    if issubclass(obj, np.floating):
+        info = np.finfo(obj)
+        return info.min, info.max
+    elif issubclass(obj, np.integer):
+        info = np.iinfo(obj)
+        return info.min, info.max
+    elif issubclass(obj, np.bool):
+        return False, True
+    else:
+        raise ValueError("Cannot determine min, max for " + str(obj))
 
 # ---- Pickles ---- #
 
@@ -132,6 +165,55 @@ def normalize_range(array, interval=None):
             interval = array
         interval = (min(interval), max(interval))
     return (array + (-interval[0])) * (1.0 / (interval[1] - interval[0]))
+
+def gaussian_filter(array, mask=None, fill=False, **kwargs):
+    """
+    Return a gaussian-filtered array.
+
+    Excludes cells by the method described in https://stackoverflow.com/a/36307291.
+
+    Arguments:
+        array (array): Array to filter
+        mask (array): Boolean mask of cells to include (True) or exclude (False).
+            If `None`, all cells are included.
+        fill (bool): Whether to fill cells excluded by `mask` with interpolated values
+        **kwargs (dict): Additional arguments to `scipy.ndimage.filters.gaussian_filter()`
+    """
+    if mask is None:
+        return scipy.ndimage.filters.gaussian_filter(array, **kwargs)
+    else:
+        x = array.copy()
+        x[~mask] = 0
+        xf = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
+        x[mask] = 1
+        xf_sum = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
+        x = xf / xf_sum
+        if not fill:
+            x[~mask] = array[~mask]
+        return x
+
+def maximum_filter(array, mask=None, fill=False, **kwargs):
+    """
+    Return a maximum-filtered array.
+
+    Excludes cells by setting them to the minimum value allowable by the datatype.
+
+    Arguments:
+        array (array): Array to filter
+        mask (array): Boolean mask of cells to include (True) or exclude (False).
+            If `None`, all cells are included.
+        fill (bool): Whether to fill cells excluded by `mask` with interpolated values
+        **kwargs (dict): Additional arguments to `scipy.ndimage.filters.maximum_filter()`
+    """
+    if mask is None:
+        return scipy.ndimage.filters.maximum_filter(array, **kwargs)
+    else:
+        x = array.copy()
+        x[~mask] = numpy_dtype_minmax(x)[0]
+        x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
+        if not fill:
+            x[~mask] = array[~mask]
+        return x
 
 # ---- Arrays: Images ---- #
 

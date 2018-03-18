@@ -810,7 +810,7 @@ class Camera(object):
             if isinstance(correction, dict):
                 # Apply elevation correction
                 dxyz[:, 2] += helpers.elevation_corrections(
-                    squared_distances=np.sum(dxyz[0:2]**2, axis=1), **correction)
+                    squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1), **correction)
         # Convert coordinates to ray directions
         xyz_c = np.matmul(self.R, dxyz.T).T
         # Set points behind camera to NaN

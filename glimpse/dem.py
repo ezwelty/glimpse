@@ -599,7 +599,9 @@ class DEM(Grid):
                 return np.ones(self.Z.shape, dtype=bool)
         rings = np.append(rings, len(ix))
         # Compute elevation ratio
-        dxy[dxy == 0] = np.nan
+        first_ring = ix[rings[0]:rings[1]]
+        is_zero = np.where(dxy[first_ring] == 0)[0]
+        dxy[first_ring[is_zero]] = np.nan
         elevation = dz / dxy
         # Compute max number of points on most distant ring
         N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
@@ -617,11 +619,18 @@ class DEM(Grid):
                 max_elevations = np.interp(rheading, previous_headings, max_elevations, period=period)
                 # NOTE: Throws warning if np.nan in relev
                 is_visible = relev > max_elevations
+                if max_elevations_has_nan:
+                    is_nan_max_elevation = np.isnan(max_elevations)
+                    new_visible = is_nan_max_elevation & ~np.isnan(relev)
+                    is_visible |= new_visible
+                    if np.count_nonzero(is_nan_max_elevation) == np.count_nonzero(new_visible):
+                        max_elevations_has_nan = False
                 max_elevations[is_visible] = relev[is_visible]
             else:
-                # First ring is always visible
-                is_visible = True
+                # First ring is always visible (if not NaN)
+                is_visible = ~np.isnan(relev)
                 max_elevations = relev
+                max_elevations_has_nan = any(np.isnan(relev))
             vis[rix] = is_visible
             previous_headings = rheading
         return vis.reshape(self.Z.shape)

@@ -1,6 +1,6 @@
 from .imports import (
     np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-        sklearn, cv2, copy_reg, os, re)
+    sklearn, cv2, copy_reg, os, re)
 
 # ---- General ---- #
 

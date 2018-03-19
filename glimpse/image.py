@@ -1,7 +1,7 @@
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem, gdal, cv2, collections)
-from . import (helpers, svg, optimize)
+    sharedmem, gdal, collections)
+from . import (helpers)
 
 class Camera(object):
     """

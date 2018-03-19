@@ -810,8 +810,9 @@ class Cameras(object):
             if not isinstance(ctrl_cams, (tuple, list)):
                 ctrl_cams = (ctrl_cams, )
             for cam in ctrl_cams:
-                j = self.cams.index(cam)
-                S[ctrl_ends[i]:ctrl_ends[i + 1], cam_ends[j]:cam_ends[j + 1]] = 1
+                if cam in self.cams:
+                    j = self.cams.index(cam)
+                    S[ctrl_ends[i]:ctrl_ends[i + 1], cam_ends[j]:cam_ends[j + 1]] = 1
         return S
 
     def observed(self, index=None):

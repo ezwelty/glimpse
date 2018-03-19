@@ -961,7 +961,7 @@ class Exif(object):
         code = getattr(getattr(piexif, group + 'IFD'), tag)
         if group is 'Image':
             group = '0th'
-        if not group in self.tags or not code in self.tags[group]:
+        if group not in self.tags or code not in self.tags[group]:
             return None
         else:
             return self.tags[group][code]
@@ -978,7 +978,7 @@ class Exif(object):
         code = getattr(getattr(piexif, group + 'IFD'), tag)
         if group is 'Image':
             group = '0th'
-        if not group in self.tags:
+        if group not in self.tags:
             self.tags[group] = {}
         self.tags[group][code] = value
 
@@ -1040,13 +1040,13 @@ class Image(object):
                 cam = copy.deepcopy(cam)
             elif cam is None:
                 cam = dict()
-            if not 'vector' in cam:
-                if not 'imgsz' in cam:
+            if 'vector' not in cam:
+                if 'imgsz' not in cam:
                     cam['imgsz'] = self.exif.size
-                if not 'f' in cam:
-                    if not 'fmm' in cam:
+                if 'f' not in cam:
+                    if 'fmm' not in cam:
                         cam['fmm'] = self.exif.fmm
-                    if not 'sensorsz' in cam:
+                    if 'sensorsz' not in cam:
                         cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
             self.cam = Camera(**cam)
         self.I = None

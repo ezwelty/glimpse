@@ -281,6 +281,9 @@ class Grid(object):
     def rowcol_to_idx(self, rowcol):
         return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.n[::-1])
 
+    def idx_to_rowcol(self, idx):
+        return np.column_stack(np.unravel_index(idx, self.n[::-1]))
+
     def crop_extent(self, xlim=None, ylim=None):
         # Calculate x,y limits
         if xlim is None:

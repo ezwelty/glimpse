@@ -1,5 +1,5 @@
 from .imports import (np, cv2, warnings, datetime, scipy)
-from . import (helpers)
+from . import (helpers, dem as DEM)
 
 class Tracker(object):
     """
@@ -8,6 +8,8 @@ class Tracker(object):
     Attributes:
         observers (list): Observer objects
         dem (DEM): Digital elevation model of the surface on which to track points
+        viewshed (DEM): `DEM` object of a binary viewshed.
+            Can also be an array, in which case it must be the same shape as `dem.Z`.
         time_unit (float): Length of time unit for temporal arguments, in seconds
             (e.g., 1 minute = 60, 1 hour = 3600)
         resample_method (str): Particle resampling method
@@ -31,10 +33,13 @@ class Tracker(object):
         histograms (list): Histogram (values, quantiles) of each `tiles`
             for histogram matching
     """
-    def __init__(self, observers, dem, time_unit=1, resample_method='systematic',
+    def __init__(self, observers, dem, viewshed=None, time_unit=1, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
         self.dem = dem
+        if isinstance(viewshed, np.ndarray):
+            viewshed = DEM.DEM(Z=viewshed, x=self.dem.x, y=self.dem.y)
+        self.viewshed = viewshed
         self.time_unit = time_unit
         self.resample_method = resample_method
         self.grayscale = grayscale
@@ -102,7 +107,13 @@ class Tracker(object):
         """
         daxy = axy_sigma * np.random.randn(self.n, 2)
         self.particles[:, 0:2] += dt * self.particles[:, 3:5] + 0.5 * (axy + daxy) * dt**2
+        if self.viewshed is not None:
+            is_visible = self.viewshed.sample(self.particles[:, 0:2], method='nearest')
+            if not all(is_visible):
+                raise ValueError("Some particles are not visible")
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
+        if any(np.isnan(self.particles[:, 2])):
+            raise ValueError("Some particles have missing elevations")
         self.particles[:, 3:5] += dt * (axy + daxy)
 
     def update_weights(self, likelihoods):

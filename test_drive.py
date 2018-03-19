@@ -26,10 +26,14 @@ for station in STATIONS:
         path=os.path.join(station_dir, IMG_DIR, basename + '.JPG'),
         cam=os.path.join(station_dir, CAM_DIR, basename + '.json'))
         for basename in basenames]
-    [im.read() for im in images]
     datetimes = np.array([img.datetime for img in images])
     inrange = np.logical_and(datetimes > start, datetimes < end)
     observers.append(glimpse.Observer(list(np.array(images)[inrange])))
+
+# ---- Cache images into memory ----
+
+for obs in observers:
+    obs.cache_images()
 
 # ---- Prepare DEM ----
 
@@ -38,8 +42,17 @@ boxes = [obs.images[0].cam.viewbox(radius=MAX_DISTANCE)
 box = glimpse.helpers.intersect_boxes(boxes)
 path = glob.glob(os.path.join(DEM_DIR, '*.tif'))[0]
 dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3])
-dem.Z[dem.Z < 0] = np.nan
-dem.fill_crevasses_simple()
+dem.crop(zlim=(0, np.inf))
+dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
+for obs in observers:
+    dem.fill_circle(obs.xyz, radius=100, value=np.nan)
+
+# ---- Prepare viewshed ----
+
+viewsheds = [dem.viewshed(obs.xyz) for obs in observers]
+viewshed = np.ones(dem.Z.shape, dtype=bool)
+for v in viewsheds:
+    viewshed &= v
 
 # ---- Run Tracker ----
 
@@ -48,8 +61,9 @@ xys = xy0 + np.vstack([xy for xy in
     itertools.product(range(-300, 400, 100), range(-300, 400, 100))])
 time_unit = datetime.timedelta(days=1).total_seconds()
 tracker = glimpse.Tracker(
-    observers=observers, dem=dem,
+    observers=observers, dem=dem, viewshed=viewshed,
     time_unit=time_unit, resample_method='systematic')
+
 def run_tracker(xy):
     tracker.initialize_particles(
         n=5000, xy=xy, xy_sigma=(2, 2),

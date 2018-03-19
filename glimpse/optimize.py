@@ -1429,7 +1429,7 @@ def test_cameras(model):
             for ctrl_cams, directions in zip(control_cams, is_directions_control)]
     # Error: Not all cameras appear in controls
     control_cams_flat = [cam for cams in control_cams for cam in cams]
-    if (set(model.cams) & set(control_cams_flat)) < len(model.cams):
+    if len(set(model.cams) & set(control_cams_flat)) < len(model.cams):
         raise ValueErrors("Not all cameras appear in controls")
     # Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
     if 'xyz' in model.group_params and any(is_directions_control):

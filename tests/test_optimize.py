@@ -20,7 +20,10 @@ def test_ransac_camera_viewdir(tol=0.1):
     imgB.cam.viewdir = viewdir
     imgB.I = imgA.project(imgB.cam)
     # Match features
-    matches = glimpse.optimize.sift_matches((imgA, imgB), ratio=0.8)
+    keypoints = [glimpse.optimize.detect_keypoints(img.read())
+        for img in (imgA, imgB)]
+    uvA, uvB = glimpse.optimize.match_keypoints(keypoints[0], keypoints[1])
+    matches = glimpse.optimize.Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
     model = glimpse.optimize.Cameras(cams=imgB.cam,
         controls=matches, cam_params=dict(viewdir=True))
     values = model.fit()

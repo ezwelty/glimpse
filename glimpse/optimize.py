@@ -1346,34 +1346,6 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
         uvB = uvB[is_valid]
     return uvA, uvB
 
-def build_matches(img, imgs, masks=None, keypoint_params=dict(), match_params=dict()):
-    """
-    Return `Matches` constructed from keypoints matched between sequential images.
-
-    Arguments:
-        images (list): Image objects.
-            Matches are computed between each sequential pair.
-        masks (list or array): Regions in which to detect features (uint8) -
-            either in all images (if array) or in each image (if list)
-        keypoint_params (dict): Additional arguments passed to `detect_keypoint()`
-        match_params (dict): Additional arguments passed to `match_keypoint()`
-
-    Returns:
-        list: Matches objects
-    """
-    if masks is None or isinstance(masks, np.ndarray):
-        masks = (masks, ) * len(images)
-    # Detect keypoints
-    keypoints = list()
-    for img, mask in zip(images, masks):
-        keypoints.append(detect_keypoints(img, mask=mask, **keypoint_params))
-    # Match keypoints
-    controls = list()
-    for i in range(len(images) - 1):
-        uvA, uvB = match_keypoints(keypoints[i], keypoints[i + 1], **match_params)
-        controls.append(Matches(cams=(images[i].cam, images[i + 1].cam), uvs=(uvA, uvB)))
-    return controls
-
 # ---- Helpers ----
 
 def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):

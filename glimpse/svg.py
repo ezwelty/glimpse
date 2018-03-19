@@ -1,4 +1,4 @@
-from .imports import (np, lxml, re)
+from .imports import (np, lxml, re, warnings)
 
 # ---- Parse SVG file ----
 

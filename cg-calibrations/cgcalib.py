@@ -156,8 +156,16 @@ def load_image(image):
     image_path = os.path.join(DIR, "images", basename + ".json")
     return glimpse.helpers.read_json(image_path)
 
-def camera_motion_matches(camera, root=".", size=1, force_size=False, method="sift",
-    station_calib=False, camera_calib=False, **kwargs):
+def build_sequential_matches(images, detect=dict(), match=dict()):
+    keypoints = [glimpse.optimize.detect_keypoints(img.read(), **detect) for img in images]
+    matches = list()
+    for i in range(len(images) - 1):
+        uvA, uvB = glimpse.optimize.match_keypoints(keypoints[i], keypoints[i + 1], **match)
+        matches.append(glimpse.optimize.Matches(cams=(images[i].cam, images[i + 1].cam), uvs=(uvA, uvB)))
+    return matches
+
+def camera_motion_matches(camera, root=".", size=1, force_size=False,
+    station_calib=False, camera_calib=False, detect=dict(), match=dict()):
     motion = glimpse.helpers.read_json(os.path.join(DIR, "motion.json"))
     sequences = [item['paths'] for item in motion
         if parse_image_path(item['paths'][0])['camera'] == camera]
@@ -172,10 +180,7 @@ def camera_motion_matches(camera, root=".", size=1, force_size=False, method="si
             for path in paths])
         for img in images[idx]:
             img.cam.resize(size, force=force_size)
-        if method == "sift":
-            matches.extend(glimpse.optimize.sift_matches(images[idx], **kwargs))
-        elif method == "surf":
-            matches.extend(glimpse.optimize.surf_matches(images[idx], **kwargs))
+        matches.extend(build_sequential_matches(images[idx], detect=detect, match=match))
         cam_params.extend([dict()] + [dict(viewdir=True)] * (len(sequence) - 1))
     return images, matches, cam_params
 

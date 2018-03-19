@@ -402,13 +402,13 @@ def geojson_iterfeatures(obj):
         yield features[i]
 
 def _get_geojson_coords(feature):
-    if feature.has_key('geometry'):
+    if 'geometry' in feature:
         return feature['geometry']['coordinates']
     else:
         return feature['coordinates']
 
 def _set_geojson_coords(feature, coords):
-    if feature.has_key('geometry'):
+    if 'geometry' in feature:
         feature['geometry']['coordinates'] = coords
     else:
         feature['coordinates'] = coords

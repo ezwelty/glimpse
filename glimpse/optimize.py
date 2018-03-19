@@ -1418,7 +1418,7 @@ def test_cameras(model):
     if not model.controls:
         raise ValueError("No controls reference the cameras")
     # Error: 'f' or 'c' in `group_params` but image sizes not equal
-    if model.group_params.has_key('f') or model.group_params.has_key('c'):
+    if 'f' in model.group_params or 'c' in model.group_params:
         sizes = np.unique([cam.imgsz for cam in model.cams], axis=0)
         if len(sizes) > 1:
             raise ValueError("'f' or 'c' in `group_params` but image sizes not equal: " +

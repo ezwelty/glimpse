@@ -812,12 +812,14 @@ class Camera(object):
                 dxyz[:, 2] += helpers.elevation_corrections(
                     squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1), **correction)
         # Convert coordinates to ray directions
-        xyz_c = np.matmul(self.R, dxyz.T).T
-        # Set points behind camera to NaN
-        behind = xyz_c[:, 2] <= 0
-        xyz_c[behind, 2] = np.nan
+        xyz_c = np.dot(dxyz, self.R.T)
+        # FIXME: Matmul faster but silently breaks usage in sharedmem pool
+        # xyz_c = np.matmul(self.R, dxyz.T).T
         # Normalize by perspective division
         xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
+        # Set points behind camera to NaN
+        behind = xyz_c[:, 2] <= 0
+        xy[behind, :] = np.nan
         return xy
 
     def _camera2world(self, xy):
@@ -828,7 +830,9 @@ class Camera(object):
             xy (array): Camera coordinates (Nx2)
         """
         # Multiply 2-d coordinates
-        xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
+        xyz = np.dot(xy, self.R[0:2, :])
+        # FIXME: Matmul faster but silently breaks usage in sharedmem pool
+        # xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
         # Simulate z = 1 by adding 3rd column of rotation matrix
         xyz += self.R.T[:, 2]
         return xyz

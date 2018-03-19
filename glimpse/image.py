@@ -262,7 +262,7 @@ class Camera(object):
             make_model = make.strip() + " " + model.strip()
         else:
             make_model = ""
-        if sensor_sizes.has_key(make_model):
+        if make_model in sensor_sizes:
             return sensor_sizes[make_model]
         else:
             raise KeyError("No sensor size found for: " + make_model)
@@ -965,7 +965,7 @@ class Exif(object):
         code = getattr(getattr(piexif, group + 'IFD'), tag)
         if group is 'Image':
             group = '0th'
-        if not self.tags.has_key(group) or not self.tags[group].has_key(code):
+        if not group in self.tags or not code in self.tags[group]:
             return None
         else:
             return self.tags[group][code]
@@ -982,7 +982,7 @@ class Exif(object):
         code = getattr(getattr(piexif, group + 'IFD'), tag)
         if group is 'Image':
             group = '0th'
-        if not self.tags.has_key(group):
+        if not group in self.tags:
             self.tags[group] = {}
         self.tags[group][code] = value
 
@@ -1044,13 +1044,13 @@ class Image(object):
                 cam = copy.deepcopy(cam)
             elif cam is None:
                 cam = dict()
-            if not cam.has_key('vector'):
-                if not cam.has_key('imgsz'):
+            if not 'vector' in cam:
+                if not 'imgsz' in cam:
                     cam['imgsz'] = self.exif.size
-                if not cam.has_key('f'):
-                    if not cam.has_key('fmm'):
+                if not 'f' in cam:
+                    if not 'fmm' in cam:
                         cam['fmm'] = self.exif.fmm
-                    if not cam.has_key('sensorsz'):
+                    if not 'sensorsz' in cam:
                         cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
             self.cam = Camera(**cam)
         self.I = None

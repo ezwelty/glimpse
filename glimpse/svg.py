@@ -89,7 +89,7 @@ def _parse_nodes(nodes, scale=None):
     for i in range(len(nodes)):
         tag = tags[i]
         # Use @id, tag-<counter>, or tag
-        if nodes[i].attrib.has_key('id'):
+        if 'id' in nodes[i].attrib:
             id = nodes[i].attrib['id']
         elif tags.count(tag) > 1:
             id = tag + "-" + str(i)

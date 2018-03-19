@@ -929,9 +929,11 @@ class Cameras(object):
                     kwargs['jac_sparsity'] = self.sparsity
                 else:
                     if isinstance(index, slice):
-                        index = np.arange(self.data_size())[index]
-                    index = np.dstack((2 * index, 2 * index + 1)).ravel()
-                    kwargs['jac_sparsity'] = self.sparsity[index]
+                        jac_index = np.arange(self.data_size())[index]
+                    else:
+                        jac_index = index
+                    jac_index = np.dstack((2 * jac_index, 2 * jac_index + 1)).ravel()
+                    kwargs['jac_sparsity'] = self.sparsity[jac_index]
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
             sys.stdout.write("\r" + str(err))

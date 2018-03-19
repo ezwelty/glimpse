@@ -210,11 +210,28 @@ class Observer(object):
         matplotlib.pyplot.xlim(box[0::2])
         matplotlib.pyplot.ylim(box[1::2])
 
-    def clear_cache(self):
+    def cache_images(self, index=None):
         """
-        Clear cached image data from all images.
+        Cache image data.
+
+        Arguments:
+            index (iterable or slice): Index of images, or all if `None`
         """
-        for img in self.images:
+        if index is None:
+            index = slice(None)
+        for img in np.array(self.images)[index]:
+            img.read(cache=True)
+
+    def clear_images(self, index=None):
+        """
+        Clear cached image data.
+
+        Arguments:
+            index (iterable or slice): Index of images, or all if `None`
+        """
+        if index is None:
+            index = slice(None)
+        for img in np.array(self.images)[index]:
             img.I = None
 
     def animate(self, uv, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):

@@ -9,9 +9,6 @@ def track(tracker, xy, n, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0),
     Requires image.SHAREDMEM_COMPATIBLE to be True (for Ethan), which disables
     use of numpy.matmul in Camera._world2camera().
     """
-    SHAREDMEM_COMPATIBLE = image.SHAREDMEM_COMPATIBLE
-    if not SHAREDMEM_COMPATIBLE:
-        image.SHAREDMEM_COMPATIBLE = True
     for obs in tracker.observers:
         obs.cache_images()
     def process(xyi):
@@ -22,10 +19,7 @@ def track(tracker, xy, n, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0),
             axy=axy, axy_sigma=axy_sigma)
         return np.vstack(tracker.means), np.dstack(tracker.covariances)
     with sharedmem.MapReduce() as pool:
-        results = pool.map(process, xy)
-    if not SHAREDMEM_COMPATIBLE:
-        image.SHAREDMEM_COMPATIBLE = False
-    return results
+        return pool.map(process, xy)
 
 def detect_keypoints(arrays, masks=None, paths=None, method='sift', root=True,
     **params):

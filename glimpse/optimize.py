@@ -1528,7 +1528,7 @@ def camera_bounds(cam):
         [-p, p], [-p, p]
     ], dtype=float)
 
-def parse_params(params=None):
+def parse_params(params=None, default_bounds=None):
     """
     Return a mask of selected camera parameters and associated bounds.
 
@@ -1540,22 +1540,25 @@ def parse_params(params=None):
             - {'viewdir': [0, 1]} : First and second `viewdir` elements
 
             Bounds can be specified inside a tuple (indices, min, max).
-            Singletons are expanded as needed, and `None` can be used to
-            indicate no bound. The following are equivalent:
+            Singletons are expanded as needed, and `np.inf` with the
+            appropriate sign can be used to indicate no bound:
 
-            - {'viewdir': ([0, 1], None, 180)}
-            - {'viewdir': ([0, 1], None, [180, 180])}
-            - {'viewdir': ([0, 1], [None, None], [180, 180])}
+            - {'viewdir': ([0, 1], -np.inf, 180)}
+            - {'viewdir': ([0, 1], -np.inf, [180, 180])}
+
+            `None` or `np.nan` may also be used. These are replaced by the
+            values in `default_bounds` (for example, from `camera_bounds()`),
+            or (-)`np.inf` if `None`.
 
     Returns:
-        array: Parameter boolean mask (20,)
+        array: Parameter boolean mask (20, )
         array: Parameter min and max bounds (20, 2)
     """
     if params is None:
         params = dict()
-    attributes = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
-    indices = [0, 3, 6, 8, 10, 12, 18, 20]
-    mask = np.full(20, False)
+    attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
+    indices = (0, 3, 6, 8, 10, 12, 18, 20)
+    mask = np.zeros(20, dtype=bool)
     bounds = np.full((20, 2), np.nan)
     for key, value in params.items():
         if key in attributes:
@@ -1578,6 +1581,15 @@ def parse_params(params=None):
                 if len(max_bounds) == 1:
                     max_bounds = np.repeat(max_bounds, len(positions))
                 bounds[positions] = np.column_stack((min_bounds, max_bounds))
+    if default_bounds:
+        missing_min = (bounds[:, 0] == None) | (np.isnan(bounds[:, 0]))
+        missing_max = (bounds[:, 1] == None) | (np.isnan(bounds[:, 1]))
+        bounds[missing_min, 0] = default_bounds[missing_min, 0]
+        bounds[missing_max, 1] = default_bounds[missing_max, 1]
+    missing_min = (bounds[:, 0] == None) | (np.isnan(bounds[:, 0]))
+    missing_max = (bounds[:, 1] == None) | (np.isnan(bounds[:, 1]))
+    bounds[missing_min, 0] = -np.inf
+    bounds[missing_max, 1] = np.inf
     return mask, bounds
 
 def build_lmfit_params(cams, cam_params=None, group_params=None):

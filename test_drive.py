@@ -57,26 +57,18 @@ for v in viewsheds:
 # ---- Run Tracker ----
 
 xy0 = np.array((4.988e5, 6.78186e6))
-xys = xy0 + np.vstack([xy for xy in
+xy = xy0 + np.vstack([xy for xy in
     itertools.product(range(-300, 400, 100), range(-300, 400, 100))])
 time_unit = datetime.timedelta(days=1).total_seconds()
 tracker = glimpse.Tracker(
     observers=observers, dem=dem, viewshed=viewshed,
     time_unit=time_unit, resample_method='systematic')
-
-def run_tracker(xy):
-    tracker.initialize_particles(
-        n=5000, xy=xy, xy_sigma=(2, 2),
-        vxy=(0, 0), vxy_sigma=(10, 10))
-    tracker.track(datetimes=None, maxdt=0, tile_size=(15,15),
-        axy=(0, 0), axy_sigma=(2, 2))
-    return np.vstack(tracker.means)
-
-with sharedmem.MapReduce() as pool:
-    results = pool.map(run_tracker, xys)
+results = glimpse.parallel.track(tracker, xy,
+    n=5000, xy_sigma=(2, 2), vxy=(0, 0), vxy_sigma=(10, 10),
+    datetimes=None, maxdt=0, tile_size=(15, 15), axy=(0, 0), axy_sigma=(0, 0))
 
 # ---- Plot track ----
 
-for means in results:
+for means, covariances in results:
     matplotlib.pyplot.plot(means[:, 0], means[:, 1], marker='.', color='red')
     matplotlib.pyplot.plot(means[0, 0], means[0, 1], marker='.', color='green')

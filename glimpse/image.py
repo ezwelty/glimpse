@@ -3,6 +3,8 @@ from .imports import (
     sharedmem, gdal, collections)
 from . import (helpers)
 
+SHAREDMEM_COMPATIBLE = False
+
 class Camera(object):
     """
     A `Camera` converts between 3D world coordinates and 2D image coordinates.
@@ -411,7 +413,7 @@ class Camera(object):
             dxyz = xyz
         else:
             dxyz = xyz - self.xyz
-        z = np.dot(dxyz, self.R.T)[:, 2]
+        z = np.dot(dxyz, self.R.T[:, 2])
         return z > 0
 
     def inframe(self, uv):
@@ -812,7 +814,10 @@ class Camera(object):
                 dxyz[:, 2] += helpers.elevation_corrections(
                     squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1), **correction)
         # Convert coordinates to ray directions
-        xyz_c = np.matmul(self.R, dxyz.T).T
+        if SHAREDMEM_COMPATIBLE:
+            xyz_c = np.dot(dxyz, self.R.T)
+        else:
+            xyz_c = np.matmul(self.R, dxyz.T).T
         # Normalize by perspective division
         xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
         # Set points behind camera to NaN
@@ -828,7 +833,10 @@ class Camera(object):
             xy (array): Camera coordinates (Nx2)
         """
         # Multiply 2-d coordinates
-        xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
+        if SHAREDMEM_COMPATIBLE:
+            xyz = np.dot(xy, self.R[0:2, :])
+        else:
+            xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
         # Simulate z = 1 by adding 3rd column of rotation matrix
         xyz += self.R.T[:, 2]
         return xyz

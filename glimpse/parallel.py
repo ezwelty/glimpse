@@ -5,9 +5,6 @@ def track(tracker, xy, n, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0),
     datetimes=None, maxdt=0, tile_size=(15, 15), axy=(0, 0), axy_sigma=(0, 0)):
     """
     Run Tracker.track() in parallel for multiple initial particle states.
-
-    Requires image.SHAREDMEM_COMPATIBLE to be True (for Ethan), which disables
-    use of numpy.matmul in Camera._world2camera().
     """
     for obs in tracker.observers:
         obs.cache_images()
@@ -25,9 +22,6 @@ def detect_keypoints(arrays, masks=None, paths=None, method='sift', root=True,
     **params):
     """
     Detect keypoints and descriptors in parallel for multiple image arrays.
-
-    Does not currently work (for Ethan) for unknown reasons related to
-    cv2.SIFT(SURF).detectAndCompute() clashing with glimpse in parallel.
     """
     if masks is np.ndarray or masks is None:
         masks = (masks, ) * len(arrays)

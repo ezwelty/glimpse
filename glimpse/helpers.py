@@ -491,7 +491,7 @@ def elevate_geojson(obj, elevation):
     def set_from_elevation(coords, elevation):
         if isinstance(elevation, (int, float)):
             return set_z(coords, elevation)
-        elif isinstance(elevation, dem.DEM):
+        else:
             return set_z(coords, elevation.sample(coords[:, 0:2]))
     if isinstance(elevation, str):
         for feature in geojson_iterfeatures(obj):

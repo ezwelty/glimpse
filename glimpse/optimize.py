@@ -806,7 +806,9 @@ class Cameras(object):
         ctrl_ends = np.cumsum([0] + m_control)
         cam_ends = np.cumsum([0] + n_cams) + n_group
         for i, control in enumerate(self.controls):
-            ctrl_cams = getattr(control, 'cam', getattr(control, 'cams'))
+            ctrl_cams = getattr(control, 'cam', None)
+            if ctrl_cams is None:
+                ctrl_cams = getattr(control, 'cams')
             if not isinstance(ctrl_cams, (tuple, list)):
                 ctrl_cams = (ctrl_cams, )
             for cam in ctrl_cams:

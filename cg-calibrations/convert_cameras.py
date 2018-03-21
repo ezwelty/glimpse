@@ -1,8 +1,6 @@
-import sys
-sys.path.insert(0, '..')
-import glimpse
+import cg
+from cg import (glimpse)
 from glimpse.imports import (re)
-import cgcalib
 
 def parse_matlab_calibration(path):
     with open(path, mode='r') as fp:
@@ -26,30 +24,30 @@ def parse_matlab_calibration(path):
 
 def import_matlab_calibration(path, camera, suffix='-calib'):
     calib = parse_matlab_calibration(path)
-    imgsz = [calib['nx'], calib['ny']]
-    sensorsz = cgcalib.load_calibration(camera=camera)['sensorsz']
+    imgsz = (calib['nx'], calib['ny'])
+    sensorsz = cg.load_calibration(camera=camera)['sensorsz']
     # mean values
     cam = glimpse.Camera.from_matlab(
         imgsz=imgsz, sensorsz=sensorsz,
         fc=calib['fc'], cc=calib['cc'], kc=calib['kc'])
     cam.write(
-        path="cameras/" + camera + suffix + ".json",
-        attributes=["fmm", "cmm", "k", "p", "sensorsz"])
+        path=os.path.join('cameras', camera + suffix + '.json'),
+        attributes=('fmm', 'cmm', 'k', 'p', 'sensorsz'))
     # standard errors
     cam = glimpse.Camera.from_matlab(
         imgsz=imgsz, sensorsz=sensorsz,
         fc=calib['fc_error'], cc=calib['cc_error'], kc=calib['kc_error'])
-    cam.vector /= 3 # "errors are approximately three times the standard deviations"
+    cam.vector /= 3 # 'errors are approximately three times the standard deviations'
     cam.write(
-        path="cameras/" + camera + suffix + "_stderr.json",
-        attributes=["fmm", "cmm", "k", "p"])
+        path=os.path.join('cameras', camera + suffix + '_stderr.json'),
+        attributes=('fmm', 'cmm', 'k', 'p'))
 
 # ---- #
 
 CAMERA = 'nikon-e8700'
-CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/results/matlab-cct/Calib_Results.m'
-calib = import_matlab_calibration(CALIB_PATH, CAMERA)
+CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/matlab-cct/Calib_Results.m'
+import_matlab_calibration(CALIB_PATH, CAMERA)
 
 CAMERA = 'canon-40d-01'
-CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/results/matlab-cct/Calib_Results.m'
-calib = import_matlab_calibration(CALIB_PATH, CAMERA)
+CALIB_PATH = '/volumes/science-b/projects/timeseries/calibrations/cg/' + CAMERA + '/matlab-cct/Calib_Results.m'
+import_matlab_calibration(CALIB_PATH, CAMERA)

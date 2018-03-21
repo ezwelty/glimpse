@@ -1,13 +1,10 @@
-import sys
-sys.path.insert(0, '..')
-import glimpse
+import cg
+from cg import (glimpse, glob)
 from glimpse.imports import (os, re, np)
-import glob
-import cgcalib
+cg.IMAGE_PATH = '/volumes/science-b/data/columbia/timelapse'
 
-IMG_DIR = "/volumes/science-b/data/columbia/timelapse"
 IMG_SIZE = 1
-SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
+SVG_KEYS = ('gcp', 'horizon', 'coast', 'terminus', 'moraines')
 
 # ---- Calibrate station ---- #
 
@@ -37,14 +34,14 @@ SVG_KEYS = ['gcp', 'horizon', 'coast', 'terminus', 'moraines']
 STATION = 'AK04'
 
 # Gather svg control
-images, controls, cam_params = cgcalib.station_svg_controls(
-    STATION, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
+images, controls, cam_params = cg.station_svg_controls(
+    STATION, keys=SVG_KEYS, size=IMG_SIZE,
     station_calib=False, camera_calib=True)
 
 # Optional second station
 images2, controls2, cam_params2 = [], [], []
-# images2, controls2, cam_params2 = cgcalib.station_svg_controls(
-#     STATION2, root=IMG_DIR, keys=SVG_KEYS, size=IMG_SIZE,
+# images2, controls2, cam_params2 = cg.station_svg_controls(
+#     STATION2, keys=SVG_KEYS, size=IMG_SIZE,
 #     station_calib=False, camera_calib=True)
 
 # Calibrate station
@@ -53,9 +50,8 @@ station_model = glimpse.optimize.Cameras(
     controls=controls + controls2,
     cam_params=cam_params + cam_params2,
     group_params=dict(xyz=True))
-station_fit = station_model.fit(group_params=[dict()], full=True)
+station_fit = station_model.fit(group_params=(dict(), ), full=True)
 print np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.cams[0].xyz
-# station_model.set_cameras(station_fit.params)
 
 # ---- Verify with image plot ---- #
 
@@ -76,14 +72,14 @@ viewdir_keys = station_fit.params.keys()[3:(len(images) + 1) * 3]
 cam.xyz = [station_fit.params[key].value for key in xyz_keys]
 viewdir = [station_fit.params[key].value for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION + SUFFIX + ".json",
-    attributes=['xyz', 'viewdir'])
+cam.write(path=os.path.join('stations', STATION + SUFFIX + '.json'),
+    attributes=('xyz', 'viewdir'))
 # (standard errors)
 cam.xyz = [station_fit.params[key].stderr for key in xyz_keys]
 viewdir = [station_fit.params[key].stderr for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION + SUFFIX + "_stderr.json",
-    attributes=['xyz', 'viewdir'])
+cam.write(path=os.path.join('stations', STATION + SUFFIX + '_stderr.json',
+    attributes=('xyz', 'viewdir'))
 
 # Optional second station
 
@@ -92,11 +88,11 @@ viewdir_keys = station_fit.params.keys()[(len(images) + 1) * 3:]
 cam.xyz = [station_fit.params[key].value for key in xyz_keys]
 viewdir = [station_fit.params[key].value for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION2 + SUFFIX + ".json",
-    attributes=['xyz', 'viewdir'])
+cam.write(path=os.path.join('stations', STATION2 + SUFFIX + '.json'),
+    attributes=('xyz', 'viewdir'))
 # (standard errors)
 cam.xyz = [station_fit.params[key].stderr for key in xyz_keys]
 viewdir = [station_fit.params[key].stderr for key in viewdir_keys]
 cam.viewdir = [np.mean(viewdir[0::3]), np.mean(viewdir[1::3]), np.mean(viewdir[2::3])]
-cam.write(path="stations/" + STATION2 + SUFFIX + "_stderr.json",
-    attributes=['xyz', 'viewdir'])
+cam.write(path=os.path.join('stations', STATION2 + SUFFIX + '_stderr.json',
+    attributes=('xyz', 'viewdir'))

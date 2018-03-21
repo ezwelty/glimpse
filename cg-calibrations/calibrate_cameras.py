@@ -1,19 +1,16 @@
-import sys
-sys.path.insert(0, '..')
-import glimpse
+import cg
+from cg import (glimpse, glob)
 from glimpse.imports import (os, re, np, matplotlib)
-import glob
-import cgcalib
+cg.IMAGE_PATH = '/volumes/science-b/data/columbia/timelapse'
 
-IMG_DIR = "/volumes/science-b/data/columbia/timelapse/"
-GROUP_PARAMS = [
+GROUP_PARAMS = (
     dict(),
     dict(f=True),
     dict(f=True, k=[0]),
     dict(f=True, k=[0, 1]),
     dict(f=True, k=[0, 1], p=True),
-    dict(f=True, k=[0, 1], p=True, c=True)]
-SVG_KEYS = ['moraines', 'gcp', 'horizon', 'coast', 'terminus']
+    dict(f=True, k=[0, 1], p=True, c=True))
+SVG_KEYS = ('moraines', 'gcp', 'horizon', 'coast', 'terminus')
 
 # ---- Calibrate camera ---- #
 
@@ -61,13 +58,13 @@ CAMERA = 'nikon-d200-04-35' # AK04
 IMG_SIZE = 1
 
 # Gather motion control
-motion_images, motion_controls, motion_cam_params = cgcalib.camera_motion_matches(
-    CAMERA, root=IMG_DIR, size=IMG_SIZE, force_size=True, ratio=0.2,
-    station_calib=False, camera_calib=False)
+motion_images, motion_controls, motion_cam_params = cg.camera_motion_matches(
+    CAMERA, size=IMG_SIZE, force_size=True, station_calib=False, camera_calib=False,
+    match=dict(max_ratio=0.2))
 
 # Gather svg control
-svg_images, svg_controls, svg_cam_params = cgcalib.camera_svg_controls(
-    CAMERA, root=IMG_DIR, size=IMG_SIZE, force_size=True, fixed=True, keys=SVG_KEYS,
+svg_images, svg_controls, svg_cam_params = cg.camera_svg_controls(
+    CAMERA, size=IMG_SIZE, force_size=True, keys=SVG_KEYS,
     correction=True, station_calib=False, camera_calib=False)
 
 # Calibrate camera
@@ -79,11 +76,9 @@ camera_model = glimpse.optimize.Cameras(
     group_params=GROUP_PARAMS[-1])
 # Fit parameters to model
 camera_fit = camera_model.fit(group_params=GROUP_PARAMS[:-1], full=True)
-print np.array(camera_fit.params.valuesdict().values()[0:3]) - svg_images[0].cam.xyz
-# camera_model.set_cameras(camera_fit.params)
 
 # Mean error for SVG images
-svg_size = np.sum([control.size() for control in svg_controls])
+svg_size = np.sum([control.size for control in svg_controls])
 camera_model.errors(camera_fit.params)[-svg_size:].mean()
 
 # ---- Verify with image plot (motion) ---- #
@@ -106,37 +101,32 @@ svg_images[i].set_plot_limits()
 
 # ---- Verify with ortho projection (svg) ---- #
 
-DEM_DIR = "/volumes/science-b/data/columbia/dem/"
-ORTHO_DIR = "/volumes/science-b/data/columbia/ortho/"
+DEM_DIR = '/volumes/science-b/data/columbia/dem'
+ORTHO_DIR = '/volumes/science-b/data/columbia/ortho'
 DEM_GRID_SIZE = 5
 IMG_SIZE2 = 0.5 # relative to above
 
-i = 1
-date = re.findall("_([0-9]{8})_", svg_images[i].path)[0]
-dem_path = glob.glob(DEM_DIR + date + "*.tif")[-1]
-ortho_path = glob.glob(ORTHO_DIR + date + "*.tif")[-1]
+i = 0
+ids = cg.parse_image_path(svg_images[i].path)
+dem_path = glob.glob(os.path.join(DEM_DIR, ids['date_str'] + '*.tif'))[-1]
+ortho_path = glob.glob(os.path.join(ORTHO_DIR, ids['date_str'] + '*.tif'))[-1]
 # Apply fitted params
 camera_model.set_cameras(camera_fit.params)
 svg_images[i].cam.resize(IMG_SIZE2)
 # Prepare dem
-dem = glimpse.DEM.read(dem_path)
-smdem = dem.copy()
-smdem.resize(smdem.d[0] / DEM_GRID_SIZE)
-smdem.crop(zlim=[1, np.inf])
-mask = smdem.visible(svg_images[i].cam.xyz) & ~np.isnan(smortho.Z)
+dem = glimpse.DEM.read(dem_path, d=DEM_GRID_SIZE)
+dem.crop(zlim=(1, np.inf))
 # Prepare ortho
-ortho = glimpse.DEM.read(ortho_path)
-smortho = ortho.copy()
-smortho.resize(smortho.d[0] / DEM_GRID_SIZE)
-smortho.resample(smdem, method="linear")
-# Save original
-basename = os.path.splitext(os.path.basename(svg_images[i].path))[0]
-svg_images[i].write(basename + "-original.jpg", I=svg_images[i].read())
+ortho = glimpse.DEM.read(ortho_path, d=DEM_GRID_SIZE)
+ortho.resample(dem, method='linear')
+mask = dem.viewshed(svg_images[i].cam.xyz) & ~np.isnan(ortho.Z)
+# Save original (resized)
+svg_images[i].write(ids['basename'] + '-original.jpg', I=svg_images[i].read())
 # Save ortho projection
-I = cgcalib.dem_to_image(svg_images[i].cam, smdem, smortho.Z, mask=mask)
+I = cg.project_dem(svg_images[i].cam, dem, ortho.Z, mask=mask)
 I[np.isnan(I)] = np.nanmax(I) / 2 # fill holes with grey
 I = (255 * (I / I.max() - I.min() / I.max()))
-svg_images[i].write(basename + "-distorted.jpg", I.astype(np.uint8))
+svg_images[i].write(ids['basename'] + '-distorted.jpg', I.astype(np.uint8))
 # Reset cameras
 camera_model.reset_cameras()
 
@@ -149,21 +139,21 @@ cam = (motion_images + svg_images)[0].cam.copy()
 keys = camera_fit.params.keys()[:camera_model.group_mask.sum()]
 # (mean values)
 cam.vector[camera_model.group_mask] = [camera_fit.params[key].value for key in keys]
-cam.write(path="cameras/" + CAMERA + SUFFIX + ".json",
-    attributes=['fmm', 'cmm', 'k', 'p', 'sensorsz'])
+cam.write(path='cameras/' + CAMERA + SUFFIX + '.json',
+    attributes=('fmm', 'cmm', 'k', 'p', 'sensorsz'))
 # (standard errors)
 cam.vector[camera_model.group_mask] = [camera_fit.params[key].stderr for key in keys]
-cam.write(path="cameras/" + CAMERA + SUFFIX + "_stderr.json",
-    attributes=['fmm', 'cmm', 'k', 'p'])
+cam.write(path='cameras/' + CAMERA + SUFFIX + '_stderr.json',
+    attributes=('fmm', 'cmm', 'k', 'p'))
 
 # ---- Check single image (svg) ---- #
 
-svg_path = "svg/AKST03B_20100602_224800.svg"
-img_path = cgcalib.find_image(svg_path, IMG_DIR)
-ids = cgcalib.parse_image_path(img_path)
-eop = cgcalib.station_eop(ids['station'])
-img = glimpse.Image(img_path, cam=dict(xyz=eop['xyz'], viewdir=eop['viewdir']))
-controls = cgcalib.svg_controls(img, svg_path, keys=SVG_KEYS)
+svg_path = 'svg/AKST03B_20100602_224800.svg'
+img_path = cg.find_image(svg_path)
+ids = cg.parse_image_path(img_path)
+eop = cg.load_station_estimate(ids['station'])
+img = glimpse.Image(img_path, cam=eop)
+controls = cg.svg_controls(img, svg_path, keys=SVG_KEYS)
 svg_model = glimpse.optimize.Cameras(img.cam, controls,
     cam_params=dict(viewdir=True), group_params=GROUP_PARAMS[-1])
 svg_fit = svg_model.fit(full=True, group_params=GROUP_PARAMS[:-1])
@@ -174,9 +164,9 @@ img.set_plot_limits()
 # ---- Check undistorted image ---- #
 
 img = glimpse.Image(
-    cgcalib.find_image("AKJNC_20120508_191103C", root=IMG_DIR),
-    cam="cameras/canon-40d-01b.json")
+    cg.find_image('AKJNC_20120508_191103C'),
+    cam='cameras/canon-40d-01.json')
 ideal_cam = img.cam.copy()
 ideal_cam.idealize()
 I = img.project(ideal_cam)
-img.write(path="test.jpg", I=I)
+img.write(path='test.jpg', I=I)

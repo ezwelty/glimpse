@@ -44,7 +44,7 @@ class Grid(object):
     @property
     def X(self):
         if self._X is None:
-            self._X = np.tile(self.x, [self.n[1], 1])
+            self._X = np.tile(self.x, (self.n[1], 1))
         return self._X
 
     @property
@@ -60,7 +60,7 @@ class Grid(object):
     @property
     def Y(self):
         if self._Y is None:
-            self._Y = np.tile(self.y, [self.n[0], 1]).transpose()
+            self._Y = np.tile(self.y, (self.n[0], 1)).T
         return self._Y
 
     @classmethod
@@ -450,7 +450,7 @@ class DEM(Grid):
             return self.Zf(xy, method=method)
 
     def resample(self, dem, method="linear"):
-        xy = np.column_stack((dem.X.flatten(), dem.Y.flatten()))
+        xy = np.column_stack((dem.X.ravel(), dem.Y.ravel()))
         Z = self.sample(xy, method=method)
         self.Z = Z.reshape(dem.Z.shape)
         self.xlim, self._x, self._X = self._parse_x(dem.X)

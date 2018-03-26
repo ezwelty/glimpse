@@ -1119,7 +1119,7 @@ class ObserverCameras(object):
 
         Results are stored in `self.matches` as an (n, n) array of augmented `Matches`,
         and the result for each `Image` pair (i, j) optionally written to a binary `pickle`
-        file with name `basenames[i]_basenames[j].pkl`.
+        file with name `basenames[i]-basenames[j].pkl`.
 
         Arguments:
             max_dt (`datetime.timedelta`): Maximum time seperation between

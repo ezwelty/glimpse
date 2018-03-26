@@ -1,7 +1,7 @@
 import glimpse
 from glimpse.imports import (datetime, np, os, sys, matplotlib)
-sys.path.append('cg-calibrations')
-import cgcalib
+sys.path.insert(0, 'cg')
+import cg
 import glob
 
 # ---- Constants ----
@@ -24,7 +24,7 @@ inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)
 img_paths = [all_img_paths[i] for i in np.where(inrange)[0]]
 basenames = [os.path.splitext(os.path.basename(path))[0]
     for path in img_paths]
-cam_args = cgcalib.load_calibration(image=ANCHOR_BASENAME)
+cam_args = cg.load_calibration(image=ANCHOR_BASENAME)
 images = [glimpse.Image(
     path, cam=cam_args.copy(), anchor=(basename == ANCHOR_BASENAME),
     keypoints_path=os.path.join(KEYPOINT_DIR, basename + '.pkl'))

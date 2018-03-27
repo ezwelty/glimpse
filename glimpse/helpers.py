@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
-    np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
+    np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
     sklearn, cv2, copyreg, os, re)
 
 # ---- General ---- #
@@ -100,7 +100,7 @@ def numpy_dtype_minmax(obj):
 
 # ---- Pickles ---- #
 
-def write_pickle(obj, path, gz=False, binary=True, protocol=cPickle.HIGHEST_PROTOCOL):
+def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):
     """
     Write object to pickle file.
     """
@@ -110,7 +110,7 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=cPickle.HIGHEST_PROT
         fp = gzip.open(path, mode=mode)
     else:
         fp = open(path, mode=mode)
-    cPickle.dump(obj, file=fp, protocol=protocol)
+    pickle.dump(obj, file=fp, protocol=protocol)
     fp.close()
 
 def read_pickle(path, gz=False, binary=True):
@@ -122,7 +122,7 @@ def read_pickle(path, gz=False, binary=True):
         fp = gzip.open(path, mode=mode)
     else:
         fp = open(path, mode=mode)
-    obj = cPickle.load(fp)
+    obj = pickle.load(fp)
     fp.close()
     return obj
 

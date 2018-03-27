@@ -1,7 +1,11 @@
 import collections
 import copy
 import copyreg
-import cPickle
+try:
+    # Python 2
+    import cPickle as pickle
+except ImportError:
+    import pickle
 import cv2
 import datetime
 import gdal

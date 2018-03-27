@@ -18,7 +18,7 @@ for path in paths:
     glimpse.helpers.elevate_geojson(geo, elevation=dem)
     for coords in glimpse.helpers.geojson_itercoords(geo):
         if any(np.isnan(coords[:, 2])):
-            print 'Missing elevations in ' + path
+            print('Missing elevations in ' + path)
     geo2 = glimpse.helpers.ordered_geojson(geo)
     glimpse.helpers.write_geojson(geo2,
         path=os.path.splitext(path)[0] + '.geojson',
@@ -36,7 +36,7 @@ for key in keys:
     coords = geo['features'][key]['geometry']['coordinates']
     coords[:, 2] = dem.sample(coords[:, 0:2])
     if any(np.isnan(coords[:, 2])):
-        print 'Missing elevation for ' + key
+        print('Missing elevation for ' + key)
 
 # Check for gross errors
 z = np.vstack([geo['features'][key]['geometry']['coordinates'][:, 2] for key in keys])

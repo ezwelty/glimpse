@@ -10,8 +10,8 @@ import backports.functools_lru_cache
 
 # ---- Environment variables ---
 
-print 'cg: Remember to set IMAGE_PATH'
-# print 'cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and/or MATCH_PATH'
+print('cg: Remember to set IMAGE_PATH')
+# print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and/or MATCH_PATH')
 IMAGE_PATH = None
 # KEYPOINT_PATH = None
 # MATCH_PATH = None

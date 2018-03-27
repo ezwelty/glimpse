@@ -51,7 +51,7 @@ station_model = glimpse.optimize.Cameras(
     cam_params=cam_params + cam_params2,
     group_params=dict(xyz=True))
 station_fit = station_model.fit(group_params=(dict(), ), full=True)
-print np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.cams[0].xyz
+print(np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.cams[0].xyz)
 
 # ---- Verify with image plot ---- #
 

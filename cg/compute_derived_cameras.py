@@ -26,14 +26,14 @@ image_dir = data_dir+'images/'
 animation_dir = data_dir+'animation/'
 derived_image_dir = data_dir+'images_json/'
 
-anchor_image = image.Image('./images/'+anchor_image_name+'-original.jpg',cam='./images/'+anchor_image_name+'.json') 
+anchor_image = image.Image('./images/'+anchor_image_name+'-original.jpg',cam='./images/'+anchor_image_name+'.json')
 anchor_image.read()
 
 files = np.sort(os.listdir(image_dir))
 
 if animate:
     plt.ion()
-    uv = anchor_image.cam.project(other_camera_location)[0]   
+    uv = anchor_image.cam.project(other_camera_location)[0]
     fig,ax = plt.subplots()
     im = ax.imshow(anchor_image.I)
     ax.set_xlim(250,350)
@@ -41,8 +41,8 @@ if animate:
     ph, = ax.plot(uv[0],uv[1],'r.')
 
 for filename in files:
-    print filename
-    new_image = image.Image(image_dir+filename,cam='./images/'+anchor_image_name+'.json') 
+    print(filename)
+    new_image = image.Image(image_dir+filename,cam='./images/'+anchor_image_name+'.json')
     new_image.read()
 
     #matches = optimize.corr_matches([anchor_image,new_image],masks=mask,n_points=100,hw=15,sd=25,do_highpass=True)
@@ -63,12 +63,4 @@ for filename in files:
             fig.savefig(animation_dir+filename,dpi=200)
         new_image.cam.write(derived_image_dir+new_image.path[-25:-4]+'.json')
     except ValueError:
-        print "BAD SOLUTION"
-    
-   
-
-
-
-
-
-
+        print("BAD SOLUTION")

@@ -86,7 +86,7 @@ print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
 model.reset_cameras()
 
 # Cameras + RotationMatches
-temp = np.reshape(fit_Cameras.params.valuesdict().values(), (-1, 3))
+temp = np.reshape(list(fit_Cameras.params.valuesdict().values()), (-1, 3))
 viewdirs = np.insert(temp, model.anchors - range(len(model.anchors)), fit.x.reshape(-1, 3)[model.anchors], axis=0)
 model.set_cameras(viewdirs=viewdirs)
 residuals = np.vstack([m.predicted(cam=0) - m.predicted(cam=1) for m in model.matches.ravel() if m])

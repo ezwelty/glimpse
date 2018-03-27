@@ -181,13 +181,13 @@ class Tracker(object):
                 replace=True, p=self.weights)
         if method is None:
             method = self.resample_method
-        if method is 'systematic':
+        if method == 'systematic':
             indexes = systematic()
-        elif method is 'stratified':
+        elif method == 'stratified':
             indexes = stratified()
-        elif method is 'residual':
+        elif method == 'residual':
             indexes = residual()
-        elif method is 'choice':
+        elif method == 'choice':
             indexes = choice()
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]

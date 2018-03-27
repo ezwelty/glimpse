@@ -961,7 +961,7 @@ class Exif(object):
             group (str): Group name ('Exif', 'Image', or 'GPS')
         """
         code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group is 'Image':
+        if group == 'Image':
             group = '0th'
         if group not in self.tags or code not in self.tags[group]:
             return None
@@ -981,7 +981,7 @@ class Exif(object):
             group (str): Group name ('Exif', 'Image', or 'GPS')
         """
         code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group is 'Image':
+        if group == 'Image':
             group = '0th'
         if group not in self.tags:
             self.tags[group] = {}
@@ -1235,11 +1235,11 @@ class Image(object):
         # Project target grid onto source image (flip for RegularGridInterpolator)
         pvu = np.fliplr(self.cam.project(dxyz, directions=True))
         # Construct grid in source image
-        if cam.imgsz[0] is self.cam.imgsz[0]:
+        if cam.imgsz[0] == self.cam.imgsz[0]:
             pu = u
         else:
             pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, int(self.cam.imgsz[0]))
-        if cam.imgsz[1] is self.cam.imgsz[1]:
+        if cam.imgsz[1] == self.cam.imgsz[1]:
             pv = v
         else:
             pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, int(self.cam.imgsz[1]))

@@ -96,7 +96,7 @@ def numpy_dtype_minmax(obj):
     elif issubclass(obj, np.bool):
         return False, True
     else:
-        raise ValueError("Cannot determine min, max for " + str(obj))
+        raise ValueError('Cannot determine min, max for ' + str(obj))
 
 # ---- Pickles ---- #
 
@@ -341,11 +341,11 @@ def sp_transform(points, current, target):
         if isinstance(obj, pyproj.Proj):
             return obj
         elif isinstance(obj, int):
-            return pyproj.Proj(init="epsg:" + str(obj))
+            return pyproj.Proj(init='EPSG:' + str(obj))
         elif isinstance(obj, dict):
             return pyproj.Proj(**obj)
         else:
-            raise ValueError("Cannot coerce input to pyproj.Proj")
+            raise ValueError('Cannot coerce input to pyproj.Proj')
     current = build_proj(current)
     target = build_proj(target)
     if points.shape[1] < 3:
@@ -363,7 +363,7 @@ def read_json(path, **kwargs):
         path (str): Path to file
         **kwargs: Additional arguments passed to `json.load()`
     """
-    with open(path, "r") as fp:
+    with open(path, mode='r') as fp:
         return json.load(fp, **kwargs)
 
 def write_json(obj, path=None, flat_arrays=False, **kwargs):
@@ -388,7 +388,7 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
         txt = re.sub(r'(\[\s*)+[^\]\{]*(\s*\])+', flatten, txt)
     if path:
         make_path_directories(path, is_file=True)
-        with open(path, "w") as fp:
+        with open(path, mode='w') as fp:
             fp.write(txt)
         return None
     else:
@@ -870,7 +870,7 @@ def intersect_ranges(ranges):
     rmin = np.nanmax(ranges[:, 0])
     rmax = np.nanmin(ranges[:, 1])
     if rmax - rmin <= 0:
-        raise ValueError("Ranges do not intersect")
+        raise ValueError('Ranges do not intersect')
     else:
         return np.hstack((rmin, rmax))
 
@@ -883,7 +883,7 @@ def intersect_boxes(boxes):
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
     boxmax = np.nanmin(boxes[:, ndim:], axis=0)
     if any(boxmax - boxmin <= 0):
-        raise ValueError("Boxes do not intersect")
+        raise ValueError('Boxes do not intersect')
     else:
         return np.hstack((boxmin, boxmax))
 

@@ -25,16 +25,16 @@ class Observer(object):
         self.xyz = images[0].cam.xyz
         for img in images[1:]:
             if any(img.cam.xyz != self.xyz):
-                raise ValueError("Positions (xyz) are not equal")
+                raise ValueError('Positions (xyz) are not equal')
             if any(img.cam.f != images[0].cam.f):
-                raise ValueError("Focal lengths (f) are not equal")
+                raise ValueError('Focal lengths (f) are not equal')
             if any(img.cam.imgsz != images[0].cam.imgsz):
-                raise ValueError("Image sizes (imgsz) are not equal")
+                raise ValueError('Image sizes (imgsz) are not equal')
         self.images = images
         self.datetimes = np.array([img.datetime for img in self.images])
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
         if any(time_deltas <= 0):
-            raise ValueError("Image datetimes are not stricly increasing")
+            raise ValueError('Image datetimes are not stricly increasing')
         self.sigma = sigma
         self.correction = correction
         self.cache = cache
@@ -56,7 +56,7 @@ class Observer(object):
             index = np.argmin(time_deltas)
             seconds = time_deltas[index].total_seconds()
             if seconds > max_seconds:
-                raise IndexError("Nearest image out of range by " + str(seconds - max_seconds) + " s")
+                raise IndexError('Nearest image out of range by ' + str(seconds - max_seconds) + ' s')
             return index
         else:
             return self.images.index(value)
@@ -117,7 +117,7 @@ class Observer(object):
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
         if any(np.abs(duv) > 0.5):
-            raise ValueError("Shift larger than 0.5 pixels")
+            raise ValueError('Shift larger than 0.5 pixels')
         # Cell center coordinates (arbitrary origin)
         cu = self.grid.x[0:tile.shape[0]] # x|cols
         cv = self.grid.y[0:tile.shape[1]] # y|rows
@@ -145,7 +145,7 @@ class Observer(object):
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
         if not np.all(helpers.in_box(uv, box)):
-            raise ValueError("Some sampling points are outside box")
+            raise ValueError('Some sampling points are outside box')
         # Cell sizes
         du = (box[2] - box[0]) / tile.shape[1]
         dv = (box[3] - box[1]) / tile.shape[0]

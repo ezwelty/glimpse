@@ -1,6 +1,10 @@
 import collections
 import copy
-import copyreg
+try:
+    import copyreg
+except ImportError:
+    # Python 2
+    import copy_reg as copyreg
 try:
     # Python 2
     import cPickle as pickle

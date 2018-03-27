@@ -391,7 +391,7 @@ class DEM(Grid):
             buf_xsize=buf_xsize, buf_ysize=buf_ysize)
         # FIXME: band.GetNoDataValue() not equal to read values due to rounding
         nan_value = band.GetNoDataValue()
-        if np.issubdtype(Z.dtype, float) and nan_value:
+        if np.issubdtype(Z.dtype, np.floating) and nan_value:
             Z[Z == nan_value] = np.nan
         return cls(Z, x=xlim, y=ylim, datetime=datetime)
 

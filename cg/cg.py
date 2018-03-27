@@ -84,7 +84,7 @@ def gcp_points(img, markup, correction=True):
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'gcp.geojson'), key='id', crs=32606)
     xyz = np.vstack((geo['features'][key]['geometry']['coordinates']
-        for key in markup.iterkeys()))
+        for key in markup))
     return glimpse.optimize.Points(img.cam, uv, xyz, correction=correction)
 
 def coast_lines(img, markup, correction=True):

@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copy_reg, os, re)
+    sklearn, cv2, copyreg, os, re)
 
 # ---- General ---- #
 
@@ -130,7 +130,7 @@ def read_pickle(path, gz=False, binary=True):
 # https://stackoverflow.com/questions/10045363/pickling-cv2-keypoint-causes-picklingerror
 def _pickle_cv2_keypoints(k):
     return cv2.KeyPoint, (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id)
-copy_reg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
+copyreg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
 
 # ---- Arrays: General ---- #
 

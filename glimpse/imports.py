@@ -1,6 +1,6 @@
 import collections
 import copy
-import copy_reg
+import copyreg
 import cPickle
 import cv2
 import datetime

@@ -757,14 +757,14 @@ def bresenham_line(start, end):
     y = y1
     points = []
     if is_steep:
-        for x in xrange(x1, x2 + 1):
+        for x in range(x1, x2 + 1):
             points.append((y, x))
             error -= abs_dy
             if error < 0:
                 y += ystep
                 error += dx
     else:
-        for x in xrange(x1, x2 + 1):
+        for x in range(x1, x2 + 1):
             points.append((x, y))
             error -= abs_dy
             if error < 0:

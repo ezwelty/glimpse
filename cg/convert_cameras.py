@@ -20,7 +20,7 @@ def parse_matlab_calibration(path):
         cc=2, cc_error=2,
         kc=5, kc_error=5,
         nx=1, ny=1)
-    return dict((param, parse_parameter(param, length)) for param, length in lengths.iteritems())
+    return dict((param, parse_parameter(param, length)) for param, length in lengths.items())
 
 def import_matlab_calibration(path, camera, suffix='-calib'):
     calib = parse_matlab_calibration(path)

@@ -117,7 +117,7 @@ def moraines_mlines(img, markup, correction=True):
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'moraines', date_str + '.geojson'), key='id', crs=32606)
     mlines = []
-    for key, moraine in markup.iteritems():
+    for key, moraine in markup.items():
         luv = moraine.values()
         xyz = geo['features'][key]['geometry']['coordinates']
         mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction))

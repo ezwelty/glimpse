@@ -1312,13 +1312,13 @@ def detect_keypoints(I, mask=None, method='sift', root=True, **params):
         try:
             detector = cv2.xfeatures2d.SIFT_create(**params)
         except AttributeError:
-            # Python 2
+            # OpenCV 2
             detector = cv2.SIFT(**params)
     elif method == 'surf':
         try:
             detector = cv2.xfeatures2d.SURF_create(**params)
         except AttributeError:
-            # Python 2
+            # OpenCV 2
             detector = cv2.SURF(**params)
     keypoints, descriptors = detector.detectAndCompute(I, mask=mask)
     # Empty result: ([], None)

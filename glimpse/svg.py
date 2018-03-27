@@ -258,7 +258,7 @@ def parse_path(d):
         elif tag == 'a':
             X.insert(i, data.reshape((-1, 7))[:, 5:7] + X[-1][-1])
         else:
-            print "Unsupported tag encountered: " + tag
+            print("Unsupported tag encountered: " + tag)
     return np.vstack(X)
 
 def parse_circle(cx, cy):

@@ -63,18 +63,18 @@ fit_CamerasXY = model_CamerasXY.fit(ftol=1, full=True)
 
 # ObserverCameras
 residuals = model_Cameras.residuals(params=np.delete(fit.x.reshape(-1, 3), model.anchors, axis=0).ravel())
-print np.mean(np.linalg.norm(residuals, ord=1, axis=1))
-print np.mean(np.linalg.norm(residuals, ord=2, axis=1))
+print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
+print(np.mean(np.linalg.norm(residuals, ord=2, axis=1)))
 
 # Cameras + RotationMatches
 residuals = model_Cameras.residuals(params=fit_Cameras.params)
-print np.mean(np.linalg.norm(residuals, ord=1, axis=1))
-print np.mean(np.linalg.norm(residuals, ord=2, axis=1))
+print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
+print(np.mean(np.linalg.norm(residuals, ord=2, axis=1)))
 
 # Cameras + RotationMatchesXY
 residuals = model_Cameras.residuals(params=fit_CamerasXY.params)
-print np.mean(np.linalg.norm(residuals, ord=1, axis=1))
-print np.mean(np.linalg.norm(residuals, ord=2, axis=1))
+print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
+print(np.mean(np.linalg.norm(residuals, ord=2, axis=1)))
 
 # --- Compare results (XYZ) ----
 
@@ -82,7 +82,7 @@ print np.mean(np.linalg.norm(residuals, ord=2, axis=1))
 viewdirs = fit.x.reshape(-1, 3)
 model.set_cameras(viewdirs=viewdirs)
 residuals = np.vstack([m.predicted(cam=0) - m.predicted(cam=1) for m in model.matches.ravel() if m])
-print np.mean(np.linalg.norm(residuals, ord=1, axis=1))
+print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
 model.reset_cameras()
 
 # Cameras + RotationMatches
@@ -90,7 +90,7 @@ temp = np.reshape(fit_Cameras.params.valuesdict().values(), (-1, 3))
 viewdirs = np.insert(temp, model.anchors - range(len(model.anchors)), fit.x.reshape(-1, 3)[model.anchors], axis=0)
 model.set_cameras(viewdirs=viewdirs)
 residuals = np.vstack([m.predicted(cam=0) - m.predicted(cam=1) for m in model.matches.ravel() if m])
-print np.mean(np.linalg.norm(residuals, ord=1, axis=1))
+print(np.mean(np.linalg.norm(residuals, ord=1, axis=1)))
 model.reset_cameras()
 
 # ---- RANSAC (inspect match pairs) ----

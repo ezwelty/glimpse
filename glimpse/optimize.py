@@ -960,7 +960,7 @@ class Cameras(object):
             self.reset_cameras()
             self.update_params()
         if not result.success:
-            print result.message
+            print(result.message)
         if full:
             return result
         elif result.success:
@@ -1101,7 +1101,7 @@ class ObserverCameras(object):
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks, ) * len(self.observer.images)
         for img, mask in zip(self.observer.images, masks):
-            print img.path
+            print(img.path)
             if overwrite or img.read_keypoints() is None:
                 I = self.read_image(img)
                 img.keypoints = detect_keypoints(I, mask=mask, **params)
@@ -1139,12 +1139,12 @@ class ObserverCameras(object):
                 raise ValueError("Image basenames are not unique")
         for i, imgA in enumerate(self.observer.images[:-1]):
             if i > 0:
-                print "" # new line
-            print "Matching", i, "->",
+                print("") # new line
+            print("Matching", i, "->", end='')
             for j, imgB in enumerate(self.observer.images[(i + 1):], i + 1):
                 if (imgB.datetime - imgA.datetime) > max_dt:
                     continue
-                print j,
+                print(j, end='')
                 if path:
                     outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
                 if path and not overwrite and os.path.exists(outfile):
@@ -1213,7 +1213,7 @@ class ObserverCameras(object):
         self.reset_cameras()
         if not result.success:
             sys.stdout.write('\n') # new line
-            print result.message
+            print(result.message)
         return result
 
 # ---- RANSAC ----

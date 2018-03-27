@@ -966,7 +966,7 @@ class Cameras(object):
         if full:
             return result
         elif result.success:
-            return np.array(result.params.valuesdict().values())
+            return np.array(list(result.params.valuesdict().values()))
 
     def plot(self, params=None, cam=0, index=None, scale=1, width=5, selected='red', unselected=None,
         lines_observed='green', lines_predicted='yellow'):
@@ -1637,7 +1637,7 @@ def build_lmfit_params(cams, cam_params=None, group_params=None):
     # Build apply function
     def apply_params(values):
         if isinstance(values, lmfit.parameter.Parameters):
-            values = np.array(values.valuesdict().values())
+            values = np.array(list(values.valuesdict().values()))
         n_group = group_mask.sum()
         group_values = values[0:n_group]
         n_cams = [mask.sum() for mask in cam_masks]

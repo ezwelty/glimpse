@@ -136,7 +136,7 @@ camera_model.reset_cameras()
 SUFFIX = ''
 
 cam = (motion_images + svg_images)[0].cam.copy()
-keys = camera_fit.params.keys()[:camera_model.group_mask.sum()]
+keys = list(camera_fit.params)[:camera_model.group_mask.sum()]
 # (mean values)
 cam.vector[camera_model.group_mask] = [camera_fit.params[key].value for key in keys]
 cam.write(path='cameras/' + CAMERA + SUFFIX + '.json',

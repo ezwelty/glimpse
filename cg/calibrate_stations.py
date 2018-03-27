@@ -16,10 +16,10 @@ SVG_KEYS = ('gcp', 'horizon', 'coast', 'terminus', 'moraines')
 # STATION = 'AK03'; STATION2 = 'AK03b'
 # STATION = 'AK09'
 # station_fit = camera_fit # use better calibrate_camera solution
-# viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
+# viewdir_keys = list(station_fit.params)[-len(svg_images) * 3:]
 # STATION = 'AK09b'
 # station_fit = camera_fit # use better calibrate_camera solution
-# viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
+# viewdir_keys = list(station_fit.params)[-len(svg_images) * 3:]
 # STATION = 'AK12'
 # images[2].cam.viewdir = [5.5, -9, 0]
 # images[3].cam.viewdir = [5.5, -9, 0]
@@ -28,7 +28,7 @@ SVG_KEYS = ('gcp', 'horizon', 'coast', 'terminus', 'moraines')
 # STATION = 'AK10'
 # STATION = 'AK01'
 # station_fit = camera_fit # use better calibrate_camera solution
-# viewdir_keys = station_fit.params.keys()[-len(svg_images) * 3:]
+# viewdir_keys = list(station_fit.params)[-len(svg_images) * 3:]
 # STATION = 'AKST03A'
 # STATION = 'AKST03B'
 STATION = 'AK04'
@@ -51,7 +51,7 @@ station_model = glimpse.optimize.Cameras(
     cam_params=cam_params + cam_params2,
     group_params=dict(xyz=True))
 station_fit = station_model.fit(group_params=(dict(), ), full=True)
-print(np.array(station_fit.params.valuesdict().values()[0:3]) - station_model.cams[0].xyz)
+print(np.array(list(station_fit.params.valuesdict().values())[0:3]) - station_model.cams[0].xyz)
 
 # ---- Verify with image plot ---- #
 
@@ -66,8 +66,8 @@ images[i].set_plot_limits()
 SUFFIX = ''
 
 cam = images[0].cam.copy()
-xyz_keys = station_fit.params.keys()[0:3]
-viewdir_keys = station_fit.params.keys()[3:(len(images) + 1) * 3]
+xyz_keys = list(station_fit.params)[0:3]
+viewdir_keys = list(station_fit.params)[3:(len(images) + 1) * 3]
 # (mean values)
 cam.xyz = [station_fit.params[key].value for key in xyz_keys]
 viewdir = [station_fit.params[key].value for key in viewdir_keys]
@@ -83,7 +83,7 @@ cam.write(path=os.path.join('stations', STATION + SUFFIX + '_stderr.json',
 
 # Optional second station
 
-viewdir_keys = station_fit.params.keys()[(len(images) + 1) * 3:]
+viewdir_keys = list(station_fit.params)[(len(images) + 1) * 3:]
 # (mean values)
 cam.xyz = [station_fit.params[key].value for key in xyz_keys]
 viewdir = [station_fit.params[key].value for key in viewdir_keys]

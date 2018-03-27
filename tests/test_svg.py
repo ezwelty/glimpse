@@ -45,8 +45,8 @@ def test_parse_circle():
 def test_parse_svg():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.svg')
     svg = glimpse.svg.parse_svg(path)
-    assert set(svg.keys()) == set(('glacier', 'gcp', 'land', 'horizon', 'coast'))
-    assert set(svg['gcp'].keys()) == set(('pier', 'orb', 'slant', 'beetle'))
+    assert set(svg) == {'glacier', 'gcp', 'land', 'horizon', 'coast'}
+    assert set(svg['gcp']) == {'pier', 'orb', 'slant', 'beetle'}
     svg_1 = glimpse.svg.parse_svg(path, imgsz=(1, 1))
     svg_2 = glimpse.svg.parse_svg(path, imgsz=(2, 2))
     assert np.array_equal(svg_2['gcp']['orb'], 2 * svg_1['gcp']['orb'])

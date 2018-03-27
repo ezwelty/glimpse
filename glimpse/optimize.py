@@ -30,7 +30,7 @@ class Points(object):
 
     def __init__(self, cam, uv, xyz, directions=False, correction=False):
         if len(uv) != len(xyz):
-            raise ValueError("`uv` and `xyz` have different number of rows")
+            raise ValueError('`uv` and `xyz` have different number of rows')
         self.cam = cam
         self.uv = uv
         self.xyz = xyz
@@ -63,7 +63,7 @@ class Points(object):
         if index is None:
             index = slice(None)
         if self.directions and not self.is_static():
-            raise ValueError("Camera has changed position ('xyz') and `directions=True`")
+            raise ValueError('Camera has changed position (xyz) and `directions=True`')
         return self.cam.project(self.xyz[index], directions=self.directions, correction=self.correction)
 
     def is_static(self):
@@ -164,7 +164,7 @@ class Lines(object):
             list: Arrays of image coordinates (Nx2)
         """
         if self.directions and not self.is_static():
-            raise ValueError("Camera has changed position ('xyz') and `directions=True`")
+            raise ValueError('Camera has changed position (xyz) and `directions=True`')
         xy_step = 1 / self.cam.f.mean()
         uv_edges = self.cam.edges(step = self.cam.imgsz / 2)
         xy_edges = self.cam._image2camera(uv_edges)
@@ -188,7 +188,7 @@ class Lines(object):
         else:
             # FIXME: Fails if lines slip out of camera view
             # TODO: Return center of image instead of error?
-            raise ValueError("All line vertices are outside camera view")
+            raise ValueError('All line vertices are outside camera view')
 
     def predicted(self, index=None):
         """
@@ -284,11 +284,11 @@ class Matches(object):
 
     def __init__(self, cams, uvs):
         if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError("`cams` and `uvs` must each have two elements")
+            raise ValueError('`cams` and `uvs` must each have two elements')
         if cams[0] is cams[1]:
-            raise ValueError("Both cameras are the same object")
+            raise ValueError('Both cameras are the same object')
         if uvs[0].shape != uvs[1].shape:
-            raise ValueError("Image coordinate arrays have different shapes")
+            raise ValueError('Image coordinate arrays have different shapes')
         self.cams = cams
         self.uvs = uvs
         self.size = len(self.uvs[0])
@@ -318,7 +318,7 @@ class Matches(object):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError("Cameras have different positions ('xyz')")
+            raise ValueError('Cameras have different positions (xyz)')
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -341,7 +341,7 @@ class Matches(object):
         """
         if isinstance(cam, int):
             if cam >= len(self.cams):
-                raise IndexError("Camera index out of range")
+                raise IndexError('Camera index out of range')
             return cam
         else:
             return self.cams.index(cam)
@@ -402,13 +402,13 @@ class RotationMatches(Matches):
 
     def __init__(self, cams, uvs):
         if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError("`cams` and `uvs` must each have two elements")
+            raise ValueError('`cams` and `uvs` must each have two elements')
         if cams[0] is cams[1]:
-            raise ValueError("Both cameras are the same object")
+            raise ValueError('Both cameras are the same object')
         if uvs[0].shape != uvs[1].shape:
-            raise ValueError("Image coordinate arrays have different shapes")
+            raise ValueError('Image coordinate arrays have different shapes')
         if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
         self.cams = cams
         self.uvs = uvs
         self.xys = (
@@ -427,9 +427,9 @@ class RotationMatches(Matches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError("Cameras have different positions ('xyz')")
+            raise ValueError('Cameras have different positions (xyz)')
         if not self.is_original_internals():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -469,13 +469,13 @@ class RotationMatchesXY(RotationMatches):
 
     def __init__(self, cams, uvs, normalized=False):
         if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError("`cams` and `uvs` must each have two elements")
+            raise ValueError('`cams` and `uvs` must each have two elements')
         if cams[0] is cams[1]:
-            raise ValueError("Both cameras are the same object")
+            raise ValueError('Both cameras are the same object')
         if uvs[0].shape != uvs[1].shape:
-            raise ValueError("Image coordinate arrays have different shapes")
+            raise ValueError('Image coordinate arrays have different shapes')
         if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
         self.cams = cams
         self.xys = (
             self.cams[0]._image2camera(uvs[0]),
@@ -507,9 +507,9 @@ class RotationMatchesXY(RotationMatches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError("Cameras have different positions ('xyz')")
+            raise ValueError('Cameras have different positions (xyz)')
         if not self.is_original_internals():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -518,7 +518,7 @@ class RotationMatchesXY(RotationMatches):
         return self.cams[cam_in]._world2camera(dxyz, directions=True)
 
     def plot(self, *args, **kwargs):
-        raise AttributeError("plot() not supported by RotationMatchesXY")
+        raise AttributeError('plot() not supported by RotationMatchesXY')
 
 class RotationMatchesXYZ(RotationMatches):
     """
@@ -543,13 +543,13 @@ class RotationMatchesXYZ(RotationMatches):
 
     def __init__(self, cams, uvs):
         if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError("`cams` and `uvs` must each have two elements")
+            raise ValueError('`cams` and `uvs` must each have two elements')
         if cams[0] is cams[1]:
-            raise ValueError("Both cameras are the same object")
+            raise ValueError('Both cameras are the same object')
         if uvs[0].shape != uvs[1].shape:
-            raise ValueError("Image coordinate arrays have different shapes")
+            raise ValueError('Image coordinate arrays have different shapes')
         if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) are not equal")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
         self.cams = cams
         self.xys = (
             self.cams[0]._image2camera(uvs[0]),
@@ -559,7 +559,7 @@ class RotationMatchesXYZ(RotationMatches):
         self.size = len(self.xys[0])
 
     def observed(self, *args, **kwargs):
-        raise AttributeError("observed() not supported by RotationMatchesXYZ")
+        raise AttributeError('observed() not supported by RotationMatchesXYZ')
 
     def predicted(self, index=None, cam=0):
         """
@@ -572,9 +572,9 @@ class RotationMatchesXYZ(RotationMatches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError("Cameras have different positions ('xyz')")
+            raise ValueError('Cameras have different positions (xyz)')
         if not self.is_original_internals():
-            raise ValueError("Camera internal parameters (imgsz, f, c, k, p) have changed")
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
         if index is None:
             index = slice(None)
         cam_idx = self.cam_index(cam)
@@ -584,7 +584,7 @@ class RotationMatchesXYZ(RotationMatches):
         return dxyz
 
     def plot(self, *args, **kwargs):
-        raise AttributeError("plot() not supported by RotationMatchesXY")
+        raise AttributeError('plot() not supported by RotationMatchesXY')
 
 # ---- Models ----
 
@@ -649,7 +649,7 @@ class Polynomial(object):
         """
         return np.polyfit(self.data[index, 0], self.data[index, 1], deg=self.deg)
 
-    def plot(self, params=None, index=slice(None), selected="red", unselected="grey", polynomial="red"):
+    def plot(self, params=None, index=slice(None), selected='red', unselected='grey', polynomial='red'):
         """
         Plot the points and the polynomial fit.
 
@@ -940,7 +940,7 @@ class Cameras(object):
                     kwargs['jac_sparsity'] = self.sparsity[jac_index]
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
-            sys.stdout.write("\r" + str(err))
+            sys.stdout.write('\r' + str(err))
             sys.stdout.flush()
         iterations = max(
             len(cam_params) if cam_params else 0,
@@ -957,7 +957,7 @@ class Cameras(object):
             self.update_params()
         result = lmfit.minimize(params=self.params, fcn=self.residuals, kws=dict(index=index), iter_cb=callback,
             method=method, nan_policy=nan_policy, reduce_fcn=reduce_fcn, **kwargs)
-        sys.stdout.write("\n")
+        sys.stdout.write('\n')
         if iterations:
             self.reset_cameras()
             self.update_params()
@@ -995,7 +995,7 @@ class Cameras(object):
         cam_controls = prune_controls([cam], self.controls)
         if index is not None and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
-            raise ValueError("Plotting with `index` not yet supported with multiple controls")
+            raise ValueError('Plotting with `index` not yet supported with multiple controls')
         for control in cam_controls:
             if isinstance(control, Lines):
                 control.plot(index=index, scale=scale, width=width, selected=selected, unselected=unselected,
@@ -1138,11 +1138,11 @@ class ObserverCameras(object):
             basenames = [os.path.splitext(os.path.basename(img.path))[0]
                 for img in self.observer.images]
             if len(basenames) != len(set(basenames)):
-                raise ValueError("Image basenames are not unique")
+                raise ValueError('Image basenames are not unique')
         for i, imgA in enumerate(self.observer.images[:-1]):
             if i > 0:
-                print("") # new line
-            print("Matching", i, "->", end='')
+                print('') # new line
+            print('Matching', i, '->', end='')
             for j, imgB in enumerate(self.observer.images[(i + 1):], i + 1):
                 if (imgB.datetime - imgA.datetime) > max_dt:
                     continue
@@ -1206,7 +1206,7 @@ class ObserverCameras(object):
                         # j -> i
                         gradients[j] -= gradient
             # Update console output
-            sys.stdout.write("\r" + str(objective))
+            sys.stdout.write('\r' + str(objective))
             sys.stdout.flush()
             return objective, gradients.ravel()
         viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
@@ -1269,7 +1269,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100):
                 inlier_idx = better_idx
         i += 1
     if params is None:
-        raise ValueError("Best fit does not meet acceptance criteria")
+        raise ValueError('Best fit does not meet acceptance criteria')
     return params, inlier_idx
 
 def ransac_sample(sample_size, data_size):
@@ -1285,7 +1285,7 @@ def ransac_sample(sample_size, data_size):
         array (int): Outlier indices
     """
     if sample_size >= data_size:
-        raise ValueError("`sample_size` is larger or equal to `data_size`")
+        raise ValueError('`sample_size` is larger or equal to `data_size`')
     indices = np.arange(data_size)
     np.random.shuffle(indices)
     return indices[:sample_size], indices[sample_size:]
@@ -1420,7 +1420,7 @@ def test_cameras(model):
     """
     # Error: No controls reference the cameras
     if not model.controls:
-        raise ValueError("No controls reference the cameras")
+        raise ValueError('No controls reference the cameras')
     # Error: 'f' or 'c' in `group_params` but image sizes not equal
     if 'f' in model.group_params or 'c' in model.group_params:
         sizes = np.unique([cam.imgsz for cam in model.cams], axis=0)
@@ -1437,7 +1437,7 @@ def test_cameras(model):
     # Error: Not all cameras appear in controls
     control_cams_flat = [cam for cams in control_cams for cam in cams]
     if len(set(model.cams) & set(control_cams_flat)) < len(model.cams):
-        raise ValueErrors("Not all cameras appear in controls")
+        raise ValueErrors('Not all cameras appear in controls')
     # Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
     if 'xyz' in model.group_params and any(is_directions_control):
         raise ValueError("'xyz' cannot be in `group_params` if any `control.directions` is True")
@@ -1611,11 +1611,11 @@ def build_lmfit_params(cams, cam_params=None, group_params=None):
     cam_bounds = [x[1] for x in temp]
     group_mask, group_bounds = parse_params(params=group_params)
     # Labels: (cam<camera_index>_)<attribute><position>
-    attributes = ['xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p']
+    attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
     lengths = [3, 3, 2, 2, 2, 6, 2]
     base_labels = np.array([attribute + str(i) for attribute, length in zip(attributes, lengths) for i in range(length)])
     group_labels = base_labels[group_mask]
-    cam_labels = np.hstack(("cam" + str(i) + "_" + label for i, mask in enumerate(cam_masks) for label in base_labels[mask]))
+    cam_labels = np.hstack(('cam' + str(i) + '_' + label for i, mask in enumerate(cam_masks) for label in base_labels[mask]))
     labels = np.hstack((group_labels, cam_labels))
     # Values
     # NOTE: Group values from first camera
@@ -1673,5 +1673,4 @@ def model_criteria(fit):
         caic = base + k * (np.log(n) + 1),
         bic = base + 2 * k * np.log(n),
         ssd = base + k * np.log((n + 2) / 24) + np.log(k + 1),
-        mdl = base + 1 / (2 * k * np.log(n))
-    )
+        mdl = base + 1 / (2 * k * np.log(n)))

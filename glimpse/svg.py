@@ -23,20 +23,20 @@ def parse_svg(path, imgsz=None):
     """
     tree = lxml.etree.parse(path)
     # Remove namespaces from tags and attributes
-    regex = re.compile("\{.*\}")
+    regex = re.compile(r'\{.*\}')
     for node in tree.iter():
-        node.tag = regex.sub("", node.tag)
+        node.tag = regex.sub('', node.tag)
         for key in node.attrib.keys():
-            new_key = regex.sub("", key)
-            new_value = regex.sub("", node.attrib.pop(key))
+            new_key = regex.sub('', key)
+            new_value = regex.sub('', node.attrib.pop(key))
             node.attrib[new_key] = new_value
     # SVG size
-    svgs = tree.xpath("//svg")
+    svgs = tree.xpath('//svg')
     if len(svgs) > 1:
-        warnings.warn("Using first (of multiple) <svg> for scale calculation.")
+        warnings.warn('Using first (of multiple) <svg> for scale calculation')
     svg_width = svgs[0].get('width')
     svg_height = svgs[0].get('height')
-    regex = re.compile("[0-9\.]+")
+    regex = re.compile(r'[0-9\.]+')
     if svg_width and svg_height:
         svg_width = regex.findall(svg_width)
         svg_height = regex.findall(svg_height)
@@ -44,17 +44,17 @@ def parse_svg(path, imgsz=None):
     else:
         svgsz = None
     # Image size
-    images = tree.xpath("//image")
+    images = tree.xpath('//image')
     if imgsz is None and svgsz is not None:
         if images:
             # Get image size from SVG
             if len(images) > 1:
-                warnings.warn("Using first (of multiple) <image> for scale calculation.")
+                warnings.warn('Using first (of multiple) <image> for scale calculation')
             # TODO: Support transform attribute
             img_width = images[0].get('width')
             img_height = images[0].get('height')
             if img_width and img_height:
-                regex = re.compile("([0-9\.]+)")
+                regex = re.compile(r'([0-9\.]+)')
                 img_width = regex.findall(img_width)
                 img_height = regex.findall(img_height)
                 imgsz = np.array(img_width + img_height, dtype=float)
@@ -66,10 +66,10 @@ def parse_svg(path, imgsz=None):
         # Use default scale
         scale = np.array([1, 1], dtype=float)
     # Parse all data or g[@id] node not ancestors of g[@id] and who are (or are ancestors of) data
-    tags = ["path", "line", "polyline", "polygon", "circle"]
-    selfs = " | ".join(["self::" + tag for tag in tags])
-    descendants = " | ".join(["descendant-or-self::" + tag for tag in tags])
-    nodes = tree.xpath("//*[not(ancestor::g[@id]) and (self::g[@id] or (" + selfs + ")) and (" + descendants + ")]")
+    tags = ('path', 'line', 'polyline', 'polygon', 'circle')
+    selfs = ' | '.join(['self::' + tag for tag in tags])
+    descendants = ' | '.join(['descendant-or-self::' + tag for tag in tags])
+    nodes = tree.xpath('//*[not(ancestor::g[@id]) and (self::g[@id] or (' + selfs + ')) and (' + descendants + ')]')
     return _parse_nodes(nodes, scale=scale)
 
 def _parse_nodes(nodes, scale=None):
@@ -94,7 +94,7 @@ def _parse_nodes(nodes, scale=None):
         if 'id' in nodes[i].attrib:
             id = nodes[i].attrib['id']
         elif tags.count(tag) > 1:
-            id = tag + "-" + str(i)
+            id = tag + '-' + str(i)
         else:
             id = tag
         if len(nodes[i]):
@@ -130,7 +130,7 @@ def parse_polyline(points):
     Returns:
         array: Coordinates x,y (Nx2)
     """
-    num_str = re.findall("[0-9\.\-]+", points)
+    num_str = re.findall(r'[0-9\.\-]+', points)
     return np.array(num_str, dtype=float).reshape((-1, 2))
 
 def parse_polygon(points, closed=True):
@@ -147,10 +147,10 @@ def parse_polygon(points, closed=True):
     Returns:
         array: Coordinates x,y (Nx2)
     """
-    num_str = re.findall("[0-9\.\-]+", points)
+    num_str = re.findall(r'[0-9\.\-]+', points)
     if closed:
         num_str += num_str[0:2]
-    return np.array(num_str, dtype=float).reshape((-1, 2))
+    return np.array(num_str, dtype=float).reshape(-1, 2)
 
 def parse_line(x1, y1, x2, y2):
     """
@@ -167,7 +167,7 @@ def parse_line(x1, y1, x2, y2):
     Returns:
         array: Coordinates x,y (2x2)
     """
-    return np.array([x1, y1, x2, y2], dtype=float).reshape((2, 2))
+    return np.array((x1, y1, x2, y2), dtype=float).reshape(2, 2)
 
 def parse_path(d):
     """
@@ -182,8 +182,8 @@ def parse_path(d):
         array: Coordinates x,y (Nx2)
     """
     # Parse letter and number lists
-    letters = re.findall("[a-zA-Z]+", d)
-    numbers = re.findall("[\.,0-9\- ]+", d)
+    letters = re.findall(r'[a-zA-Z]+', d)
+    numbers = re.findall(r'[\.,0-9\- ]+', d)
     n = len(letters)
     X = []
     # Compute coordinates of vertices
@@ -194,7 +194,7 @@ def parse_path(d):
             X.insert(i, X[0][0])
             continue
         else:
-            data = np.array(re.findall("\-*[\.0-9]+", numbers[i]), dtype=float)
+            data = np.array(re.findall(r'\-*[\.0-9]+', numbers[i]), dtype=float)
         if len(data) % 2 == 0:
             data = data.reshape((-1, 2))
         # moveto: M (x,y)+ | m (dx,dy)+
@@ -260,7 +260,7 @@ def parse_path(d):
         elif tag == 'a':
             X.insert(i, data.reshape((-1, 7))[:, 5:7] + X[-1][-1])
         else:
-            print("Unsupported tag encountered: " + tag)
+            print('Unsupported tag encountered:', tag)
     return np.vstack(X)
 
 def parse_circle(cx, cy):

@@ -205,7 +205,7 @@ class Grid(object):
         """
         # TODO: Faster version for image grid
         if not centers and not edges:
-            raise ValueError("centers and edges cannot both be false")
+            raise ValueError('centers and edges cannot both be false')
         origin = np.append(self.xlim[0], self.ylim[0])
         nxy = (xy - origin) / self.d
         if centers and not edges:
@@ -240,7 +240,7 @@ class Grid(object):
         halfsize = np.multiply(size, 0.5)
         xy_box = np.vstack((xy - halfsize, xy + halfsize))
         if any(~self.inbounds(xy_box)):
-            raise IndexError("Sample extends beyond grid bounds")
+            raise IndexError('Sample extends beyond grid bounds')
         return self.snap_xy(xy_box, centers=centers, edges=edges, inbounds=inbounds).flatten()
 
     def rowcol_to_xy(self, rowcol):
@@ -429,7 +429,7 @@ class DEM(Grid):
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RegularGridInterpolator(
                 (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]],
-                method="linear", bounds_error=False)
+                method='linear', bounds_error=False)
         return self._Zf
 
     # ---- Methods (public) ----
@@ -437,28 +437,28 @@ class DEM(Grid):
     def copy(self):
         return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
 
-    def sample(self, xy, indices=False, method="linear"):
+    def sample(self, xy, indices=False, method='linear'):
         """
         Sample `Z` at points.
 
         Arguments:
             xy (array): Point coordinates (Nx2)
             method (str): Interpolation method,
-                either "linear" (default) or "nearest"
+                either 'linear' (default) or 'nearest'
         """
         if indices:
             return self.Z.flat[self.rowcol_to_idx(xy)]
         else:
             return self.Zf(xy, method=method)
 
-    def resample(self, dem, method="linear"):
+    def resample(self, dem, method='linear'):
         xy = np.column_stack((dem.X.ravel(), dem.Y.ravel()))
         Z = self.sample(xy, method=method)
         self.Z = Z.reshape(dem.Z.shape)
         self.xlim, self._x, self._X = self._parse_x(dem.X)
         self.ylim, self._y, self._Y = self._parse_y(dem.Y)
 
-    def plot(self, array=None, cmap="gray", **kwargs):
+    def plot(self, array=None, cmap='gray', **kwargs):
         """
         Plot a DEM.
 
@@ -772,7 +772,7 @@ class DEMInterpolant(object):
                     j_side_nearest = np.argmin(abs(dt[on_j_side]))
                     j = np.arange(len(dt))[on_j_side][j_side_nearest]
                 else:
-                    raise ValueError("Sample time not bounded on both sides by a DEM")
+                    raise ValueError('Sample time not bounded on both sides by a DEM')
         if self.datetimes[i] < self.datetimes[j]:
             ij = i, j
         elif self.datetimes[i] > self.datetimes[j]:

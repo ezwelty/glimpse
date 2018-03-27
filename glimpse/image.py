@@ -267,7 +267,7 @@ class Camera(object):
         if make_model in sensor_sizes:
             return sensor_sizes[make_model]
         else:
-            raise KeyError("No sensor size found for: " + make_model)
+            raise KeyError('No sensor size found for: ' + make_model)
 
     @staticmethod
     def get_scale_from_size(old_size, new_size):
@@ -360,7 +360,7 @@ class Camera(object):
                 # Compute scalar scale factor (if one exists)
                 scale1d = Camera.get_scale_from_size(self.imgsz, scale1d)
                 if scale1d is None:
-                    raise ValueError("Target size cannot be achieved with scalar scale factor")
+                    raise ValueError('Target size cannot be achieved with scalar scale factor')
             new_size = np.floor(scale1d * self.imgsz + 0.5)
         scale2d = new_size / self.imgsz
         self.imgsz = np.round(self.imgsz * scale2d) # ensure whole numbers
@@ -443,16 +443,16 @@ class Camera(object):
         Arguments:
             mode (str): Image coordinates, returned as either
 
-                - "vectors": x (nx, ) and y (ny, ) coordinates
-                - "grids": x (ny, nx) and y (ny, nx) coordinates
+                - 'vectors': x (nx, ) and y (ny, ) coordinates
+                - 'grids': x (ny, nx) and y (ny, nx) coordinates
                 - otherwise: x, y coordinates (ny * nx, 2)
         """
         u = np.linspace(0.5, self.imgsz[0] - 0.5, int(self.imgsz[0]))
         v = np.linspace(0.5, self.imgsz[1] - 0.5, int(self.imgsz[1]))
-        if mode == "vectors":
+        if mode == 'vectors':
             return u, v
         U, V = np.meshgrid(u, v)
-        if mode == "grids":
+        if mode == 'grids':
             return U, V
         return np.column_stack((U.flatten(), V.flatten()))
 
@@ -606,7 +606,7 @@ class Camera(object):
                 dxy += self._tangential_distortion(xy, r2)
             return dxy
 
-    def _undistort(self, xy, method="oulu", **params):
+    def _undistort(self, xy, method='oulu', **params):
         """
         Remove distortion from camera coordinates.
 
@@ -621,11 +621,11 @@ class Camera(object):
             return xy
         elif self.k[0] and not any(self.k[1:]) and not any(self.p):
             return self._undistort_k1(xy)
-        elif method == "lookup":
+        elif method == 'lookup':
             return self._undistort_lookup(xy, **params)
-        elif method == "oulu":
+        elif method == 'oulu':
             return self._undistort_oulu(xy, **params)
-        elif method == "regulafalsi":
+        elif method == 'regulafalsi':
             return self._undistort_regulafalsi(xy, **params)
 
     def _undistort_k1(self, xy):
@@ -694,7 +694,7 @@ class Camera(object):
         dxy = self._distort(uxy)
         # Interpolate distortion removal from gridded results
         # NOTE: Cannot use faster grid interpolation because dxy is not regular
-        return scipy.interpolate.griddata(dxy, uxy, xy, method="linear")
+        return scipy.interpolate.griddata(dxy, uxy, xy, method='linear')
 
     def _undistort_oulu(self, xy, iterations=20, tolerance=0):
         """
@@ -906,9 +906,9 @@ class Exif(object):
         datetime_str = self.get_tag('DateTimeOriginal')
         subsec_str = self.get_tag('SubSecTimeOriginal')
         if datetime_str and not subsec_str:
-            return datetime.datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
+            return datetime.datetime.strptime(datetime_str, '%Y:%m:%d %H:%M:%S')
         elif datetime_str and subsec_str:
-            return datetime.datetime.strptime(datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f")
+            return datetime.datetime.strptime(datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
         else:
             return None
 
@@ -1158,7 +1158,7 @@ class Image(object):
                 exif.set_tag('PixelYDimension', im.size[1])
                 im.save(path, exif=exif.dump(), **params)
             else:
-                warnings.warn("Writing EXIF to non-JPEG file is not supported.")
+                warnings.warn('Writing EXIF to non-JPEG file is not supported')
                 im.save(path, **params)
 
     def read_keypoints(self):
@@ -1172,13 +1172,13 @@ class Image(object):
         """
         if self.keypoints is None:
             if self.keypoints_path is None:
-                warnings.warn("Keypoints path not specified")
+                warnings.warn('Keypoints path not specified')
                 return None
             else:
                 try:
                     self.keypoints = helpers.read_pickle(self.keypoints_path)
                 except IOError:
-                    warnings.warn("No keypoints found at keypoints path")
+                    warnings.warn('No keypoints found at keypoints path')
         return self.keypoints
 
     def write_keypoints(self):
@@ -1191,7 +1191,7 @@ class Image(object):
         if self.keypoints is not None and self.keypoints_path is not None:
             helpers.write_pickle(self.keypoints, path=self.keypoints_path)
         else:
-            raise ValueError("No keypoints, or keypoints path not specified")
+            raise ValueError('No keypoints, or keypoints path not specified')
 
     def plot(self, origin='upper', extent=None, **params):
         """
@@ -1215,13 +1215,13 @@ class Image(object):
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
-    def project(self, cam, method="linear"):
+    def project(self, cam, method='linear'):
         """
         Project image into another `Camera`.
 
         Arguments:
             cam (Camera): Target `Camera`
-            method (str): Interpolation method, either "linear" or "nearest"
+            method (str): Interpolation method, either 'linear' or 'nearest'
         """
         if not np.all(cam.xyz == self.cam.xyz):
             raise ValueError("Source and target cameras must have the same position ('xyz')")

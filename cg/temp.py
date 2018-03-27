@@ -33,7 +33,7 @@ ANCHOR_BASENAME = 'AK01b_20130615_220325'
 
 # ---- Prepare Observer ----
 
-all_img_paths = glob.glob(os.path.join(IMG_DIR, "*.JPG"))
+all_img_paths = glob.glob(os.path.join(IMG_DIR, '*.JPG'))
 datetimes = np.array([glimpse.Exif(path).datetime
     for path in all_img_paths])
 inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)

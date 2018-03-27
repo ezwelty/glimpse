@@ -112,10 +112,10 @@ class Tracker(object):
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], method='nearest')
             if not all(is_visible):
-                raise ValueError("Some particles are not visible")
+                raise ValueError('Some particles are not visible')
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
         if any(np.isnan(self.particles[:, 2])):
-            raise ValueError("Some particles have missing elevations")
+            raise ValueError('Some particles have missing elevations')
         self.particles[:, 3:5] += dt * (axy + daxy)
 
     def update_weights(self, likelihoods):
@@ -213,7 +213,7 @@ class Tracker(object):
             axy_sigma (array-like) Standard deviation of random accelerations (x, y)
         """
         if self.particles is None:
-            raise Exception("Particles are not initialized")
+            raise Exception('Particles are not initialized')
         self._initialize_track(datetimes=datetimes, maxdt=maxdt, tile_size=tile_size)
         self.means = [self.particle_mean]
         self.covariances = [self.particle_covariance]
@@ -253,7 +253,7 @@ class Tracker(object):
         # NOTE: Not necessary if default datetimes
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
         if any(time_deltas < 0):
-            raise ValueError("Datetimes are not monotonically increasing")
+            raise ValueError('Datetimes are not monotonically increasing')
         # Drop datetimes not matching any Observer
         # NOTE: Not necessary if default datetimes
         nearest = []
@@ -269,11 +269,11 @@ class Tracker(object):
         has_match = dt <= datetime.timedelta(seconds=maxdt * self.time_unit)
         has_any_match = np.any(has_match, axis=1)
         if not all(has_any_match):
-            warnings.warn("Dropping datetimes not matching any Observers")
+            warnings.warn('Dropping datetimes not matching any Observers')
             datetimes = datetimes[has_any_match]
             has_match = has_match[has_any_match, :]
         if len(datetimes) < 2:
-            raise ValueError("Fewer than two valid datetimes")
+            raise ValueError('Fewer than two valid datetimes')
         self.datetimes = datetimes
         # Initialize each Observer at first matching datetime
         self.tiles = [None] * len(self.observers)
@@ -360,7 +360,7 @@ class Tracker(object):
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)
         # Check that box is within image bounds
         if not all(observer.grid.inbounds(box)):
-            raise IndexError("Particle bounding box extends past image bounds")
+            raise IndexError('Particle bounding box extends past image bounds')
         # Flatten box
         box = box.ravel()
         # Extract test tile

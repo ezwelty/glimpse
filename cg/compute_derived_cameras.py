@@ -63,4 +63,4 @@ for filename in files:
             fig.savefig(animation_dir+filename,dpi=200)
         new_image.cam.write(derived_image_dir+new_image.path[-25:-4]+'.json')
     except ValueError:
-        print("BAD SOLUTION")
+        print('BAD SOLUTION')

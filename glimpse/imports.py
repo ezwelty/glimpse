@@ -1,4 +1,3 @@
-from .backports import *
 import collections
 import copy
 import copy_reg

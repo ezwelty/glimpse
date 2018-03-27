@@ -1,3 +1,5 @@
+from __future__ import (print_function, division, unicode_literals)
+from .backports import *
 from .imports import (
     np, cPickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
     sklearn, cv2, copy_reg, os, re)
@@ -493,7 +495,7 @@ def elevate_geojson(obj, elevation):
             return set_z(coords, elevation)
         else:
             return set_z(coords, elevation.sample(coords[:, 0:2]))
-    if isinstance(elevation, str):
+    if isinstance(elevation, (bytes, str)):
         for feature in geojson_iterfeatures(obj):
             coords = _get_geojson_coords(feature)
             _set_geojson_coords(feature, set_z(coords, feature['properties'][elevation]))

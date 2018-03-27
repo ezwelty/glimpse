@@ -1,3 +1,5 @@
+from __future__ import (print_function, division, unicode_literals)
+from .backports import *
 from .imports import (np, lxml, re, warnings)
 
 # ---- Parse SVG file ----

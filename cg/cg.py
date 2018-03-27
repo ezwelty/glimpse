@@ -6,37 +6,44 @@ import glimpse
 from glimpse.imports import (np, pandas, re, datetime)
 import glob
 import requests
+import backports.functools_lru_cache
 
 # ---- Environment variables ---
 
-print 'cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and/or MATCH_PATH'
+print 'cg: Remember to set IMAGE_PATH'
+# print 'cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and/or MATCH_PATH'
 IMAGE_PATH = None
-KEYPOINT_PATH = None
-MATCH_PATH = None
+# KEYPOINT_PATH = None
+# MATCH_PATH = None
 
 # ---- Images ----
+
+@backports.functools_lru_cache.lru_cache(maxsize=1)
+def Sequences():
+    df = pandas.read_csv(
+        os.path.join(CG_PATH, 'sequences.csv'),
+        parse_dates=['first_time_utc', 'last_time_utc'])
+    # Floor start time subseconds for comparisons to filename times
+    df.first_time_utc = df.first_time_utc.apply(
+        datetime.datetime.replace, microsecond=0)
+    return df
 
 def parse_image_path(path):
     basename = os.path.splitext(os.path.basename(path))[0]
     station, date_str, time_str = re.findall('^([^_]+)_([0-9]{8})_([0-9]{6})', basename)[0]
     capture_time = datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
-    Sequences = pandas.read_csv(
-        os.path.join(CG_PATH, 'sequences.csv'),
-        parse_dates=['first_time_utc', 'last_time_utc'])
-    # Floor seconds on left side of interval since subseconds not in filename
-    Sequences.first_time_utc = Sequences.first_time_utc.apply(
-        datetime.datetime.replace, microsecond=0)
-    rows = Sequences[
-        (Sequences.station == station) &
-        (Sequences.first_time_utc <= capture_time) &
-        (Sequences.last_time_utc >= capture_time)]
+    sequences = Sequences()
+    is_row = ((sequences.station == station) &
+        (sequences.first_time_utc <= capture_time) &
+        (sequences.last_time_utc >= capture_time))
+    rows = np.where(is_row)[0]
     if len(rows) != 1:
         raise ValueError('Image path has zero or multiple sequence matches: ' + path)
     # NOTE: All strings expected to be type str (i.e. default '')
     return dict(
-        station=station.encode(), service=rows.service.iloc[0], camera=rows.camera.iloc[0],
-        basename=basename.encode(), datetime=capture_time, date_str=date_str.encode(),
-        time_str=time_str.encode())
+        station=station.encode(), service=sequences.service.iloc[rows[0]],
+        camera=sequences.camera.iloc[rows[0]], basename=basename.encode(),
+        datetime=capture_time, date_str=date_str.encode(), time_str=time_str.encode())
 
 def find_image(path):
     ids = parse_image_path(path)

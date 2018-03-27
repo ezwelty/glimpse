@@ -6,7 +6,11 @@ import glimpse
 from glimpse.imports import (np, pandas, re, datetime)
 import glob
 import requests
-import backports.functools_lru_cache
+try:
+    from functools import lru_cache
+except ImportError:
+    # Python 2
+    from backports.functools_lru_cache import lru_cache
 
 # ---- Environment variables ---
 
@@ -18,7 +22,7 @@ IMAGE_PATH = None
 
 # ---- Images ----
 
-@backports.functools_lru_cache.lru_cache(maxsize=1)
+@lru_cache(maxsize=1)
 def Sequences():
     df = pandas.read_csv(
         os.path.join(CG_PATH, 'sequences.csv'),

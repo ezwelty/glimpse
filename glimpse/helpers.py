@@ -264,7 +264,7 @@ def rgb_to_gray(rgb, method='average', weights=None, pca=None):
     Returns:
         array: 2-d grayscale image
     """
-    if method is 'average':
+    if method == 'average':
         return np.average(rgb, axis=2, weights=weights)
     else:
         if pca is None:

@@ -1,3 +1,5 @@
+from __future__ import (print_function, division, unicode_literals)
+from .backports import *
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
     sharedmem, gdal, collections)
@@ -964,7 +966,10 @@ class Exif(object):
         if group not in self.tags or code not in self.tags[group]:
             return None
         else:
-            return self.tags[group][code]
+            value = self.tags[group][code]
+            if isinstance(value, bytes):
+                value = value.decode()
+            return value
 
     def set_tag(self, tag, value, group='Exif'):
         """
@@ -980,6 +985,8 @@ class Exif(object):
             group = '0th'
         if group not in self.tags:
             self.tags[group] = {}
+        if isinstance(value, str):
+            value = value.encode()
         self.tags[group][code] = value
 
     def dump(self):
@@ -1034,7 +1041,7 @@ class Image(object):
         if isinstance(cam, Camera):
             self.cam = cam
         else:
-            if isinstance(cam, str):
+            if isinstance(cam, (bytes, str)):
                 cam = helpers.read_json(cam)
             elif isinstance(cam, dict):
                 cam = copy.deepcopy(cam)

@@ -60,7 +60,7 @@ def find_image(path):
 # ---- Calibration controls ----
 
 def svg_controls(img, svg, keys=None, correction=True):
-    if isinstance(svg, str):
+    if isinstance(svg, (bytes, str)):
         svg = glimpse.svg.parse_svg(svg, imgsz=img.cam.imgsz)
     if keys is None:
         keys = svg.keys()
@@ -226,14 +226,14 @@ def load_calibration(path=None, station=False, camera=False, image=False,
             camera = ids['camera']
         if image is True:
             image = ids['basename']
-    if isinstance(station, str):
+    if isinstance(station, (bytes, str)):
         if station_estimate:
             calibration = glimpse.helpers.merge_dicts(calibration, load_station_estimate(station))
         else:
             calibration = glimpse.helpers.merge_dicts(calibration, load_station(station))
-    if isinstance(camera, str):
+    if isinstance(camera, (bytes, str)):
         calibration = glimpse.helpers.merge_dicts(calibration, load_camera(camera))
-    if isinstance(image, str):
+    if isinstance(image, (bytes, str)):
         calibration = glimpse.helpers.merge_dicts(calibration, load_image(image))
     return glimpse.helpers.merge_dicts(calibration, kwargs)
 

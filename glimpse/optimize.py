@@ -1301,17 +1301,25 @@ def detect_keypoints(I, mask=None, method='sift', root=True, **params):
         mask (array): Regions in which to detect keypoints (uint8)
         root (bool): Whether to return square root L1-normalized descriptors.
             See https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf.
-        **params: Additional arguments passed to `cv2.SIFT()` or `cv2.SURF()`.
-            See https://docs.opencv.org/2.4.13/modules/nonfree/doc/feature_detection.html.
+        **params: Additional arguments passed to `cv2.xfeatures2d.SIFT()` or `cv2.xfeatures2d.SURF()`.
+            See https://docs.opencv.org/master/d2/dca/group__xfeatures2d__nonfree.html.
 
     Returns:
         list: Keypoints as cv2.KeyPoint objects
         array: Descriptors as array rows
     """
     if method == 'sift':
-        detector = cv2.SIFT(**params)
+        try:
+            detector = cv2.xfeatures2d.SIFT_create(**params)
+        except AttributeError:
+            # Python 2
+            detector = cv2.SIFT(**params)
     elif method == 'surf':
-        detector = cv2.SURF(**params)
+        try:
+            detector = cv2.xfeatures2d.SURF_create(**params)
+        except AttributeError:
+            # Python 2
+            detector = cv2.SURF(**params)
     keypoints, descriptors = detector.detectAndCompute(I, mask=mask)
     # Empty result: ([], None)
     if root and descriptors is not None:

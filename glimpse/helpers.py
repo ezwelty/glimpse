@@ -45,7 +45,7 @@ def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
             # Repeat list
             if len(obj) > 0:
                 assert length % len(obj) == 0
-                obj *= length / len(obj)
+                obj *= length // len(obj)
     if dtype:
         obj = [dtype(i) for i in obj[0:length]]
     if ltype:
@@ -876,7 +876,8 @@ def intersect_boxes(boxes):
     # boxes: ((minx, ..., maxx, ...), ...) or 2-d array
     if not isinstance(boxes, np.ndarray):
         boxes = np.array(boxes)
-    ndim = boxes.shape[1] / 2
+    assert boxes.shape[1] % 2 == 0
+    ndim = boxes.shape[1] // 2
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
     boxmax = np.nanmin(boxes[:, ndim:], axis=0)
     if any(boxmax - boxmin <= 0):

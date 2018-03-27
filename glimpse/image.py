@@ -914,7 +914,7 @@ class Exif(object):
     def shutter(self):
         tag = self.get_tag('ExposureTime')
         if tag:
-            return float(tag[0]) / tag[1]
+            return tag[0] / tag[1]
         else:
             return None
 
@@ -922,7 +922,7 @@ class Exif(object):
     def aperture(self):
         tag = self.get_tag('FNumber')
         if tag:
-            return float(tag[0]) / tag[1]
+            return tag[0] / tag[1]
         else:
             return None
 
@@ -938,7 +938,7 @@ class Exif(object):
     def fmm(self):
         tag = self.get_tag('FocalLength')
         if tag:
-            return float(tag[0]) / tag[1]
+            return tag[0] / tag[1]
         else:
             return None
 

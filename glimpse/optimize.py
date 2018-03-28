@@ -283,15 +283,20 @@ class Matches(object):
     """
 
     def __init__(self, cams, uvs):
-        if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError('`cams` and `uvs` must each have two elements')
-        if cams[0] is cams[1]:
-            raise ValueError('Both cameras are the same object')
-        if uvs[0].shape != uvs[1].shape:
-            raise ValueError('Image coordinate arrays have different shapes')
         self.cams = cams
         self.uvs = uvs
+        self._test_matches()
         self.size = len(self.uvs[0])
+
+    def _test_matches(self):
+        if self.cams[0] is self.cams[1]:
+            raise ValueError('Both cameras are the same object')
+        # RotationMatchesXY(Z) do not store self.uvs
+        uvs = getattr(self, 'uvs', getattr(self, 'xys', None))
+        if len(self.cams) != 2 or len(uvs) != 2:
+            raise ValueError('`cams` and coordinate arrays must each have two elements')
+        if uvs[0].shape != uvs[1].shape:
+            raise ValueError('Coordinate arrays have different shapes')
 
     def observed(self, index=None, cam=0):
         """
@@ -308,10 +313,7 @@ class Matches(object):
 
     def predicted(self, index=None, cam=0):
         """
-        Predict image coordinates for a camera from the coordinates of the other camera.
-
-        If the cameras are not at the same position, the point correspondences cannot be
-        projected explicitly and an error is raised.
+        Predict image coordinates for a camera from those of the other camera.
 
         Arguments:
             index (array_like or slice): Indices of points to project from other camera
@@ -382,6 +384,21 @@ class Matches(object):
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
+    def as_rotation_matches(self, rmtype='uv'):
+        """
+        Return as a `RotationMatches` object.
+
+        Arguments:
+            rmtype (str): Type of RotationMatches object ('uv', 'xy', or 'xyz')
+        """
+        if rmtype == 'uv':
+            constructor = RotationMatches
+        elif rmtype == 'xy':
+            constructor = RotationMatchesXY
+        elif rmtype == 'xyz':
+            constructor = RotationMatchesXYZ
+        return constructor(cams=self.cams, uvs=self.uvs)
+
 class RotationMatches(Matches):
     """
     `RotationMatches` store image-image point correspondences for cameras seperated
@@ -400,27 +417,39 @@ class RotationMatches(Matches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs):
-        if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError('`cams` and `uvs` must each have two elements')
-        if cams[0] is cams[1]:
-            raise ValueError('Both cameras are the same object')
-        if uvs[0].shape != uvs[1].shape:
-            raise ValueError('Image coordinate arrays have different shapes')
-        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
+    def __init__(self, cams, uvs=None, xys=None):
         self.cams = cams
-        self.uvs = uvs
-        self.xys = (
-            self.cams[0]._image2camera(self.uvs[0]),
-            self.cams[1]._image2camera(self.uvs[1]))
+        self.uvs = self._build_uvs(uvs=uvs, xys=xys)
+        self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self._test_matches()
+        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
         self.size = len(self.uvs[0])
 
+    def _build_uvs(self, uvs=None, xys=None):
+        if uvs is None and xys is not None:
+            return (
+                self.cams[0]._camera2image(xys[0]),
+                self.cams[1]._camera2image(xys[1]))
+        else:
+            return uvs
+
+    def _build_xys(self, uvs=None, xys=None):
+        if xys is None and uvs is not None:
+            return (
+                self.cams[0]._image2camera(uvs[0]),
+                self.cams[1]._image2camera(uvs[1]))
+        else:
+            return xys
+
+    def _test_rotation_matches(self):
+        if (self.cams[0].vector[6:] != self.cams[1].vector[6:]).any():
+            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
+
     def predicted(self, index=None, cam=0):
         """
-        Predict image coordinates for a camera from the coordinates of the other camera.
+        Predict image coordinates for a camera from those of the other camera.
 
         Arguments:
             index (array_like or slice): Indices of points to project from other camera
@@ -445,13 +474,37 @@ class RotationMatches(Matches):
             (self.cams[0].vector[6:] == self.original_internals) &
             (self.cams[1].vector[6:] == self.original_internals)).all()
 
+    def as_matches(self):
+        """
+        Return as a `Matches` object.
+        """
+        return Matches(cams=self.cams, uvs=self.uvs)
+
+    def as_type(self, rmtype='uv'):
+        """
+        Return as different `RotationMatches` type.
+
+        Arguments:
+            rmtype (str): Type of `RotationMatches` object ('uv', 'xy', or 'xyz')
+        """
+        uvs = getattr(self, 'uvs', None)
+        xys = getattr(self, 'xys', None)
+        if rmtype == 'uv':
+            constructor = RotationMatches
+        elif rmtype == 'xy':
+            constructor = RotationMatchesXY
+        elif rmtype == 'xyz':
+            constructor = RotationMatchesXYZ
+        return constructor(cams=self.cams, uvs=uvs, xys=xys)
+
+
 class RotationMatchesXY(RotationMatches):
     """
     `RotationMatchesXY` store image-image point correspondences for cameras seperated
     only by a pure rotation.
 
     Normalized camera coordinates are pre-computed for speed,
-    and image coordinates are discarded to save memory.
+    and image coordinates may be discarded to save memory (`self.uvs = None`).
     Unlike `RotationMatches`, `self.predicted()` and `self.observed()` return
     normalized camera coordinates.
 
@@ -463,26 +516,17 @@ class RotationMatchesXY(RotationMatches):
         xys (list): Pair of normalized coordinate arrays (Nx2)
         original_internals (array): Original camera internal parameters
             (imgsz, f, c, k, p)
-        normalized (bool): Whether to normalize ray directions to unit length
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs, normalized=False):
-        if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError('`cams` and `uvs` must each have two elements')
-        if cams[0] is cams[1]:
-            raise ValueError('Both cameras are the same object')
-        if uvs[0].shape != uvs[1].shape:
-            raise ValueError('Image coordinate arrays have different shapes')
-        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
+    def __init__(self, cams, uvs=None, xys=None):
         self.cams = cams
-        self.xys = (
-            self.cams[0]._image2camera(uvs[0]),
-            self.cams[1]._image2camera(uvs[1]))
+        self.uvs = uvs
+        self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self._test_matches()
+        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
-        self.normalized = normalized
         self.size = len(self.xys[0])
 
     def observed(self, index=None, cam=0):
@@ -500,7 +544,7 @@ class RotationMatchesXY(RotationMatches):
 
     def predicted(self, index=None, cam=0):
         """
-        Predict camera coordinates for a camera from the coordinates of the other camera.
+        Predict camera coordinates for a camera from those of the other camera.
 
         Arguments:
             index (array_like or slice): Indices of points to project from other camera
@@ -520,13 +564,20 @@ class RotationMatchesXY(RotationMatches):
     def plot(self, *args, **kwargs):
         raise AttributeError('plot() not supported by RotationMatchesXY')
 
+    def as_matches(self):
+        """
+        Return as a `Matches` object.
+        """
+        uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
+        return Matches(cams=self.cams, uvs=uvs)
+
 class RotationMatchesXYZ(RotationMatches):
     """
     `RotationMatches3D` store image-image point correspondences for cameras seperated
     only by a pure rotation.
 
     Normalized camera coordinates are pre-computed for speed,
-    and image coordinates are discarded to save memory.
+    and image coordinates may be discarded to save memory (`self.uvs = None`).
     Unlike `RotationMatches`, `self.predicted()` returns
     world ray directions and `self.observed()` is disabled.
 
@@ -541,19 +592,12 @@ class RotationMatchesXYZ(RotationMatches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs):
-        if len(cams) != 2 or len(uvs) != 2:
-            raise ValueError('`cams` and `uvs` must each have two elements')
-        if cams[0] is cams[1]:
-            raise ValueError('Both cameras are the same object')
-        if uvs[0].shape != uvs[1].shape:
-            raise ValueError('Image coordinate arrays have different shapes')
-        if (cams[0].vector[6:] != cams[1].vector[6:]).any():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
+    def __init__(self, cams, uvs=None, xys=None):
         self.cams = cams
-        self.xys = (
-            self.cams[0]._image2camera(uvs[0]),
-            self.cams[1]._image2camera(uvs[1]))
+        self.uvs = uvs
+        self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self._test_matches()
+        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
         self.size = len(self.xys[0])
@@ -585,6 +629,13 @@ class RotationMatchesXYZ(RotationMatches):
 
     def plot(self, *args, **kwargs):
         raise AttributeError('plot() not supported by RotationMatchesXY')
+
+    def as_matches(self):
+        """
+        Return as a `Matches` object.
+        """
+        uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
+        return Matches(cams=self.cams, uvs=uvs)
 
 # ---- Models ----
 

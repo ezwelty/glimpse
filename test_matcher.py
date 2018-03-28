@@ -46,16 +46,12 @@ cam_params = [dict() if img.anchor else dict(viewdir=True) for img in model.obse
 matches_xyz = [m for m in np.triu(model.matches).ravel() if m]
 
 # RotationMatches
-matches = [glimpse.optimize.RotationMatches(
-    cams=m.cams, uvs=(m.cams[0]._camera2image(m.xys[0]), m.cams[1]._camera2image(m.xys[1])))
-    for m in matches_xyz]
+matches = [m.as_type('uv') for m in matches_xyz]
 model_Cameras = glimpse.optimize.Cameras(cams, matches, cam_params=cam_params)
 fit_Cameras = model_Cameras.fit(ftol=1, full=True)
 
 # RotationMatchesXY
-matchesXY = [glimpse.optimize.RotationMatchesXY(
-    cams=m.cams, uvs=(m.cams[0]._camera2image(m.xys[0]), m.cams[1]._camera2image(m.xys[1])))
-    for m in matches_xyz]
+matchesXY = [m.as_type('xy') for m in matches_xyz]
 model_CamerasXY = glimpse.optimize.Cameras(cams, matchesXY, cam_params=cam_params)
 fit_CamerasXY = model_CamerasXY.fit(ftol=1, full=True)
 

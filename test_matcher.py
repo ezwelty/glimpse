@@ -33,8 +33,11 @@ observer = glimpse.Observer(images)
 
 # ---- Align Observer (ObserverCameras + RotationMatchesXYZ) ----
 
+mask = np.load(MASK_PATH)
 model = glimpse.optimize.ObserverCameras(observer)
-model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
+# model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
+glimpse.parallel.build_keypoints(model.matcher, processes=4,
+    masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
 model.build_matches(max_dt=datetime.timedelta(days=1), path=MATCH_DIR, overwrite=False, max_ratio=0.6, max_distance=10)
 fit = model.fit(tol=1)
 

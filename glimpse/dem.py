@@ -379,16 +379,17 @@ class DEM(Grid):
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
         if d:
-            buf_xsize = int(np.ceil(abs(win_xsize * grid.d[0] / d)))
-            buf_ysize = int(np.ceil(abs(win_ysize * grid.d[1] / d)))
+            buf_xsize = np.ceil(abs(win_xsize * grid.d[0] / d))
+            buf_ysize = np.ceil(abs(win_ysize * grid.d[1] / d))
         else:
             buf_xsize = win_xsize
             buf_ysize = win_ysize
         band = raster.GetRasterBand(band)
         Z = band.ReadAsArray(
-            xoff=cols[0], yoff=rows[0],
-            win_xsize=win_xsize, win_ysize=win_ysize,
-            buf_xsize=buf_xsize, buf_ysize=buf_ysize)
+            # ReadAsArray() requires int, not numpy.int#
+            xoff=int(cols[0]), yoff=int(rows[0]),
+            win_xsize=int(win_xsize), win_ysize=int(win_ysize),
+            buf_xsize=int(buf_xsize), buf_ysize=int(buf_ysize))
         # FIXME: band.GetNoDataValue() not equal to read values due to rounding
         nan_value = band.GetNoDataValue()
         if np.issubdtype(Z.dtype, np.floating) and nan_value:

@@ -11,6 +11,7 @@ Thumbs.db
 *.pyc
 __pycache__/
 .cache/
+.pytest_cache/
 
 # Pyenv
 .python-version

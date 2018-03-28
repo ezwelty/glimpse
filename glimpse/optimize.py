@@ -498,7 +498,6 @@ class RotationMatches(Matches):
             constructor = RotationMatchesXYZ
         return constructor(cams=self.cams, uvs=uvs, xys=xys)
 
-
 class RotationMatchesXY(RotationMatches):
     """
     `RotationMatchesXY` store image-image point correspondences for cameras seperated
@@ -578,12 +577,16 @@ class RotationMatchesXY(RotationMatches):
         between cameras.
 
         Function returns gradients by column for parameters:
-        viewdirA0, viewdirA1, viewdirA2, viewdirB0, viewdirB1, viewdirB2
+        (viewdirA0, viewdirA1, viewdirA2), (viewdirB0, viewdirB1, viewdirB2)
         and by row for observations:
         x0, y0, x1, y1, ...
 
         Arguments:
             cam (Camera or int): Camera to project points into
+
+        Returns:
+            array: Gradients for first camera view directions
+            array: Gradients for second camera view directions
         """
         def _jacobian(xyA0, xyA1,
             viewdirA0, viewdirA1, viewdirA2,
@@ -667,7 +670,8 @@ class RotationMatchesXY(RotationMatches):
             x75 = - x60 - x61 + x62 - x65 + x69
             x76 = x25 * (x20 * xyA0 + x23 * xyA1)
             x77 = (x18 - x49 - xyA0 * (x22 * x5 + x51 - x52) - xyA1 * (x19 * x5 + x55 + x66)) / x24**2
-            results = [x26 * (x30 - x33 + x38 - x43 + x58),
+            results = [
+                x26 * (x30 - x33 + x38 - x43 + x58),
                 - x26 * (x48 * x70 + x59),
                 - x26 * (x28 * x45 + x31 * x71 - x50 * x72 - x50 * x73 + x54 + x57 * x74),
                 x26 * ( - x10 * x28 - x28 * x71 - x63 * x72 - x63 * x73 + x67 - x74 * x75),
@@ -678,11 +682,12 @@ class RotationMatchesXY(RotationMatches):
                 x0 * (x31 - x57 * x77),
                 x0 * (x28 + x70 * x77),
                 - x26 * x70,
-                - x26 * x57]
+                - x26 * x57
+            ]
             return np.column_stack((np.column_stack(results[i:(i + 2)]).ravel() for i in range(0, len(results), 2)))
         cam_in = self.cam_index(cam)
         cam_out = 0 if cam_in else 1
-        return _jacobian(
+        J = _jacobian(
             xyA0=self.xys[cam_out][:, 0], xyA1=self.xys[cam_out][:, 1],
             viewdirA0=self.cams[cam_out].viewdir[0],
             viewdirA1=self.cams[cam_out].viewdir[1],
@@ -690,6 +695,10 @@ class RotationMatchesXY(RotationMatches):
             viewdirB0=self.cams[cam_in].viewdir[0],
             viewdirB1=self.cams[cam_in].viewdir[1],
             viewdirB2=self.cams[cam_in].viewdir[2])
+        if cam_in:
+            return (J[:, 0:3], J[:, 3:6])
+        else:
+            return (J[:, 3:6], J[:, 0:3])
 
 class RotationMatchesXYZ(RotationMatches):
     """
@@ -963,7 +972,7 @@ class Cameras(object):
         """
         return np.array([control.size for control in self.controls]).sum()
 
-    def build_sparsity(self):
+    def _initialize_sparse_jacobian(self, dtype):
         # Number of parameters
         n_group = np.count_nonzero(self.group_mask)
         n_cams = [np.count_nonzero(mask) for mask in self.cam_masks]
@@ -972,17 +981,19 @@ class Cameras(object):
         m_control = [2 * control.size for control in self.controls]
         m = sum(m_control)
         # Initialize sparse matrix with zeros
-        S = scipy.sparse.lil_matrix((m, n), dtype=int)
+        S = scipy.sparse.lil_matrix((m, n), dtype=dtype)
+        ctrl_ends = np.cumsum([0] + m_control)
+        cam_ends = np.cumsum([0] + n_cams) + n_group
+        return S, n_group, cam_ends, ctrl_ends
+
+    def build_sparsity(self):
+        S, n_group, cam_ends, ctrl_ends = self._initialize_sparse_jacobian(dtype=int)
         # Group parameters
         S[:, 0:n_group] = 1
         # Camera parameters
-        ctrl_ends = np.cumsum([0] + m_control)
-        cam_ends = np.cumsum([0] + n_cams) + n_group
         for i, control in enumerate(self.controls):
-            ctrl_cams = getattr(control, 'cam', None)
-            if ctrl_cams is None:
-                ctrl_cams = getattr(control, 'cams')
-            if not isinstance(ctrl_cams, (tuple, list)):
+            ctrl_cams = getattr(control, 'cam', getattr(control, 'cams', None))
+            if not np.iterable(ctrl_cams):
                 ctrl_cams = (ctrl_cams, )
             for cam in ctrl_cams:
                 if cam in self.cams:

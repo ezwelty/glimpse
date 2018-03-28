@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
-    warnings, datetime, math)
+    warnings, datetime)
 from . import (helpers)
 
 # ---- Controls ----
@@ -385,20 +385,11 @@ class Matches(object):
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
-    def as_rotation_matches(self, rmtype='uv'):
+    def as_type(self, mtype):
         """
-        Return as a `RotationMatches` object.
-
-        Arguments:
-            rmtype (str): Type of RotationMatches object ('uv', 'xy', or 'xyz')
+        Return as a matches object of a different type.
         """
-        if rmtype == 'uv':
-            constructor = RotationMatches
-        elif rmtype == 'xy':
-            constructor = RotationMatchesXY
-        elif rmtype == 'xyz':
-            constructor = RotationMatchesXYZ
-        return constructor(cams=self.cams, uvs=self.uvs)
+        return mtype(cams=self.cams, uvs=self.uvs)
 
 class RotationMatches(Matches):
     """
@@ -475,28 +466,15 @@ class RotationMatches(Matches):
             (self.cams[0].vector[6:] == self.original_internals) &
             (self.cams[1].vector[6:] == self.original_internals)).all()
 
-    def as_matches(self):
+    def as_type(self, mtype):
         """
-        Return as a `Matches` object.
+        Return as a matches object of a different type.
         """
-        return Matches(cams=self.cams, uvs=self.uvs)
-
-    def as_type(self, rmtype='uv'):
-        """
-        Return as different `RotationMatches` type.
-
-        Arguments:
-            rmtype (str): Type of `RotationMatches` object ('uv', 'xy', or 'xyz')
-        """
-        uvs = getattr(self, 'uvs', None)
-        xys = getattr(self, 'xys', None)
-        if rmtype == 'uv':
-            constructor = RotationMatches
-        elif rmtype == 'xy':
-            constructor = RotationMatchesXY
-        elif rmtype == 'xyz':
-            constructor = RotationMatchesXYZ
-        return constructor(cams=self.cams, uvs=uvs, xys=xys)
+        if mtype is Matches:
+            uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
+            return mtype(cams=self.cams, uvs=uvs)
+        else:
+            return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys)
 
 class RotationMatchesXY(RotationMatches):
     """
@@ -564,13 +542,6 @@ class RotationMatchesXY(RotationMatches):
     def plot(self, *args, **kwargs):
         raise AttributeError('plot() not supported by RotationMatchesXY')
 
-    def as_matches(self):
-        """
-        Return as a `Matches` object.
-        """
-        uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
-        return Matches(cams=self.cams, uvs=uvs)
-
 class RotationMatchesXYZ(RotationMatches):
     """
     `RotationMatches3D` store image-image point correspondences for cameras seperated
@@ -629,13 +600,6 @@ class RotationMatchesXYZ(RotationMatches):
 
     def plot(self, *args, **kwargs):
         raise AttributeError('plot() not supported by RotationMatchesXY')
-
-    def as_matches(self):
-        """
-        Return as a `Matches` object.
-        """
-        uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
-        return Matches(cams=self.cams, uvs=uvs)
 
 # ---- Models ----
 
@@ -756,11 +720,11 @@ class Cameras(object):
 
     def __init__(self, cams, controls, cam_params=dict(viewdir=True), group_params=dict(), weights=None,
         scales=True, sparsity=True):
-        self.cams = cams if isinstance(cams, (list, tuple)) else [cams]
+        self.cams = cams if np.iterable(cams) else (cams, )
         self.vectors = [cam.vector.copy() for cam in self.cams]
-        controls = controls if isinstance(controls, (list, tuple)) else [controls]
+        controls = controls if np.iterable(controls) else (controls, )
         self.controls = prune_controls(self.cams, controls)
-        self.cam_params = cam_params if isinstance(cam_params, (list, tuple)) else [cam_params]
+        self.cam_params = (cam_params, ) if isinstance(cam_params, dict) else cam_params
         self.group_params = group_params
         test_cameras(self)
         temp = [parse_params(params) for params in self.cam_params]
@@ -783,7 +747,7 @@ class Cameras(object):
             self.scales = None
         if sparsity is True:
             self.sparsity = self.build_sparsity()
-        elif scales is not False:
+        elif sparsity is not False:
             self.sparsity = sparsity
         else:
             self.sparsity = None
@@ -1073,25 +1037,17 @@ class ObserverCameras(object):
     """
     `ObserverCameras` finds the optimal view directions of the cameras in an `Observer`.
 
-    Optimization proceeds in stages:
-
-        - Build (and save to file) keypoint descriptors for each image with `self.build_keypoints()`.
-        - Build (and save to file) keypoints matches between image pairs with `self.build_matches()`.
-        Matches are made between an image and all others falling within a certain distance in time.
-        - Solve for the optimal view directions of all the cameras with `self.fit()`.
-
-    Arguments:
-        template: Template for histogram matching (see `helpers.match_histogram()`).
-            If `None`, the first anchor image is used, converted to grayscale.
-
     Attributes:
-        observer (`glimpse.Observer`): Observer with the cameras to orient (images to align)
-        anchors (iterable): Integer indices of `observer.images` to use as anchors
-        template (tuple): Template histogram (values, quantiles) for histogram matching
-        matches (array): Grid of `Matches` objects (see `self.build_matches`)
+        observer (`glimpse.Observer`): Observer with the cameras to orient
+        anchors (iterable): Integer indices of `observer.images` to use as anchors.
+            If `None`, the first image is used.
+        matches (array): Grid of `RotationMatchesXYZ` objects.
+        matcher (KeypointsMatcher): KeypointsMatcher object used by
+            `self.build_keypoints()` and `self.build_matches()`
+        viewdirs (array): Original camera view directions
     """
 
-    def __init__(self, observer, anchors=None, template=None):
+    def __init__(self, observer, matches=None, anchors=None):
         self.observer = observer
         if anchors is None:
             is_anchor = [img.anchor for img in self.observer.images]
@@ -1100,13 +1056,10 @@ class ObserverCameras(object):
                 warnings.warn('No anchor image found, using first image as anchor')
                 anchors = (0, )
         self.anchors = anchors
-        if template is None:
-            template = self.read_image(self.observer.images[self.anchors[0]])
-        if isinstance(template, np.ndarray):
-            template = helpers.compute_cdf(template, return_inverse=False)
-        self.template = template
+        self.matches = matches
+        I = self.observer.images[self.anchors[0]].read()
+        self.matcher = KeypointMatcher(images=self.observer.images, template=I)
         # Placeholders
-        self.matches = None
         self.viewdirs = np.vstack([img.cam.viewdir.copy()
             for img in self.observer.images])
 
@@ -1117,105 +1070,12 @@ class ObserverCameras(object):
     def reset_cameras(self):
         self.set_cameras(viewdirs=self.viewdirs.copy())
 
-    def read_image(self, img):
-        """
-        Read image data preprocessed for keypoint detection and matching.
+    def build_keypoints(self, *args, **kwargs):
+        self.matcher.build_keypoints(*args, **kwargs)
 
-        Images are converted to grayscale,
-        then histogram matched to `self.template`.
-
-        Arguments:
-            img (`glimpse.Image`): Image object
-
-        Returns:
-            array: Preprocessed grayscale image (uint8)
-        """
-        I = img.read()
-        if I.ndim > 2:
-            I = helpers.rgb_to_gray(I, method='average', weights=None)
-        if hasattr(self, 'template') and self.template is not None:
-            I = helpers.match_histogram(I, template=self.template)
-        return I.astype(np.uint8)
-
-    def build_keypoints(self, masks=None, overwrite=False,
-        clear_images=True, clear_keypoints=False, **params):
-        """
-        Build image keypoints and their descriptors.
-
-        The result for each `Image` is stored in `Image.keypoints`
-        and written to a binary `pickle` file if `Image.keypoints_path` is set.
-
-        Arguments:
-            masks (list or array): Boolean array(s) (uint8) indicating regions in which to detect keypoints
-            overwrite (bool): Whether to recompute and overwrite existing keypoint files
-            clear_images (bool): Whether to clear cached image data (`self.observer.images[i].I`)
-            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`).
-                Ignored if `Image.keypoints_path` keypoints were not written to file.
-            **params: Additional arguments to `optimize.detect_keypoints()`
-        """
-        if masks is None or isinstance(masks, np.ndarray):
-            masks = (masks, ) * len(self.observer.images)
-        for img, mask in zip(self.observer.images, masks):
-            print(img.path)
-            if overwrite or img.read_keypoints() is None:
-                I = self.read_image(img)
-                img.keypoints = detect_keypoints(I, mask=mask, **params)
-                if img.keypoints_path:
-                    img.write_keypoints()
-                    if clear_keypoints:
-                        img.keypoints = None
-                if clear_images:
-                    img.I = None
-
-    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None, overwrite=False,
-        clear_keypoints=True, **params):
-        """
-        Build matches between each image and its nearest neighbors.
-
-        Results are stored in `self.matches` as an (n, n) array of augmented `Matches`,
-        and the result for each `Image` pair (i, j) optionally written to a binary `pickle`
-        file with name `basenames[i]-basenames[j].pkl`.
-
-        Arguments:
-            max_dt (`datetime.timedelta`): Maximum time seperation between
-                pairs of images to match
-            path (str): Directory for match files.
-                If `None`, no files are written.
-            overwrite (bool): Whether to recompute and overwrite existing match files
-            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
-            **params: Additional arguments to `optimize.match_keypoints()`
-        """
-        n = len(self.observer.images)
-        matches = np.full((n, n), None).astype(object)
-        if path:
-            basenames = [os.path.splitext(os.path.basename(img.path))[0]
-                for img in self.observer.images]
-            if len(basenames) != len(set(basenames)):
-                raise ValueError('Image basenames are not unique')
-        for i, imgA in enumerate(self.observer.images[:-1]):
-            if i > 0:
-                print('') # new line
-            print('Matching', i, '->', end=' ')
-            for j, imgB in enumerate(self.observer.images[(i + 1):], i + 1):
-                if (imgB.datetime - imgA.datetime) > max_dt:
-                    continue
-                print(j, end=' ')
-                if path:
-                    outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
-                if path and not overwrite and os.path.exists(outfile):
-                    match = helpers.read_pickle(outfile)
-                    # Point matches to existing Camera objects
-                    match.cams = (imgA.cam, imgB.cam)
-                    matches[i, j] = match
-                else:
-                    uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
-                    match = RotationMatchesXYZ(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
-                    matches[i, j] = match
-                    if path is not None:
-                        helpers.write_pickle(match, outfile)
-                if clear_keypoints:
-                    imgA.keypoints = None
-                    imgB.keypoints = None
+    def build_matches(self, *args, **kwargs):
+        matches = self.matcher.build_matches(*args, **kwargs)
+        self.matcher.convert_matches(matches, RotationMatchesXYZ, copy=False)
         self.matches = matches
 
     def fit(self, anchor_weight=1e6, method='bfgs', **params):
@@ -1345,12 +1205,12 @@ def ransac_sample(sample_size, data_size):
 
 # ---- Keypoints ----
 
-def detect_keypoints(I, mask=None, method='sift', root=True, **params):
+def detect_keypoints(array, mask=None, method='sift', root=True, **params):
     """
     Return keypoints and descriptors for an image.
 
     Arguments:
-        I (array): 2 or 3-dimensional image array (uint8)
+        array (array): 2 or 3-dimensional image array (uint8)
         mask (array): Regions in which to detect keypoints (uint8)
         root (bool): Whether to return square root L1-normalized descriptors.
             See https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf.
@@ -1373,7 +1233,7 @@ def detect_keypoints(I, mask=None, method='sift', root=True, **params):
         except AttributeError:
             # OpenCV 2
             detector = cv2.SURF(**params)
-    keypoints, descriptors = detector.detectAndCompute(I, mask=mask)
+    keypoints, descriptors = detector.detectAndCompute(array, mask=mask)
     # Empty result: ([], None)
     if root and descriptors is not None:
         descriptors *= 1 / (descriptors.sum(axis=1, keepdims=True) + 1e-7)
@@ -1413,6 +1273,158 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
         uvA = uvA[is_valid]
         uvB = uvB[is_valid]
     return uvA, uvB
+
+class KeypointMatcher(object):
+    """
+    `KeypointMatcher` detects and matches image keypoints.
+
+        - Build (and save to file) keypoint descriptors for each image with `self.build_keypoints()`.
+        - Build (and save to file) keypoints matches between image pairs with `self.build_matches()`.
+
+    Arguments:
+        template (array or tuple): Array or histogram to use for histogram matching
+
+    Attributes:
+        images (list): Image objects
+        template (tuple): Template histogram (values, quantiles) for histogram matching
+            (see `helpers.match_histogram()`)
+    """
+
+    def __init__(self, images, template=None):
+        self.images = images
+        self.template = None
+        if isinstance(template, np.ndarray):
+            template = self._prepare_image(template)
+            template = helpers.compute_cdf(template, return_inverse=False)
+        if isinstance(template, tuple):
+            self.template = template
+
+    def _prepare_image(self, I):
+        """
+        Prepare image data for keypoint detection.
+        """
+        if I.ndim > 2:
+            I = helpers.rgb_to_gray(I, method='average', weights=None)
+        if self.template is not None:
+            I = helpers.match_histogram(I, template=self.template)
+        return I.astype(np.uint8)
+
+    def _build_image_keypoints(self, img, mask=None, overwrite=False,
+        clear_images=True, clear_keypoints=False, **params):
+        """
+        Build keypoints for a single image.
+        """
+        print(img.path)
+        if overwrite or img.read_keypoints() is None:
+            I = self._prepare_image(img.read())
+            img.keypoints = detect_keypoints(I, mask=mask, **params)
+            if img.keypoints_path:
+                img.write_keypoints()
+                if clear_keypoints:
+                    img.keypoints = None
+            if clear_images:
+                img.I = None
+
+    def build_keypoints(self, mask=None, overwrite=False,
+        clear_images=True, clear_keypoints=False, **params):
+        """
+        Build image keypoints and their descriptors.
+
+        The result for each `Image` is stored in `Image.keypoints`
+        and written to a binary `pickle` file if `Image.keypoints_path` is set.
+
+        Arguments:
+            mask (array): Boolean array(s) (uint8) indicating regions in which to detect keypoints
+            overwrite (bool): Whether to recompute and overwrite existing keypoints
+            clear_images (bool): Whether to clear cached image data (`self.observer.images[i].I`)
+            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`).
+                Ignored if `Image.keypoints_path` is `None`.
+            **params: Additional arguments to `optimize.detect_keypoints()`
+        """
+        for img in self.images:
+            self._build_image_keypoints(img, mask=mask, overwrite=overwrite,
+                clear_images=clear_images, clear_keypoints=clear_keypoints, **params)
+
+    def _build_image_matches(self, img, mask=None, overwrite=False,
+        clear_images=True, clear_keypoints=False, **params):
+        """
+        Build matches for a single starting image.
+        """
+        print(img.path)
+        if overwrite or img.read_keypoints() is None:
+            I = self._prepare_image(img.read())
+            img.keypoints = detect_keypoints(I, mask=mask, **params)
+            if img.keypoints_path:
+                img.write_keypoints()
+                if clear_keypoints:
+                    img.keypoints = None
+            if clear_images:
+                img.I = None
+
+    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None,
+        overwrite=False, clear_keypoints=True, **params):
+        """
+        Build matches between each image and its nearest neighbors.
+
+        Results are stored in `self.matches` as an (n, n) upper-triangular array of `Matches`,
+        and the result for each `Image` pair (i, j) optionally written to a binary `pickle`
+        file with name `basenames[i]-basenames[j].pkl`.
+
+        Arguments:
+            max_dt (`datetime.timedelta`): Maximum time seperation between
+                pairs of images to match
+            path (str): Directory for match files.
+                If `None`, no files are written.
+            overwrite (bool): Whether to recompute and overwrite existing match files
+            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
+            **params: Additional arguments to `optimize.match_keypoints()`
+        """
+        n = len(self.images)
+        matches = np.full((n, n), None).astype(object)
+        if path:
+            basenames = [os.path.splitext(os.path.basename(img.path))[0]
+                for img in self.images]
+            if len(basenames) != len(set(basenames)):
+                raise ValueError('Image basenames are not unique')
+        for i, imgA in enumerate(self.images[:-1]):
+            if i > 0:
+                print('') # new line
+            print('Matching', i, '->', end=' ')
+            for j, imgB in enumerate(self.images[(i + 1):], i + 1):
+                dt = imgB.datetime - imgA.datetime
+                if max_dt is not None and abs(dt) > max_dt:
+                    continue
+                print(j, end=' ')
+                if path:
+                    outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
+                if path and not overwrite and os.path.exists(outfile):
+                    match = helpers.read_pickle(outfile)
+                    # Point matches to existing Camera objects
+                    match.cams = (imgA.cam, imgB.cam)
+                    matches[i, j] = match
+                else:
+                    uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
+                    match = Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
+                    matches[i, j] = match
+                    if path is not None:
+                        helpers.write_pickle(match, outfile)
+                if clear_keypoints:
+                    imgA.keypoints = None
+                    imgB.keypoints = None
+        return matches
+
+    @staticmethod
+    def convert_matches(matches, mtype, copy=False):
+        if copy:
+            new = np.full(matches.shape, None)
+        else:
+            new = matches
+        rows, cols = np.nonzero(matches)
+        for i, j in zip(rows, cols):
+            m = matches[i, j]
+            new[i, j] = m.as_type(mtype)
+        if copy:
+            return new
 
 # ---- Helpers ----
 

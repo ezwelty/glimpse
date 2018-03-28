@@ -1142,11 +1142,11 @@ class ObserverCameras(object):
         for i, imgA in enumerate(self.observer.images[:-1]):
             if i > 0:
                 print('') # new line
-            print('Matching', i, '->', end='')
+            print('Matching', i, '->', end=' ')
             for j, imgB in enumerate(self.observer.images[(i + 1):], i + 1):
                 if (imgB.datetime - imgA.datetime) > max_dt:
                     continue
-                print(j, end='')
+                print(j, end=' ')
                 if path:
                     outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
                 if path and not overwrite and os.path.exists(outfile):

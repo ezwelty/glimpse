@@ -17,6 +17,7 @@ import gzip
 import json
 import lmfit
 import lxml.etree
+import math
 import matplotlib
 import matplotlib.animation
 import numpy as np

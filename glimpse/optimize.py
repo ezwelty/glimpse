@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
-    warnings, datetime)
+    warnings, datetime, math)
 from . import (helpers)
 
 # ---- Controls ----
@@ -291,8 +291,9 @@ class Matches(object):
     def _test_matches(self):
         if self.cams[0] is self.cams[1]:
             raise ValueError('Both cameras are the same object')
-        # RotationMatchesXY(Z) do not store self.uvs
-        uvs = getattr(self, 'uvs', getattr(self, 'xys', None))
+        uvs = self.uvs
+        if uvs is None:
+            uvs = getattr(self, 'xys', None)
         if len(self.cams) != 2 or len(uvs) != 2:
             raise ValueError('`cams` and coordinate arrays must each have two elements')
         if uvs[0].shape != uvs[1].shape:
@@ -570,6 +571,125 @@ class RotationMatchesXY(RotationMatches):
         """
         uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
         return Matches(cams=self.cams, uvs=uvs)
+
+    def jacobian(self, cam=0):
+        """
+        Return the Jacobian matrix for the projection of camera coordinates
+        between cameras.
+
+        Function returns gradients by column for parameters:
+        viewdirA0, viewdirA1, viewdirA2, viewdirB0, viewdirB1, viewdirB2
+        and by row for observations:
+        x0, y0, x1, y1, ...
+
+        Arguments:
+            cam (Camera or int): Camera to project points into
+        """
+        def _jacobian(xyA0, xyA1,
+            viewdirA0, viewdirA1, viewdirA2,
+            viewdirB0, viewdirB1, viewdirB2):
+            # Projection out camera A and in camera B
+            x0 = math.pi / 180
+            x1 = viewdirA1 * x0
+            x2 = math.sin(x1)
+            x3 = viewdirB1 * x0
+            x4 = math.sin(x3)
+            x5 = x2 * x4
+            x6 = math.pi * (viewdirA0 / 180 - viewdirB0 / 180)
+            x7 = math.cos(x6)
+            x8 = math.cos(x1)
+            x9 = math.cos(x3)
+            x10 = x8 * x9
+            x11 = x10 * x7 + x5
+            x12 = viewdirA2 * x0
+            x13 = math.cos(x12)
+            x14 = x4 * x8
+            x15 = math.sin(x12)
+            x16 = math.sin(x6)
+            x17 = x15 * x16
+            x18 = x2 * x9
+            x19 = x13 * x7
+            x20 = - x13 * x14 + x17 * x9 + x18 * x19
+            x21 = x13 * x16
+            x22 = x15 * x7
+            x23 = x14 * x15 - x18 * x22 + x21 * x9
+            x24 = x11 + x20 * xyA1 - x23 * xyA0
+            x25 = 1 / x24
+            x26 = math.pi * x25 / 180
+            x27 = viewdirB2 * x0
+            x28 = math.cos(x27)
+            x29 = x7 * x8
+            x30 = x28 * x29
+            x31 = math.sin(x27)
+            x32 = x16 * x4 * x8
+            x33 = x31 * x32
+            x34 = x17 * x28
+            x35 = x19 * x28
+            x36 = x22 * x31
+            x37 = x21 * x31
+            x38 = xyA1 * (x2 * x35 + x34 + x36 * x4 - x37 * x5)
+            x39 = x21 * x28
+            x40 = x19 * x31
+            x41 = x22 * x28
+            x42 = x17 * x31
+            x43 = xyA0 * ( - x2 * x41 + x39 + x4 * x40 + x42 * x5)
+            x44 = x16 * x8
+            x45 = x16 * x2
+            x46 = x15 * x45
+            x47 = x13 * x45
+            x48 = x25 * x9 * (x44 + xyA0 * (x19 + x46) + xyA1 * ( - x22 + x47))
+            x49 = x14 * x7
+            x50 = - x18 * x31 + x28 * x44 + x31 * x49
+            x51 = x10 * x15
+            x52 = x21 * x4
+            x53 = x28 * x46 + x31 * x51 - x31 * x52 + x35 + x36 * x5
+            x54 = x10 * x31
+            x55 = x17 * x4
+            x56 = x13 * x54 + x28 * x47 + x31 * x55 + x40 * x5 - x41
+            x57 = x50 + x53 * xyA0 + x56 * xyA1
+            x58 = x48 * x57
+            x59 = x28 * x32 + x29 * x31 + xyA0 * (x2 * x36 + x34 * x5 + x35 * x4 - x37) + xyA1 * (x2 * x40 + x39 * x5 - x4 * x41 + x42)
+            x60 = x18 * x28
+            x61 = x31 * x44
+            x62 = x28 * x49
+            x63 = x60 + x61 - x62
+            x64 = - x28 * x51 + x28 * x52 + x31 * x46 + x40 - x41 * x5
+            x65 = x64 * xyA0
+            x66 = x10 * x13
+            x67 = x31 * x45
+            x68 = - x13 * x67 + x28 * x55 + x28 * x66 + x35 * x5 + x36
+            x69 = x68 * xyA1
+            x70 = x63 + x65 - x69
+            x71 = x2 * x4 * x7
+            x72 = x15 * xyA0
+            x73 = x13 * xyA1
+            x74 = x25 * (x11 * x72 + x11 * x73 + x14 - x18 * x7)
+            x75 = - x60 - x61 + x62 - x65 + x69
+            x76 = x25 * (x20 * xyA0 + x23 * xyA1)
+            x77 = (x18 - x49 - xyA0 * (x22 * x5 + x51 - x52) - xyA1 * (x19 * x5 + x55 + x66)) / x24**2
+            results = [x26 * (x30 - x33 + x38 - x43 + x58),
+                - x26 * (x48 * x70 + x59),
+                - x26 * (x28 * x45 + x31 * x71 - x50 * x72 - x50 * x73 + x54 + x57 * x74),
+                x26 * ( - x10 * x28 - x28 * x71 - x63 * x72 - x63 * x73 + x67 - x74 * x75),
+                x26 * ( - x53 * xyA1 + x56 * xyA0 - x57 * x76),
+                x26 * (x64 * xyA1 + x68 * xyA0 - x75 * x76),
+                x26 * ( - x30 + x33 - x38 + x43 - x58),
+                x26 * ( - x48 * x75 + x59),
+                x0 * (x31 - x57 * x77),
+                x0 * (x28 + x70 * x77),
+                - x26 * x70,
+                - x26 * x57]
+            return np.column_stack((np.column_stack(results[i:(i + 2)]).ravel() for i in range(0, len(results), 2)))
+        cam_in = self.cam_index(cam)
+        cam_out = 0 if cam_in else 1
+        return _jacobian(
+            xyA0=self.xys[cam_out][:, 0], xyA1=self.xys[cam_out][:, 1],
+            viewdirA0=self.cams[cam_out].viewdir[0],
+            viewdirA1=self.cams[cam_out].viewdir[1],
+            viewdirA2=self.cams[cam_out].viewdir[2],
+            viewdirB0=self.cams[cam_in].viewdir[0],
+            viewdirB1=self.cams[cam_in].viewdir[1],
+            viewdirB2=self.cams[cam_in].viewdir[2])
 
 class RotationMatchesXYZ(RotationMatches):
     """

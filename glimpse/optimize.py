@@ -117,9 +117,9 @@ class Lines(object):
 
     Attributes:
         cam (Camera): Camera object
-        uvs (array or list): Arrays of image line vertices (Nx2)
+        uvs (array or iterable): Arrays of image line vertices (Nx2)
         uvi (array): Image coordinates interpolated from `uvs` by `step`
-        xyzs (array or list): Arrays of world line vertices (Nx3)
+        xyzs (array or iterable): Arrays of world line vertices (Nx3)
         directions (bool): Whether `xyzs` are absolute coordinates (False) or ray directions (True)
         correction (dict or bool): See `cam.project()`
         step (float): Along-line distance between image points interpolated from lines `uvs`
@@ -130,13 +130,13 @@ class Lines(object):
     def __init__(self, cam, uvs, xyzs, directions=False, correction=False, step=None):
         self.cam = cam
         # Retain image lines for plotting
-        self.uvs = uvs if isinstance(uvs, list) else [uvs]
+        self.uvs = (uvs, ) if isinstance(uvs, np.ndarray) else uvs
         self.step = step
         if step:
             self.uvi = np.vstack((interpolate_line(uv, step=step, normalized=False) for uv in self.uvs))
         else:
             self.uvi = np.vstack(self.uvs)
-        self.xyzs = xyzs if isinstance(xyzs, list) else [xyzs]
+        self.xyzs = (xyzs, ) if isinstance(xyzs, np.ndarray) else xyzs
         self.directions = directions
         self.correction = correction
         self.original_cam_xyz = cam.xyz.copy()

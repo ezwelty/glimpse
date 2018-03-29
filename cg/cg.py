@@ -33,9 +33,17 @@ def Sequences():
         datetime.datetime.replace, microsecond=0)
     return df
 
-def parse_image_path(path):
+def split_image_path(path):
     basename = os.path.splitext(os.path.basename(path))[0]
     station, date_str, time_str = re.findall('^([^_]+)_([0-9]{8})_([0-9]{6})', basename)[0]
+    return basename, station, date_str, time_str
+
+def parse_image_path_datetime(path):
+    date_str, time_str = split_image_path(path)[2:4]
+    return datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
+
+def parse_image_path(path):
+    basename, station, date_str, time_str = split_image_path(path)
     capture_time = datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
     sequences = Sequences()
     is_row = ((sequences.station == station) &

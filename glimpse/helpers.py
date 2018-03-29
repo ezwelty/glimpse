@@ -851,17 +851,6 @@ def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
     # Compute weights as inverse sum of kernel distances
     return 1 / np.sum(temp, axis=1)
 
-# TODO: Deprecate?
-def nearest_neighbours(x, lst):
-    if x <= lst[0]:
-        return 0
-    elif x >= lst[-1]:
-        return len(lst)-1
-    else:
-        for i, y in enumerate(lst[:-1]):
-            if y <= x <= lst[i+1]:
-                return i, i+1
-
 def intersect_ranges(ranges):
     # ranges: ((min, max), ...) or 2-d array
     if not isinstance(ranges, np.ndarray):

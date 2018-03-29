@@ -133,7 +133,7 @@ class Lines(object):
         self.uvs = (uvs, ) if isinstance(uvs, np.ndarray) else uvs
         self.step = step
         if step:
-            self.uvi = np.vstack((interpolate_line(uv, step=step, normalized=False) for uv in self.uvs))
+            self.uvi = np.vstack((helpers.interpolate_line(uv, step=step, normalized=False) for uv in self.uvs))
         else:
             self.uvi = np.vstack(self.uvs)
         self.xyzs = (xyzs, ) if isinstance(xyzs, np.ndarray) else xyzs
@@ -182,7 +182,7 @@ class Lines(object):
                 for cline in helpers.clip_polyline_box(line, xy_box):
                     # Interpolate clipped lines to ~1 pixel density
                     puvs.append(self.cam._camera2image(
-                        interpolate_line(np.array(cline), step=xy_step, normalized=False)))
+                        helpers.interpolate_line(np.array(cline), step=xy_step, normalized=False)))
         if puvs:
             return puvs
         else:
@@ -202,7 +202,7 @@ class Lines(object):
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        min_index = find_nearest_neighbors(self.observed(), puv)
+        min_index = helpers.find_nearest_neighbors(self.observed(), puv)
         return puv[min_index, :]
 
     def is_static(self):
@@ -253,7 +253,7 @@ class Lines(object):
             if not predicted:
                 puvs = self.project()
             puv = np.row_stack(puvs)
-            min_index = find_nearest_neighbors(uv, puv)
+            min_index = helpers.find_nearest_neighbors(uv, puv)
             duv = scale * (puv[min_index, :] - uv)
             defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
             if unselected is not None:
@@ -1427,48 +1427,6 @@ class KeypointMatcher(object):
             return new
 
 # ---- Helpers ----
-
-def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):
-    """
-    Return points at the specified distances along an N-dimensional line.
-
-    Arguments:
-        vertices (array): Coordinates of vertices (NxD)
-        num (int): Number of evenly-spaced points to return
-        step (float): Target distance between evenly-spaced points (ignored if `num` is not None)
-        distances (array): Distance of points along line (ignored if either `num` or `step` are not None)
-        normalized (bool): Whether `step` or `distances` represent a fraction of the line's todal length
-    """
-    # Compute cumulative length at each vertex
-    d = np.insert(
-            np.cumsum(
-                np.sqrt(
-                    np.sum(np.diff(vertices, axis=0) ** 2, axis=1))),
-            0, 0)
-    if normalized:
-        d /= d[-1]
-    # Prepare distances
-    if distances is None:
-        if num is None:
-            num = np.round(d[-1] / step)
-        distances = np.linspace(start=0, stop=d[-1], num=num, endpoint=True)
-    # Interpolate each dimension and combine
-    return np.column_stack(
-        (np.interp(distances, d, vertices[:, i]) for i in range(vertices.shape[1])))
-
-def find_nearest_neighbors(A, B):
-    """
-    Find the nearest neighbors between two sets of points.
-
-    Arguments:
-        A (array): First set of points (NxD)
-        B (array): Second set of points (MxD)
-
-    Returns:
-        array: Indices of the nearest neighbors of `A` in `B`
-    """
-    D = scipy.spatial.distance.cdist(A, B, metric='sqeuclidean')
-    return np.argmin(D, axis=1)
 
 def prune_controls(cams, controls):
     """

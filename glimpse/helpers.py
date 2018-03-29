@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copyreg, os, re)
+    sklearn, cv2, copyreg, os, re, datetime)
 
 # ---- General ---- #
 
@@ -887,6 +887,55 @@ def intersect_boxes(boxes):
     else:
         return np.hstack((boxmin, boxmax))
 
+def find_nearest_neighbors(x, y, metric='sqeuclidean', **params):
+    """
+    Find the nearest neighbors between two sets of points.
+
+    Arguments:
+        x (array-like): First set of points, either 1-d (mx, ) or 2-d (mx, n)
+        y (array-like): Second set of points, either 1-d (my, ) or 2-d (my, n)
+
+    Returns:
+        array: Indices of the nearest neighbors of `x` in `y`
+    """
+    if not isinstance(x, np.ndarray):
+        x = np.array(x)
+    if not isinstance(y, np.ndarray):
+        y = np.array(y)
+    distances = scipy.spatial.distance.cdist(
+        x if x.ndim > 1 else x.reshape(-1, 1),
+        y if y.ndim > 1 else y.reshape(-1, 1),
+        metric=metric, **params)
+    return np.argmin(distances, axis=1)
+
+def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):
+    """
+    Return points at the specified distances along an N-dimensional line.
+
+    Arguments:
+        vertices (array): Coordinates of vertices (NxD)
+        num (int): Number of evenly-spaced points to return
+        step (float): Target distance between evenly-spaced points (ignored if `num` is not None)
+        distances (array): Distance of points along line (ignored if either `num` or `step` are not None)
+        normalized (bool): Whether `step` or `distances` represent a fraction of the line's todal length
+    """
+    # Compute cumulative length at each vertex
+    d = np.insert(
+            np.cumsum(
+                np.sqrt(
+                    np.sum(np.diff(vertices, axis=0) ** 2, axis=1))),
+            0, 0)
+    if normalized:
+        d /= d[-1]
+    # Prepare distances
+    if distances is None:
+        if num is None:
+            num = np.round(d[-1] / step)
+        distances = np.linspace(start=0, stop=d[-1], num=num, endpoint=True)
+    # Interpolate each dimension and combine
+    return np.column_stack(
+        (np.interp(distances, d, vertices[:, i]) for i in range(vertices.shape[1])))
+
 # ---- Image formation ---- #
 
 def rasterize_points(rows, cols, values, shape, fun=np.mean):
@@ -952,7 +1001,7 @@ def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_r
         origin (iterable): World coordinates of origin (x, y, (z))
         xyz (array): World coordinates of target points (n, 2+)
         squared_distances (iterable): Squared Euclidean distances
-            between `origin` and `xyz`. Takes precedent if not `None`.
+            between `origin` and `xyz`. Takes precedence if not `None`.
         earth_radius (float): Radius of the earth in the same units as `xyz`.
             Default is the equatorial radius in meters.
         refraction (float): Coefficient of refraction of light.
@@ -964,3 +1013,19 @@ def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_r
     if squared_distances is None:
         squared_distances = np.sum((xyz[:, 0:2] - origin[0:2])**2, axis=1)
     return (refraction - 1) * squared_distances / (2 * earth_radius)
+
+# ---- Time ----
+
+def find_nearest_datetimes(x, y):
+    """
+    Datetime wrapper for `find_nearest_neighbors()`.
+    """
+    try:
+        x = [xi.timestamp() for xi in x]
+        y = [yi.timestamp() for yi in y]
+    except AttributeError:
+        # Python 2
+        epoch = datetime.datetime.fromtimestamp(0)
+        x = [(xi - epoch).total_seconds() for xi in x]
+        y = [(yi - epoch).total_seconds() for yi in y]
+    return find_nearest_neighbors(x, y, metric='minkowski', p=1)

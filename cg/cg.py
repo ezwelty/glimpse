@@ -83,6 +83,13 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         selected &= datetimes >= start
     if end:
         selected &= datetimes <= end
+    if step:
+        targets = datetime_range(
+            start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
+        indices = glimpse.helpers.find_nearest_datetimes(targets, datetimes)
+        temp = np.zeros(selected.shape, dtype=bool)
+        temp[indices] = True
+        selected &= temp
     camera = parse_image_path(img_paths[0])['camera']
     base_calibration = load_calibration(station=station, camera=camera)
     anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
@@ -316,3 +323,7 @@ def project_dem(cam, dem, array=None, mask=None, correction=True):
     if array is None:
         array = dem.Z
     return cam.rasterize(uv, array[mask])
+
+def datetime_range(start, stop, step):
+    max_steps = (stop - start) // step
+    return [start + n * step for n in range(max_steps + 1)]

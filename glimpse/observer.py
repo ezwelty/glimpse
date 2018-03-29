@@ -23,13 +23,7 @@ class Observer(object):
 
     def __init__(self, images, sigma=0.3, correction=True, cache=True):
         self.xyz = images[0].cam.xyz
-        for img in images[1:]:
-            if any(img.cam.xyz != self.xyz):
-                raise ValueError('Positions (xyz) are not equal')
-            if any(img.cam.f != images[0].cam.f):
-                raise ValueError('Focal lengths (f) are not equal')
-            if any(img.cam.imgsz != images[0].cam.imgsz):
-                raise ValueError('Image sizes (imgsz) are not equal')
+        self.test_images(images)
         self.images = images
         self.datetimes = np.array([img.datetime for img in self.images])
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
@@ -40,6 +34,16 @@ class Observer(object):
         self.cache = cache
         n = self.images[0].cam.imgsz
         self.grid = dem.Grid(n=n, xlim=(0, n[0]), ylim=(0, n[1]))
+
+    @staticmethod
+    def test_images(images):
+        for img in images[1:]:
+            if any(img.cam.xyz != images[0].cam.xyz):
+                raise ValueError('Positions (xyz) are not equal')
+            if any(img.cam.f != images[0].cam.f):
+                raise ValueError('Focal lengths (f) are not equal')
+            if any(img.cam.imgsz != images[0].cam.imgsz):
+                raise ValueError('Image sizes (imgsz) are not equal')
 
     def index(self, value, max_seconds=1):
         """
@@ -236,7 +240,7 @@ class Observer(object):
         for img in np.array(self.images)[index]:
             img.I = None
 
-    def animate(self, uv, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
+    def animate(self, uv=None, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
         """
         Animate image tiles centered around a target point.
 
@@ -251,7 +255,7 @@ class Observer(object):
 
         Arguments:
             uv (iterable): Image coordinate (u, v) of the center of the tile in
-                in the first image (`frames[0]`)
+                in the first image (`frames[0]`). If `None`, the image center is used.
             frames (iterable): Integer indices of the images to include
             size (iterable): Size of the image tiles to plot
             interval (number): Delay between frames in milliseconds
@@ -261,6 +265,8 @@ class Observer(object):
         Returns:
             `matplotlib.animation.FuncAnimation`
         """
+        if uv is None:
+            uv = self.images[0].cam.imgsz / 2
         if frames is None:
             frames = range(len(self.images))
         dxyz = self.images[frames[0]].cam.invproject(np.atleast_2d(uv))

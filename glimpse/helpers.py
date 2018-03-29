@@ -968,11 +968,9 @@ def compute_mask_array_from_svg(path_to_svg, array_shape, skip=[]):
             mask+=inside.reshape(mask.shape)
     return mask.astype('uint8')
 
-def mask(imgsz, polygons, inverse=False):
+def polygons_to_mask(polygons, imgsz, inverse=False):
     im_mask = PIL.Image.new(mode='1', size=tuple(np.array(imgsz).astype(int)))
     draw = PIL.ImageDraw.ImageDraw(im_mask)
-    if isinstance(polygons, dict):
-        polygons = polygons.values()
     for polygon in polygons:
         if isinstance(polygon, np.ndarray):
             polygon = [tuple(row) for row in polygon]

@@ -33,33 +33,27 @@ def Sequences():
         datetime.datetime.replace, microsecond=0)
     return df
 
-def split_image_path(path):
+def parse_image_path(path, sequence=False):
     basename = os.path.splitext(os.path.basename(path))[0]
     station, date_str, time_str = re.findall('^([^_]+)_([0-9]{8})_([0-9]{6})', basename)[0]
-    return basename, station, date_str, time_str
-
-def parse_image_path_datetime(path):
-    date_str, time_str = split_image_path(path)[2:4]
-    return datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
-
-def parse_image_path(path):
-    basename, station, date_str, time_str = split_image_path(path)
     capture_time = datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
-    sequences = Sequences()
-    is_row = ((sequences.station == station) &
-        (sequences.first_time_utc <= capture_time) &
-        (sequences.last_time_utc >= capture_time))
-    rows = np.where(is_row)[0]
-    if len(rows) != 1:
-        raise ValueError('Image path has zero or multiple sequence matches: ' + path)
-    # NOTE: All strings expected to be type str (i.e. default '')
-    return dict(
-        station=station, service=sequences.service.iloc[rows[0]],
-        camera=sequences.camera.iloc[rows[0]], basename=basename,
-        datetime=capture_time, date_str=date_str.encode(), time_str=time_str.encode())
+    results = dict(basename=basename, station=station,
+        date_str=date_str, time_str=time_str, datetime=capture_time)
+    if sequence:
+        sequences = Sequences()
+        is_row = ((sequences.station == station) &
+            (sequences.first_time_utc <= capture_time) &
+            (sequences.last_time_utc >= capture_time))
+        rows = np.where(is_row)[0]
+        if len(rows) != 1:
+            raise ValueError(
+                'Image path has zero or multiple sequence matches: ' + path)
+        results = glimpse.helpers.merge_dicts(
+            sequences.loc[rows[0]].to_dict(), results)
+    return results
 
 def find_image(path):
-    ids = parse_image_path(path)
+    ids = parse_image_path(path, sequence=True)
     service_dir = os.path.join(IMAGE_PATH, ids['station'],
         ids['station'] + '_' + ids['service'])
     filename = ids['basename'] + '.JPG'
@@ -76,7 +70,7 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         exifs = [glimpse.Exif(path) for path in img_paths]
         datetimes = np.array([exif.datetime for exif in exifs])
     else:
-        datetimes = np.array([parse_image_path_datetime(path)
+        datetimes = np.array([parse_image_path(path)['datetime']
             for path in img_paths])
     selected = np.ones(datetimes.shape, dtype=bool)
     if start:
@@ -90,7 +84,7 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         temp = np.zeros(selected.shape, dtype=bool)
         temp[indices] = True
         selected &= temp
-    camera = parse_image_path(img_paths[0])['camera']
+    camera = parse_image_path(img_paths[0], sequence=True)['camera']
     base_calibration = load_calibration(station=station, camera=camera)
     anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
     anchor_basenames = [os.path.splitext(os.path.basename(path))[0]
@@ -112,6 +106,33 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
             keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
         images.append(image)
     return images
+
+def load_masks(images):
+    glimpse.Observer.test_images(images)
+    # NOTE: Assumes that all images are from same station
+    station = parse_image_path(images[0].path)['station']
+    imgsz = images[0].cam.imgsz
+    # Find all svg files for station with 'land' markup
+    svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '_*.svg'))
+    markups = [glimpse.svg.parse_svg(path, imgsz=imgsz)
+        for path in svg_paths]
+    land_index = np.where(['land' in markup for markup in markups])[0]
+    # Select svg files nearest to images
+    svg_datetimes = [parse_image_path(path)['datetime']
+        for path in np.array(svg_paths)[land_index]]
+    img_datetimes = [img.datetime for img in images]
+    nearest_index = glimpse.helpers.find_nearest_datetimes(
+        img_datetimes, svg_datetimes)
+    nearest = np.unique(nearest_index)
+    # Make masks and expand per image without copying
+    land_markups = np.array(markups)[land_index]
+    masks = np.ones(len(images), dtype=object)
+    for i in nearest:
+        polygons = land_markups[i]['land'].values()
+        mask = glimpse.helpers.polygons_to_mask(polygons, imgsz=imgsz)
+        for j in np.where(nearest_index == i)[0]:
+            masks[j] = mask
+    return masks
 
 # ---- Calibration controls ----
 
@@ -225,7 +246,7 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
     svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', '*.svg'))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
-        ids = parse_image_path(svg_path)
+        ids = parse_image_path(svg_path, sequence=True)
         if ids['camera'] == camera:
             calibration = load_calibration(svg_path, camera=camera_calib,
                 station=station_calib, station_estimate=not station_calib)
@@ -243,7 +264,7 @@ def camera_motion_matches(camera, size=1, force_size=False,
     station_calib=False, camera_calib=False, detect=dict(), match=dict()):
     motion = glimpse.helpers.read_json(os.path.join(CG_PATH, 'motion.json'))
     sequences = [item['paths'] for item in motion
-        if parse_image_path(item['paths'][0])['camera'] == camera]
+        if parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
     images, matches, cam_params = [], [], []
     for sequence in sequences:
         sys.stdout.write('.')
@@ -275,7 +296,7 @@ def load_calibration(path=None, station=False, camera=False, image=False,
     station_estimate=False, **kwargs):
     calibration = dict()
     if path:
-        ids = parse_image_path(path)
+        ids = parse_image_path(path, sequence=(camera is True))
         if station is True or (station is False and station_estimate is True):
             station = ids['station']
         if camera is True:

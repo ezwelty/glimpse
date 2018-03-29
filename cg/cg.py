@@ -1,8 +1,10 @@
+from __future__ import (print_function, division, unicode_literals)
 import os
 CG_PATH = os.path.dirname(os.path.abspath(__file__))
 import sys
 sys.path.insert(0, os.path.join(CG_PATH, '..'))
 import glimpse
+from glimpse.backports import *
 from glimpse.imports import (np, pandas, re, datetime)
 import glob
 import requests
@@ -14,11 +16,10 @@ except ImportError:
 
 # ---- Environment variables ---
 
-print('cg: Remember to set IMAGE_PATH')
-# print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and/or MATCH_PATH')
+print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and MATCH_PATH')
 IMAGE_PATH = None
-# KEYPOINT_PATH = None
-# MATCH_PATH = None
+KEYPOINT_PATH = None
+MATCH_PATH = None
 
 # ---- Images ----
 
@@ -45,8 +46,8 @@ def parse_image_path(path):
         raise ValueError('Image path has zero or multiple sequence matches: ' + path)
     # NOTE: All strings expected to be type str (i.e. default '')
     return dict(
-        station=station.encode(), service=sequences.service.iloc[rows[0]],
-        camera=sequences.camera.iloc[rows[0]], basename=basename.encode(),
+        station=station, service=sequences.service.iloc[rows[0]],
+        camera=sequences.camera.iloc[rows[0]], basename=basename,
         datetime=capture_time, date_str=date_str.encode(), time_str=time_str.encode())
 
 def find_image(path):
@@ -92,7 +93,7 @@ def gcp_points(img, markup, correction=True):
     return glimpse.optimize.Points(img.cam, uv, xyz, correction=correction)
 
 def coast_lines(img, markup, correction=True):
-    luv = markup.values()
+    luv = tuple(markup.values())
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'coast.geojson'), crs=32606)
     lxy = [feature['geometry']['coordinates'] for feature in geo['features']]
@@ -100,7 +101,7 @@ def coast_lines(img, markup, correction=True):
     return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
 def terminus_lines(img, markup, correction=True):
-    luv = markup.values()
+    luv = tuple(markup.values())
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'termini.geojson'), key='date', crs=32606)
     date_str = img.datetime.strftime('%Y-%m-%d')
@@ -109,7 +110,7 @@ def terminus_lines(img, markup, correction=True):
     return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction)
 
 def horizon_lines(img, markup, correction=True):
-    luv = markup.values()
+    luv = tuple(markup.values())
     station = parse_image_path(img.path)['station']
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'horizons', station + '.geojson'), crs=32606)
@@ -122,7 +123,7 @@ def moraines_mlines(img, markup, correction=True):
         os.path.join(CG_PATH, 'geojson', 'moraines', date_str + '.geojson'), key='id', crs=32606)
     mlines = []
     for key, moraine in markup.items():
-        luv = moraine.values()
+        luv = tuple(moraine.values())
         xyz = geo['features'][key]['geometry']['coordinates']
         mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction))
     return mlines

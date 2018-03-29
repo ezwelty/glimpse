@@ -1017,10 +1017,11 @@ class Image(object):
 
     Attributes:
         path (str): Path to the image file
-        exif (Exif): Image metadata object
+        exif (Exif): Image metadata object.
+            Unless specified, it is read from `path`.
         datetime (datetime): Capture date and time.
-            Unless specified, it is read from the metadata.
-        cam (Camera): Camera object
+            Unless specified, it is read from `exif`.
+        cam (Camera): Camera object.
         anchor (bool): Whether the camera parameters, especially view direction,
             are known absolutely. "Anchor" images are used as a reference for
             optimizing other images whose camera parameters are not known absolutely.
@@ -1028,9 +1029,11 @@ class Image(object):
             to a `pickle` file. Unless specified, defaults to `path` with a '.pkl' extension.
     """
 
-    def __init__(self, path, cam=None, datetime=None, anchor=False, keypoints_path=None):
+    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False, keypoints_path=None):
         self.path = path
-        self.exif = Exif(path=path)
+        if exif is None:
+            exif = Exif(path=path)
+        self.exif = exif
         self.anchor = anchor
         # NOTE: Namespace conflict with datetime (package)
         if datetime:

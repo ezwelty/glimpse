@@ -70,6 +70,42 @@ def find_image(path):
             if os.path.isfile(image_path):
                 return image_path
 
+def load_images(station, service, start=None, end=None, step=None, use_exif=True):
+    img_paths = glob.glob(os.path.join(IMAGE_PATH, station, station + '_' + service, '*.JPG'))
+    if use_exif:
+        exifs = [glimpse.Exif(path) for path in img_paths]
+        datetimes = np.array([exif.datetime for exif in exifs])
+    else:
+        datetimes = np.array([parse_image_path_datetime(path)
+            for path in img_paths])
+    selected = np.ones(datetimes.shape, dtype=bool)
+    if start:
+        selected &= datetimes >= start
+    if end:
+        selected &= datetimes <= end
+    camera = parse_image_path(img_paths[0])['camera']
+    base_calibration = load_calibration(station=station, camera=camera)
+    anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
+    anchor_basenames = [os.path.splitext(os.path.basename(path))[0]
+        for path in anchor_paths]
+    images = []
+    for i in np.where(selected)[0]:
+        path = img_paths[i]
+        basename = os.path.splitext(os.path.basename(path))[0]
+        try:
+            anchor_i = anchor_basenames.index(basename)
+            cam_calibration = glimpse.helpers.read_json(anchor_paths[anchor_i])
+            calibration = glimpse.helpers.merge_dicts(base_calibration, cam_calibration)
+            anchor = True
+        except ValueError:
+            calibration = base_calibration
+            anchor = False
+        exif = exifs[i] if use_exif else None
+        image = glimpse.Image(path, cam=calibration, anchor=anchor, exif=exif,
+            keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
+        images.append(image)
+    return images
+
 # ---- Calibration controls ----
 
 def svg_controls(img, svg, keys=None, correction=True):

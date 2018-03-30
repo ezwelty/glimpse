@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.join(CG_PATH, '..'))
 import glimpse
 from glimpse.backports import *
-from glimpse.imports import (np, pandas, re, datetime)
+from glimpse.imports import (np, pandas, re, datetime, sharedmem)
 import glob
 import requests
 try:
@@ -126,10 +126,11 @@ def load_masks(images):
     nearest = np.unique(nearest_index)
     # Make masks and expand per image without copying
     land_markups = np.array(markups)[land_index]
-    masks = np.ones(len(images), dtype=object)
+    masks = [None] * len(images)
     for i in nearest:
         polygons = land_markups[i]['land'].values()
-        mask = glimpse.helpers.polygons_to_mask(polygons, imgsz=imgsz)
+        mask = glimpse.helpers.polygons_to_mask(polygons, imgsz=imgsz).astype(np.uint8)
+        mask = sharedmem.copy(mask)
         for j in np.where(nearest_index == i)[0]:
             masks[j] = mask
     return masks

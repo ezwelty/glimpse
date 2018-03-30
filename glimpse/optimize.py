@@ -1325,7 +1325,7 @@ class KeypointMatcher(object):
             if clear_images:
                 img.I = None
 
-    def build_keypoints(self, mask=None, overwrite=False,
+    def build_keypoints(self, masks=None, overwrite=False,
         clear_images=True, clear_keypoints=False, **params):
         """
         Build image keypoints and their descriptors.
@@ -1334,14 +1334,16 @@ class KeypointMatcher(object):
         and written to a binary `pickle` file if `Image.keypoints_path` is set.
 
         Arguments:
-            mask (array): Boolean array(s) (uint8) indicating regions in which to detect keypoints
+            masks (iterable): Boolean array(s) (uint8) indicating regions in which to detect keypoints
             overwrite (bool): Whether to recompute and overwrite existing keypoints
             clear_images (bool): Whether to clear cached image data (`self.observer.images[i].I`)
             clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`).
                 Ignored if `Image.keypoints_path` is `None`.
             **params: Additional arguments to `optimize.detect_keypoints()`
         """
-        for img in self.images:
+        if masks is None or isinstance(masks, np.ndarray):
+            masks = (masks, ) * len(self.images)
+        for img, mask in zip(self.images, masks):
             self._build_image_keypoints(img, mask=mask, overwrite=overwrite,
                 clear_images=clear_images, clear_keypoints=clear_keypoints, **params)
 

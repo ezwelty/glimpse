@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copyreg, os, re, datetime)
+    sklearn, cv2, copyreg, os, re, datetime, matplotlib)
 
 # ---- General ---- #
 
@@ -596,7 +596,7 @@ def in_box(points, box):
         points (array): Point coordinates (npts, ndim)
         box (array-like): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
-    box = np.reshape(box, (2, -1))
+    box = unravel_box(box)
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
 
 def clip_polyline_box(line, box, t=False):
@@ -924,6 +924,49 @@ def interpolate_line(vertices, num=None, step=None, distances=None, normalized=F
     # Interpolate each dimension and combine
     return np.column_stack(
         (np.interp(distances, d, vertices[:, i]) for i in range(vertices.shape[1])))
+
+def unravel_box(box):
+    if not isinstance(box, np.ndarray):
+        box = np.array(box)
+    assert box.size % 2 == 0
+    ndim = box.size // 2
+    return box.reshape(-1, ndim)
+
+def bounding_box(points):
+    return np.hstack((
+        np.min(points, axis=0),
+        np.max(points, axis=0)))
+
+def box_to_polygon(box):
+    box = unravel_box(box)
+    return np.column_stack((
+        box[(0, 0, 1, 1, 0), 0],
+        box[(0, 1, 1, 0, 0), 1]))
+
+def box_to_grid(box, step, snap=None):
+    box = unravel_box(box)
+    ndim = box.shape[1]
+    step = step if np.iterable(step) else (step, ) * ndim
+    if snap is None:
+        snap = box[0, :]
+    shift = (snap - box[0, :]) % step
+    n = (np.diff(box, axis=0).ravel() - shift) // step
+    arrays = (np.linspace(box[0, i] + shift[i],
+        box[0, i] + shift[i] + n[i] * step[i],
+        int(n[i]) + 1)
+        for i in range(ndim))
+    return np.meshgrid(*arrays)
+
+def grid_to_points(grid):
+    return np.reshape(grid, (len(grid), -1)).T
+
+def polygon_to_grid_points(polygon, **params):
+    box = bounding_box(polygon)
+    grid = box_to_grid(box, **params)
+    points = grid_to_points(grid)
+    path = matplotlib.path.Path(polygon)
+    is_in = path.contains_points(points)
+    return points[is_in, :]
 
 # ---- Image formation ---- #
 

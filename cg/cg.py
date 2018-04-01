@@ -13,6 +13,11 @@ try:
 except ImportError:
     # Python 2
     from backports.functools_lru_cache import lru_cache
+try:
+    FileNotFoundError
+except NameError:
+    # Python 2
+    FileNotFoundError = IOError
 
 # ---- Environment variables ---
 
@@ -34,7 +39,7 @@ def Sequences():
     return df
 
 def parse_image_path(path, sequence=False):
-    basename = os.path.splitext(os.path.basename(path))[0]
+    basename = path_basename(path)
     station, date_str, time_str = re.findall('^([^_]+)_([0-9]{8})_([0-9]{6})', basename)[0]
     capture_time = datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
     results = dict(basename=basename, station=station,
@@ -84,23 +89,23 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         temp = np.zeros(selected.shape, dtype=bool)
         temp[indices] = True
         selected &= temp
-    camera = parse_image_path(img_paths[0], sequence=True)['camera']
-    base_calibration = load_calibration(station=station, camera=camera)
+    base_calibration = load_calibrations(img_paths[0], station=True, camera=True, merge=True)
     anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
-    anchor_basenames = [os.path.splitext(os.path.basename(path))[0]
-        for path in anchor_paths]
+    anchor_basenames = [path_basename(path) for path in anchor_paths]
     images = []
     for i in np.where(selected)[0]:
         path = img_paths[i]
-        basename = os.path.splitext(os.path.basename(path))[0]
-        try:
-            anchor_i = anchor_basenames.index(basename)
-            cam_calibration = glimpse.helpers.read_json(anchor_paths[anchor_i])
-            calibration = glimpse.helpers.merge_dicts(base_calibration, cam_calibration)
+        basename = path_basename(path)
+        calibrations = load_calibrations(image=basename, viewdir=basename,
+            merge=False, file_errors=False)
+        if calibrations['image']:
+            calibration = glimpse.helpers.merge_dicts(base_calibration, calibrations['image'])
             anchor = True
-        except ValueError:
+        else:
             calibration = base_calibration
             anchor = False
+        if calibrations['viewdir']:
+            calibration = glimpse.helpers.merge_dicts(calibration, calibrations['viewdir'])
         exif = exifs[i] if use_exif else None
         image = glimpse.Image(path, cam=calibration, anchor=anchor, exif=exif,
             keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
@@ -233,8 +238,8 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
     svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '*.svg'))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
-        calibration = load_calibration(svg_path, camera=camera_calib,
-            station=station_calib, station_estimate=not station_calib)
+        calibration = load_calibrations(svg_path, camera=camera_calib,
+            station=station_calib, station_estimate=not station_calib, merge=True)
         img_path = find_image(svg_path)
         images.append(glimpse.Image(img_path, cam=calibration))
         images[-1].cam.resize(size, force=force_size)
@@ -249,8 +254,8 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
     for svg_path in svg_paths:
         ids = parse_image_path(svg_path, sequence=True)
         if ids['camera'] == camera:
-            calibration = load_calibration(svg_path, camera=camera_calib,
-                station=station_calib, station_estimate=not station_calib)
+            calibration = load_calibrations(svg_path, camera=camera_calib,
+                station=station_calib, station_estimate=not station_calib, merge=True)
             img_path = find_image(svg_path)
             images.append(glimpse.Image(img_path, cam=calibration))
             images[-1].cam.resize(size, force=force_size)
@@ -272,8 +277,8 @@ def camera_motion_matches(camera, size=1, force_size=False,
         sys.stdout.flush()
         paths = [find_image(path) for path in sequence]
         images.extend([glimpse.Image(path,
-            cam=load_calibration(path,  camera=camera_calib,
-            station=station_calib, station_estimate=not station_calib))
+            cam=load_calibrations(path,  camera=camera_calib,
+            station=station_calib, station_estimate=not station_calib, merge=True))
             for path in paths])
         idx = slice(-len(sequence), None)
         for img in images[idx]:
@@ -293,49 +298,90 @@ def build_sequential_matches(images, detect=dict(), match=dict()):
 
 # ---- Calibrations ----
 
-def load_calibration(path=None, station=False, camera=False, image=False,
-    station_estimate=False, **kwargs):
-    calibration = dict()
+def load_calibrations(path=None, station_estimate=False, station=False,
+    camera=False, image=False, viewdir=False, merge=False, file_errors=True):
+    def _try_except(fun, arg):
+        try:
+            return fun(arg)
+        except FileNotFoundError as e:
+            if file_errors:
+                raise e
+            else:
+                return None
     if path:
         ids = parse_image_path(path, sequence=(camera is True))
-        if station is True or (station is False and station_estimate is True):
+        if station_estimate is True:
+            station_estimate = ids['station']
+        if station is True:
             station = ids['station']
         if camera is True:
             camera = ids['camera']
         if image is True:
             image = ids['basename']
-    if isinstance(station, (bytes, str)):
-        if station_estimate:
-            calibration = glimpse.helpers.merge_dicts(calibration, load_station_estimate(station))
-        else:
-            calibration = glimpse.helpers.merge_dicts(calibration, load_station(station))
-    if isinstance(camera, (bytes, str)):
-        calibration = glimpse.helpers.merge_dicts(calibration, load_camera(camera))
-    if isinstance(image, (bytes, str)):
-        calibration = glimpse.helpers.merge_dicts(calibration, load_image(image))
-    return glimpse.helpers.merge_dicts(calibration, kwargs)
+        if viewdir is True:
+            viewdir = ids['basename']
+    calibrations = dict()
+    if station_estimate:
+        calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate)
+    if station:
+        calibrations['station'] = _try_except(_load_station, station)
+    if camera:
+        calibrations['camera'] = _try_except(_load_camera, camera)
+    if image:
+        calibrations['image'] = _try_except(_load_image, image)
+    if viewdir:
+        calibrations['viewdir'] = _try_except(_load_viewdir, viewdir)
+    if merge:
+        return merge_calibrations(calibrations)
+    else:
+        return calibrations
 
-def load_station_estimate(station):
-    geo = glimpse.helpers.read_geojson(
-        os.path.join(CG_PATH, 'geojson', 'stations.geojson'), crs=32606, key='id')
+def merge_calibrations(calibrations, keys=('station_estimate', 'station', 'camera', 'image', 'viewdir')):
+    calibration = dict()
+    for key in keys:
+        if key in calibrations and calibrations[key]:
+            calibration = glimpse.helpers.merge_dicts(calibration, calibrations[key])
+    return calibration
+
+def _load_station_estimate(station):
+    stations_path = os.path.join(CG_PATH, 'geojson', 'stations.geojson')
+    geo = glimpse.helpers.read_geojson(stations_path, crs=32606, key='id')
     return dict(
         xyz=np.reshape(geo['features'][station]['geometry']['coordinates'], -1),
         viewdir=geo['features'][station]['properties']['viewdir'])
 
-def load_station(station):
+def _load_station(station):
     station_path = os.path.join(CG_PATH, 'stations', station + '.json')
     return glimpse.helpers.read_json(station_path)
 
-def load_camera(camera):
+def _load_camera(camera):
     camera_path = os.path.join(CG_PATH, 'cameras', camera + '.json')
     return glimpse.helpers.read_json(camera_path)
 
-def load_image(image):
-    basename = os.path.splitext(os.path.basename(image))[0]
+def _load_image(path):
+    basename = path_basename(path)
     image_path = os.path.join(CG_PATH, 'images', basename + '.json')
     return glimpse.helpers.read_json(image_path)
 
+def _load_viewdir(path):
+    basename = path_basename(path)
+    viewdir_path = os.path.join(CG_PATH, 'viewdirs', basename + '.json')
+    return glimpse.helpers.read_json(viewdir_path)
+
+def write_image_viewdirs(images, viewdirs=None):
+    for i, img in enumerate(images):
+        basename = path_basename(img.path)
+        path = os.path.join(CG_PATH, 'viewdirs', basename + '.json')
+        if viewdirs is None:
+            d = dict(viewdir=tuple(img.cam.viewdir))
+        else:
+            d = dict(viewdir=tuple(viewdirs[i]))
+        glimpse.helpers.write_json(d, path=path)
+
 # ---- Helpers ----
+
+def path_basename(path):
+    return os.path.splitext(os.path.basename(path))[0]
 
 def project_dem(cam, dem, array=None, mask=None, correction=True):
     if mask is None:

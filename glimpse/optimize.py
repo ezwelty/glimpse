@@ -389,7 +389,10 @@ class Matches(object):
         """
         Return as a matches object of a different type.
         """
-        return mtype(cams=self.cams, uvs=self.uvs)
+        if mtype is type(self):
+            return self
+        else:
+            return mtype(cams=self.cams, uvs=self.uvs)
 
 class RotationMatches(Matches):
     """
@@ -470,7 +473,9 @@ class RotationMatches(Matches):
         """
         Return as a matches object of a different type.
         """
-        if mtype is Matches:
+        if mtype is type(self):
+            return self
+        elif mtype is Matches:
             uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
             return mtype(cams=self.cams, uvs=uvs)
         else:
@@ -1074,9 +1079,8 @@ class ObserverCameras(object):
         self.matcher.build_keypoints(*args, **kwargs)
 
     def build_matches(self, *args, **kwargs):
-        matches = self.matcher.build_matches(*args, **kwargs)
-        self.matcher.convert_matches(matches, RotationMatchesXYZ, copy=False)
-        self.matches = matches
+        self.matcher.build_matches(*args, **kwargs)
+        self.matches = self.matcher.matches_as_type(RotationMatchesXYZ, copy=False)
 
     def fit(self, anchor_weight=1e6, method='bfgs', **params):
         """
@@ -1298,6 +1302,8 @@ class KeypointMatcher(object):
             template = helpers.compute_cdf(template, return_inverse=False)
         if isinstance(template, tuple):
             self.template = template
+        # Placeholders
+        self.matches = None
 
     def _prepare_image(self, I):
         """
@@ -1413,20 +1419,20 @@ class KeypointMatcher(object):
                 if clear_keypoints:
                     imgA.keypoints = None
                     imgB.keypoints = None
-        return matches
+        self.matches = matches
 
-    @staticmethod
-    def convert_matches(matches, mtype, copy=False):
+    def matches_as_type(self, mtype, copy=False):
+        if self.matches is None:
+            raise ValueError('Matches have not been initialized. Run build_matches()')
         if copy:
-            new = np.full(matches.shape, None)
+            new = np.full(self.matches.shape, None)
         else:
-            new = matches
-        rows, cols = np.nonzero(matches)
+            new = self.matches
+        rows, cols = np.nonzero(self.matches)
         for i, j in zip(rows, cols):
-            m = matches[i, j]
+            m = self.matches[i, j]
             new[i, j] = m.as_type(mtype)
-        if copy:
-            return new
+        return new
 
 # ---- Helpers ----
 

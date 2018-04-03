@@ -20,39 +20,39 @@ def merge_dicts(*args):
         merge.update(d)
     return merge
 
-def format_list(obj, length=1, default=None, dtype=float, ltype=np.array):
+def format_list(x, length=None, default=None, dtype=None):
     """
-    Format a list-like object.
+    Return object as a formatted list.
 
     Arguments:
-        obj (object): Object
-        length (int): Output object length
+        x: Object to format
+        length (int): Output object length.
+            If `None`, length of `x` is unchanged
         default (scalar): Default element value.
-            If `None`, `obj` is repeated to achieve length `length`.
-        dtype (type): Data type to coerce list elements to.
+            If `None`, `x` is repeated to achieve length `length`.
+        dtype (callable): Data type to coerce list elements to.
             If `None`, data is left as-is.
-        ltype (type): List type to coerce object to.
     """
-    if obj is None:
-        return obj
-    try:
-        obj = list(obj)
-    except TypeError:
-        obj = [obj]
-    if len(obj) < length:
-        if default is not None:
-            # Fill remaining slots with 0
-            obj.extend([default] * (length - len(obj)))
-        else:
-            # Repeat list
-            if len(obj) > 0:
-                assert length % len(obj) == 0
-                obj *= length // len(obj)
+    if x is None:
+        return x
+    if not np.iterable(x):
+        x = [x]
+    elif not isinstance(x, (tuple, list)):
+        x = list(x)
+    if length:
+        nx = len(x)
+        if nx > length:
+            x = x[0:length]
+        elif nx < length:
+            if default is not None:
+                x += [default] * (length - nx)
+            elif nx > 0:
+                # Repeat list
+                assert length % nx == 0
+                x *= length // nx
     if dtype:
-        obj = [dtype(i) for i in obj[0:length]]
-    if ltype:
-        obj = ltype(obj)
-    return obj
+        x = [dtype(i) for i in x]
+    return x
 
 def make_path_directories(path, is_file=True):
     """
@@ -73,36 +73,97 @@ def make_path_directories(path, is_file=True):
             if not os.path.isdir(path):
                 raise
 
-def numpy_dtype_minmax(obj):
+def numpy_dtype(obj):
+    """
+    Return numpy data type.
+
+    Arguments:
+        obj: Either `numpy.ndarray`, `numpy.dtype`, `type`, or `str`
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.dtype
+    else:
+        return np.dtype(obj)
+
+def numpy_dtype_minmax(dtype):
     """
     Return min, max allowable values for a numpy datatype.
 
     Arguments:
-        obj: Either `numpy.ndarray`, `numpy.dtype`, or `type`
+        dtype: Either `numpy.ndarray`, `numpy.dtype`, `type`, or `str`
 
     Returns:
         tuple: Minimum and maximum values
     """
-    if isinstance(obj, np.ndarray):
-        obj = obj.dtype
-    if isinstance(obj, np.dtype):
-        obj = obj.type
-    if issubclass(obj, np.floating):
-        info = np.finfo(obj)
+    dtype = numpy_dtype(dtype)
+    if issubclass(dtype.type, np.floating):
+        info = np.finfo(dtype)
         return info.min, info.max
-    elif issubclass(obj, np.integer):
-        info = np.iinfo(obj)
+    elif issubclass(dtype.type, np.integer):
+        info = np.iinfo(dtype)
         return info.min, info.max
-    elif issubclass(obj, np.bool):
+    elif dtype.type in (np.bool_, np.bool):
         return False, True
     else:
-        raise ValueError('Cannot determine min, max for ' + str(obj))
+        raise ValueError('Cannot determine min, max for ' + str(dtype))
+
+def strip_path(path, extensions=True):
+    """
+    Return the final component of a path with file extensions removed.
+
+    Arguments:
+        path (str): Path to file
+        extensions: Maximum number of extensions to remove or `True` for all
+    """
+    basename = os.path.basename(path)
+    if extensions:
+        if extensions is True:
+            extensions = -1
+        return basename[::-1].split('.', maxsplit=extensions)[-1][::-1]
+    else:
+        return basename
+
+def first_not(*args, value=None, default=None):
+    """
+    Return first object which is not a particular object.
+
+    Arguments:
+        *args: Objects to evaluate
+        value: Object which `*args` should not be
+        default: Object to return if all `*args` are `value`
+    """
+    return next((xi for xi in args if xi is not value), default)
+
+def as_array(a, dtype=None):
+    """
+    Return object as array.
+
+    Equivalent to `np.asarray()` but faster if already an array or already `dtype`.
+
+    Arguments:
+        a (array-like): Input data
+        dtype (data-type): If `None`, inferred from `a`
+    """
+    if isinstance(a, np.ndarray):
+        if dtype is None or numpy_dtype(dtype) is a.dtype.type:
+            return a
+        else:
+            return a.astype(dtype)
+    else:
+        return np.asarray(a, dtype=dtype)
 
 # ---- Pickles ---- #
 
 def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):
     """
     Write object to pickle file.
+
+    Arguments:
+        obj: Object to write
+        path (str): Path to file
+        gz (bool): Whether to use gzip compression
+        binary (bool): Whether to write a binary pickle
+        protocol (int): Protocol to use
     """
     make_path_directories(path, is_file=True)
     mode = 'wb' if binary else 'w'
@@ -116,6 +177,11 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTO
 def read_pickle(path, gz=False, binary=True):
     """
     Read object from pickle file.
+
+    Arguments:
+        path (str): Path to file
+        gz (bool): Whether pickle is gzip compressed
+        binary (bool): Whether pickle is binary
     """
     mode = 'rb' if binary else 'r'
     if gz:
@@ -132,6 +198,47 @@ def _pickle_cv2_keypoints(k):
     return cv2.KeyPoint, (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id)
 copyreg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
 
+# ---- JSON ---- #
+
+def read_json(path, **kwargs):
+    """
+    Read JSON from file.
+
+    Arguments:
+        path (str): Path to file
+        **kwargs: Additional arguments passed to `json.load()`
+    """
+    with open(path, mode='r') as fp:
+        return json.load(fp, **kwargs)
+
+def write_json(obj, path=None, flat_arrays=False, **kwargs):
+    """
+    Write object to JSON.
+
+    Arguments:
+        obj: Object to write as JSON
+        path (str): Path to file. If `None`, result is returned as a string.
+        flat_arrays (bool): Whether to flatten json arrays to a single line.
+            By default, `json.dumps` puts each array element on a new line if
+            `indent` is `0` or greater.
+        **kwargs: Additional arguments passed to `json.dumps()`
+    """
+    txt = json.dumps(obj, **kwargs)
+    if flat_arrays and kwargs.get('indent') >= 0:
+        separators = kwargs.get('separators')
+        sep = separators[0] if separators else ', '
+        squished_sep = re.sub(r'\s', '', sep)
+        def flatten(match):
+            return re.sub(squished_sep, sep, re.sub(r'\s', '', match.group(0)))
+        txt = re.sub(r'(\[\s*)+[^\]\{]*(\s*\])+', flatten, txt)
+    if path:
+        make_path_directories(path, is_file=True)
+        with open(path, mode='w') as fp:
+            fp.write(txt)
+        return None
+    else:
+        return txt
+
 # ---- Arrays: General ---- #
 
 def normalize(array):
@@ -143,29 +250,25 @@ def normalize(array):
     """
     return (array - array.mean()) * (1 / array.std())
 
-def normalize_range(array, interval=None):
+# NOTE: Unused
+def normalize_range(array, interval=(0, 1)):
     """
-    Translate and scale a numeric array to the interval (0, 1).
+    Translate and scale a numeric array to a specified interval.
 
     Arguments:
         array (array): Input array
-        interval: Measurement interval (min, max) as either an iterable or np.dtype.
-            If `None`, the min and max of `array` are used.
+        interval: Interval as either (min, max) or a numpy data type.
+            If `None`, the min and max of `array` is used.
 
     Returns:
         array (optional): Normalized copy of array, cast to float
     """
-    if isinstance(interval, np.dtype):
-        dtype = interval.type
-        if issubclass(dtype, np.integer):
-            info = np.iinfo(dtype)
-        elif issubclass(dtype, np.floating):
-            info = np.finfo(dtype)
-        interval = (info.min, info.max)
+    if inverval is None:
+        interval = array
+    if np.iterable(interval):
+        interval = min(interval), max(interval)
     else:
-        if interval is None:
-            interval = array
-        interval = (min(interval), max(interval))
+        interval = numpy_dtype_minmax(interval)
     return (array + (-interval[0])) * (1.0 / (interval[1] - interval[0]))
 
 def gaussian_filter(array, mask=None, fill=False, **kwargs):
@@ -219,6 +322,7 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
 
 # ---- Arrays: Images ---- #
 
+# NOTE: Unused
 def linear_to_gamma(array, gamma=2.2):
     """
     Converts linear values to gamma-corrected values.
@@ -232,6 +336,7 @@ def linear_to_gamma(array, gamma=2.2):
     """
     return array**gamma
 
+# NOTE: Unused
 def gamma_to_linear(array, gamma=2.2):
     """
     Converts gamma-corrected values to linear values.
@@ -297,7 +402,7 @@ def compute_cdf(array, return_inverse=False):
     else:
         return results[0], quantiles
 
-def match_histogram(source, template): # hist_match
+def match_histogram(source, template):
     """
     Adjust the values of an array such that its histogram matches that of a target array.
 
@@ -318,19 +423,12 @@ def match_histogram(source, template): # hist_match
 
 # ---- GIS ---- #
 
-# FIXME: Unused?
-def dms_to_degrees(degrees, minutes, seconds):
-    """
-    Convert degree-minute-second to decimal degrees.
-    """
-    return degrees + minutes / 60.0 + seconds / 3600.0
-
 def sp_transform(points, current, target):
     """
     Transform points between spatial coordinate systems.
 
-    Coordinate systems can be specified either as an
-    `int` (EPSG code), `dict` (arguments to `pyproj.Proj()`), or `pyproj.Proj`.
+    Coordinate systems can be specified either as an EPSG code (int),
+    arguments to `pyproj.Proj()` (dict), or `pyproj.Proj`.
 
     Arguments:
         points (array): Point coordinates [[x, y(, z)]]
@@ -354,75 +452,6 @@ def sp_transform(points, current, target):
         z = points[:, 2]
     result = pyproj.transform(current, target, x=points[:, 0], y=points[:, 1], z=z)
     return np.column_stack(result)
-
-def read_json(path, **kwargs):
-    """
-    Read JSON from file.
-
-    Arguments:
-        path (str): Path to file
-        **kwargs: Additional arguments passed to `json.load()`
-    """
-    with open(path, mode='r') as fp:
-        return json.load(fp, **kwargs)
-
-def write_json(obj, path=None, flat_arrays=False, **kwargs):
-    """
-    Write object to JSON.
-
-    Arguments:
-        obj: Object to write as JSON
-        path (str): Path to file. If `None`, result is returned as a string.
-        flat_arrays (bool): Whether to flatten json arrays to a single line.
-            By default, `json.dumps` puts each array element on a new line if
-            `indent` is `0` or greater.
-        **kwargs: Additional arguments passed to `json.dumps()`
-    """
-    txt = json.dumps(obj, **kwargs)
-    if flat_arrays and kwargs.get('indent') >= 0:
-        separators = kwargs.get('separators')
-        sep = separators[0] if separators else ', '
-        squished_sep = re.sub(r'\s', '', sep)
-        def flatten(match):
-            return re.sub(squished_sep, sep, re.sub(r'\s', '', match.group(0)))
-        txt = re.sub(r'(\[\s*)+[^\]\{]*(\s*\])+', flatten, txt)
-    if path:
-        make_path_directories(path, is_file=True)
-        with open(path, mode='w') as fp:
-            fp.write(txt)
-        return None
-    else:
-        return txt
-
-def geojson_iterfeatures(obj):
-    features = obj['features']
-    if isinstance(features, list):
-        index = range(len(features))
-    else:
-        index = features.keys()
-    for i in index:
-        yield features[i]
-
-def _get_geojson_coords(feature):
-    if 'geometry' in feature:
-        return feature['geometry']['coordinates']
-    else:
-        return feature['coordinates']
-
-def _set_geojson_coords(feature, coords):
-    if 'geometry' in feature:
-        feature['geometry']['coordinates'] = coords
-    else:
-        feature['coordinates'] = coords
-
-def geojson_itercoords(obj):
-    for feature in geojson_iterfeatures(obj):
-        yield _get_geojson_coords(feature)
-
-def apply_geojson_coords(obj, fun, **kwargs):
-    for feature in geojson_iterfeatures(obj):
-        coords = _get_geojson_coords(feature)
-        _set_geojson_coords(feature, fun(coords, **kwargs))
 
 def read_geojson(path, key=None, crs=None, **kwargs):
     """
@@ -475,6 +504,50 @@ def write_geojson(obj, path=None, crs=None, decimals=None, **kwargs):
     apply_geojson_coords(obj, np.ndarray.tolist)
     return write_json(obj, path=path, **kwargs)
 
+def geojson_iterfeatures(obj):
+    """
+    Return an iterator over GeoJSON features.
+    """
+    features = obj['features']
+    if isinstance(features, list):
+        index = range(len(features))
+    else:
+        index = features.keys()
+    for i in index:
+        yield features[i]
+
+def _get_geojson_coords(feature):
+    if 'geometry' in feature:
+        return feature['geometry']['coordinates']
+    else:
+        return feature['coordinates']
+
+def _set_geojson_coords(feature, coords):
+    if 'geometry' in feature:
+        feature['geometry']['coordinates'] = coords
+    else:
+        feature['coordinates'] = coords
+
+def geojson_itercoords(obj):
+    """
+    Return an iterator over GeoJSON feature coordinates.
+    """
+    for feature in geojson_iterfeatures(obj):
+        yield _get_geojson_coords(feature)
+
+def apply_geojson_coords(obj, fun, **kwargs):
+    """
+    Apply a function to all GeoJSON feature coordinates.
+
+    Arguments:
+        obj (dict): GeoJSON
+        fun (callable): Called as `fun(coordinates, **kwargs)`
+        **kwargs (dict): Additional arguments passed to `fun`
+    """
+    for feature in geojson_iterfeatures(obj):
+        coords = _get_geojson_coords(feature)
+        _set_geojson_coords(feature, fun(coords, **kwargs))
+
 def elevate_geojson(obj, elevation):
     """
     Add or update GeoJSON elevations.
@@ -484,7 +557,7 @@ def elevate_geojson(obj, elevation):
         elevation: Elevation, as either
             the elevation of all features (int or float),
             the name of the feature property containing elevation (str), or
-            digital elevation model from which to sample elevation (`dem.DEM`).
+            digital elevation model from which to sample elevations (`dem.DEM`)
     """
     def set_z(coords, z):
         if len(z) == 1:
@@ -503,9 +576,9 @@ def elevate_geojson(obj, elevation):
         apply_geojson_coords(obj, set_from_elevation, elevation=elevation)
 
 def ordered_geojson(obj, properties=None,
-    keys=['type', 'properties', 'features', 'geometry', 'coordinates']):
+    keys=('type', 'properties', 'features', 'geometry', 'coordinates')):
     """
-    Return ordered GeoJSON.
+    Return GeoJSON as a nested ordered dictionary.
 
     Arguments:
         obj (dict): Object to order
@@ -543,8 +616,14 @@ def boolean_split(x, mask, axis=0, circular=False, include='all'):
     """
     Split array by boolean mask.
 
-    Select True groups with [0::2] if mask[0] is True,
-    else [1::2].
+    Select True groups with [0::2] if mask[0] is True, else [1::2].
+
+    Arguments:
+        x (array): Array to split
+        mask (array): Boolean array with same length as `x` along `axis`
+        axis (int): Axis along which to split
+        circular (bool): Whether to treat `x` as closed (x[-1] -> x[0])
+        include (str): Whether to return 'all', 'true', or 'false' groups
     """
     # See https://stackoverflow.com/a/36518315/8161503
     cuts = np.nonzero(mask[1:] != mask[:-1])[0] + 1
@@ -570,9 +649,9 @@ def intersect_rays_plane(origin, directions, plane):
     Optimized for rays with a common origin.
 
     Arguments:
-        origin (array-like): Common origin of rays [x, y , z]
-        directions (array-like): Directions of rays [[dx, dy, dz], ...]
-        plane (array-like): Plane [a, b, c, d], where ax + by + cz + d = 0
+        origin (iterable): Common origin of rays (x, y , z)
+        directions (array): Directions of rays [[dx, dy, dz], ...]
+        plane (iterable): Plane (a, b, c, d), where ax + by + cz + d = 0
 
     Returns:
         array: Intersection coordinates [[xi, yi, zi], ...] (`nan` if none)
@@ -594,7 +673,7 @@ def in_box(points, box):
 
     Arguments:
         points (array): Point coordinates (npts, ndim)
-        box (array-like): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
     box = unravel_box(box)
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
@@ -609,7 +688,7 @@ def clip_polyline_box(line, box, t=False):
 
     Arguments:
         line (array): 2 or 3D point coordinates (npts, ndim)
-        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
         t (bool): Last column of `line` are distances along line, linearly interpolated at splits
     """
     if t:
@@ -640,11 +719,12 @@ def intersect_edge_box(origin, distance, box):
     Returns intersection of edge with box.
 
     Arguments:
-        origin (array): Coordinates of 2 or 3D point (ndim, )
-        distance (array): Distance to end point (ndim, )
-        box (array): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        origin (iterable): Coordinates of 2 or 3D point (ndim, )
+        distance (iterable): Distance to end point (ndim, )
+        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
-    t = np.nanmin(intersect_rays_box(origin, distance[None, :], box, t=True))
+    distance_2d = as_array(distance).reshape(1, -1)
+    t = np.nanmin(intersect_rays_box(origin, distance_2d, box, t=True))
     if t > 0 and t < 1:
         return t
     else:
@@ -659,9 +739,9 @@ def intersect_rays_box(origin, directions, box, t=False):
     Also inspired by https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 
     Arguments:
-        origin (array-like): Common origin of rays [x, y(, z)]
-        directions (array-like): Directions of rays [[dx, dy(, dz)], ...]
-        box (array-like): Box min and max vertices [xmin, ymin(, zmin), xmax, ymax(, zmax)]
+        origin (iterable): Common origin of rays [x, y(, z)]
+        directions (array): Directions of rays [[dx, dy(, dz)], ...]
+        box (iterable): Box min and max vertices [xmin, ymin(, zmin), xmax, ymax(, zmax)]
 
     Returns:
         array: Entrance coordinates (`nan` if a miss or `origin` inside `box`)
@@ -713,6 +793,7 @@ def intersect_rays_box(origin, directions, box, t=False):
     else:
         return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
 
+# TODO: Implement faster run-slice (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
 def bresenham_line(start, end):
     """
     Return grid indices along a line between two grid indices.
@@ -721,19 +802,15 @@ def bresenham_line(start, end):
     Not all intersected grid cells are returned, only those with centers closest to the line.
     Code modified for speed from http://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm.
 
-    TODO: Replace with faster run-slice (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
-
     Arguments:
-        start (array-like): Start position [xi, yi]
-        end (array-like): End position [xi, yi]
+        start (iterable): Start position (xi, yi)
+        end (iterable): End position (xi, yi)
 
     Returns:
         array: Grid indices [[xi, yi], ...]
     """
-    x1 = start[0]
-    y1 = start[1]
-    x2 = end[0]
-    y2 = end[1]
+    x1, y1 = start
+    x2, y2 = end
     # Determine how steep the line is
     is_steep = abs(y2 - y1) > abs(x2 - x1)
     # Rotate line
@@ -775,10 +852,21 @@ def bresenham_line(start, end):
         points.reverse()
     return np.array(points)
 
-# FIXME: Unused?
 def bresenham_circle(center, radius):
-    x0 = center[0]
-    y0 = center[1]
+    """
+    Return grid indices along a circular path.
+
+    Uses Bresenham's circle algorithm.
+    Code modified from https://en.wikipedia.org/wiki/Midpoint_circle_algorithm.
+
+    Arguments:
+        center (iterable): Circle center (x, y)
+        radius (float): Circle radius in pixels
+
+    Returns:
+        array: Grid indices [[xi, yi], ...]
+    """
+    x0, y0 = center
     # Compute number of points
     octant_size = int(np.floor((np.sqrt(2) * (radius - 1) + 4) / 2))
     n_points = 8 * octant_size
@@ -830,13 +918,23 @@ def bresenham_circle(center, radius):
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
     return xy
 
-# FIXME: Unused?
+# NOTE: Unused
 def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
-    # http://pysal.readthedocs.io/en/latest/library/weights/Distance.html#pysal.weights.Distance.Kernel
+    """
+    Return spatial weights based on inverse kernel distances.
+
+    Arguments:
+        data (array): Observations (n, d)
+        bandwidth (float): Kernel bandwidth.
+            If `None`, the maximum pairwwise distance between `data`
+            observations is used.
+        function (str): Kernel function, either 'triangular', 'uniform', 'quadratic', 'quartic', 'gaussian'.
+            See http://pysal.readthedocs.io/en/latest/library/weights/Distance.html#pysal.weights.Distance.Kernel.
+    """
     nd = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(data))
     if bandwidth is None:
         bandwidth = np.max(nd)
-    nd /= bandwidth
+    nd *= 1 / bandwidth
     included = nd <= 1
     if function == 'triangular':
         temp = np.where(included, 1 - nd, 0)
@@ -852,9 +950,13 @@ def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
     return 1 / np.sum(temp, axis=1)
 
 def intersect_ranges(ranges):
-    # ranges: ((min, max), ...) or 2-d array
-    if not isinstance(ranges, np.ndarray):
-        ranges = np.array(ranges)
+    """
+    Return intersection of ranges.
+
+    Arguments:
+        ranges (iterable): Ranges, each in the format (min, max)
+    """
+    ranges = as_array(ranges)
     ranges.sort(axis=1)
     rmin = np.nanmax(ranges[:, 0])
     rmax = np.nanmin(ranges[:, 1])
@@ -864,9 +966,13 @@ def intersect_ranges(ranges):
         return np.hstack((rmin, rmax))
 
 def intersect_boxes(boxes):
-    # boxes: ((minx, ..., maxx, ...), ...) or 2-d array
-    if not isinstance(boxes, np.ndarray):
-        boxes = np.array(boxes)
+    """
+    Return intersection of boxes.
+
+    Arguments:
+        boxes (iterable): Boxes, each in the format (minx, ..., maxx, ...)
+    """
+    boxes = as_array(boxes)
     assert boxes.shape[1] % 2 == 0
     ndim = boxes.shape[1] // 2
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
@@ -876,74 +982,135 @@ def intersect_boxes(boxes):
     else:
         return np.hstack((boxmin, boxmax))
 
-def find_nearest_neighbors(x, y, metric='sqeuclidean', **params):
+def find_nearest(x, y, metric='sqeuclidean', **params):
     """
-    Find the nearest neighbors between two sets of points.
+    Return the indices of the nearest neighbors between two sets of points.
 
     Arguments:
-        x (array-like): First set of points, either 1-d (mx, ) or 2-d (mx, n)
-        y (array-like): Second set of points, either 1-d (my, ) or 2-d (my, n)
+        x (iterable): First set of n-d points
+        y (iterable): Second set of n-d points
+        metric (str): Distance metric.
+            See `scipy.spatial.distance.cdist()`.
+        **params (dict): Additional arguments to `scipy.spatial.distance.cdist()`
 
     Returns:
         array: Indices of the nearest neighbors of `x` in `y`
     """
-    if not isinstance(x, np.ndarray):
-        x = np.array(x)
-    if not isinstance(y, np.ndarray):
-        y = np.array(y)
+    x = as_array(x)
+    y = as_array(y)
     distances = scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
         metric=metric, **params)
     return np.argmin(distances, axis=1)
 
-def interpolate_line(vertices, num=None, step=None, distances=None, normalized=False):
+def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fill='endpoints'):
     """
-    Return points at the specified distances along an N-dimensional line.
+    Return points at the specified distances along a line.
 
     Arguments:
-        vertices (array): Coordinates of vertices (NxD)
-        num (int): Number of evenly-spaced points to return
-        step (float): Target distance between evenly-spaced points (ignored if `num` is not None)
-        distances (array): Distance of points along line (ignored if either `num` or `step` are not None)
-        normalized (bool): Whether `step` or `distances` represent a fraction of the line's todal length
+        vertices (array): Coordinates of vertices (n, d)
+        x (iterable): Distance measure at each vertex (n, ). If `None`,
+            the cumulative Euclidean distance is used.
+            Undefined behavior results if not monotonic.
+        xi (iterable): Distance of interpolated points along line
+        n (int): Number of evenly-spaced points to return
+            (ignored if `xi` is not `None`)
+        dx (float): Nominal distance between evenly-spaced points
+            (ignored if `xi` or `n` is not `None`)
+        error (bool): Whether to raise ValueError if any `xi` are outside range of `x`
+        fill: Value(s) to use for `xi` beyond `x[0]` and `xi` beyond `x[-1]`.
+            If 'endpoints', uses (`vertices[0]`, `vertices[-1]`).
     """
-    # Compute cumulative length at each vertex
-    d = np.insert(
-            np.cumsum(
-                np.sqrt(
-                    np.sum(np.diff(vertices, axis=0) ** 2, axis=1))),
-            0, 0)
-    if normalized:
-        d /= d[-1]
-    # Prepare distances
-    if distances is None:
-        if num is None:
-            num = np.round(d[-1] / step)
-        distances = np.linspace(start=0, stop=d[-1], num=num, endpoint=True)
+    assert not all((xi is None, n is None, dx is None))
+    if xi is None:
+        error = False
+        fill = 'endpoints'
+    if x is None:
+        # Compute total distance at each vertex
+        x = np.cumsum(np.sqrt(np.sum(np.diff(vertices, axis=0)**2, axis=1)))
+        # Set first vertex at 0
+        x = np.insert(x, 0, 0)
+    if xi is None:
+        if n is None:
+            n = abs((x[-1] - x[0]) / dx)
+            if n == int(n):
+                n += 1
+            n = int(round(n))
+        xi = np.linspace(start=x[0], stop=x[-1], num=n, endpoint=True)
     # Interpolate each dimension and combine
-    return np.column_stack(
-        (np.interp(distances, d, vertices[:, i]) for i in range(vertices.shape[1])))
+    result = np.column_stack((
+        np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1])))
+    if fill == 'endpoints':
+        if error is False:
+            return result
+        else:
+            fill = (vertices[0], vertices[-1])
+    if not np.iterable(fill):
+        fill = (fill, fill)
+    left = np.less(xi, x[0])
+    right = np.greater(xi, x[-1])
+    if x[0] > x[-1]:
+        right, left = left, right
+    if error and (left.any() or right.any()):
+        raise ValueError('Requested distance outside range')
+    else:
+        result[left, :] = fill[0]
+        result[right, :] = fill[1]
+        return result
 
 def unravel_box(box):
-    if not isinstance(box, np.ndarray):
-        box = np.array(box)
+    """
+    Return a box in unravelled format.
+
+    Arguments:
+        box (iterable): Box (minx, ..., maxx, ...)
+
+    Returns:
+        array: [[minx, ...], [maxx, ...]]
+    """
+    box = as_array(box)
     assert box.size % 2 == 0
     ndim = box.size // 2
     return box.reshape(-1, ndim)
 
 def bounding_box(points):
+    """
+    Return bounding box of points.
+
+    Arguments:
+        points (iterable): Points, each in the format (x, ...)
+    """
+    points = as_array(points)
     return np.hstack((
         np.min(points, axis=0),
         np.max(points, axis=0)))
 
 def box_to_polygon(box):
+    """
+    Return box as polygon.
+
+    Arguments:
+        box (iterable): Box (minx, ..., maxx, ...)
+    """
     box = unravel_box(box)
     return np.column_stack((
         box[(0, 0, 1, 1, 0), 0],
         box[(0, 1, 1, 0, 0), 1]))
 
 def box_to_grid(box, step, snap=None):
+    """
+    Return grid of points inside box.
+
+    Arguments:
+        box (iterable): Box (minx, ..., maxx, ...)
+        step: Grid spacing for all (float) or each (iterable) dimension
+        snap (iterable): Point to align grid to (need not be inside box).
+            If `None`, the `box` minimum is used.
+
+    Returns:
+        tuple: Array of grid coordinates for each dimension (see `np.meshgrid()`)
+    """
     box = unravel_box(box)
     ndim = box.shape[1]
     step = step if np.iterable(step) else (step, ) * ndim
@@ -958,9 +1125,28 @@ def box_to_grid(box, step, snap=None):
     return np.meshgrid(*arrays)
 
 def grid_to_points(grid):
+    """
+    Return grid as points.
+
+    Arguments:
+        grid (iterable): Array of grid coordinates for each dimension (X, ...)
+
+    Returns:
+        array: Point coordinates [[x, ...], ...]
+    """
     return np.reshape(grid, (len(grid), -1)).T
 
 def polygon_to_grid_points(polygon, **params):
+    """
+    Return grid of points inside polygon.
+
+    Generates a grid of points inside the polygon bounding box, then returns only
+    those grid points inside the polygon.
+
+    Arguments:
+        polygon (iterable): Polygon vertices
+        **params (dict): Arguments passed to `box_to_grid()`
+    """
     box = bounding_box(polygon)
     grid = box_to_grid(box, **params)
     points = grid_to_points(grid)
@@ -995,33 +1181,21 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
     grid.flat[idx] = groups.value.as_matrix()
     return grid
 
-def compute_mask_array_from_svg(path_to_svg, array_shape, skip=[]):
-    from svgpathtools import svg2paths
-    from matplotlib import path
-    paths, attributes = svg2paths(path_to_svg)
-    q = [np.array([(l.point(0).real, l.point(0).imag) for l in p] + [(p[0].point(0).real, p[0].point(0).imag)]) for p in paths]
-    paths = [path.Path(qq) for qq in q]
-    mask = np.zeros(array_shape).astype(bool)
-    cols, rows = np.meshgrid(range(mask.shape[1]), range(mask.shape[0]))
-    cols_f = cols.ravel()
-    rows_f = rows.ravel()
-    for i, p in enumerate(paths):
-        if i not in skip:
-            inside = p.contains_points(zip(cols.ravel(), rows.ravel()))
-            mask+=inside.reshape(mask.shape)
-    return mask.astype('uint8')
+def polygons_to_mask(polygons, size):
+    """
+    Returns a boolean array of cells inside polygons.
 
-def polygons_to_mask(polygons, imgsz, inverse=False):
-    im_mask = PIL.Image.new(mode='1', size=tuple(np.array(imgsz).astype(int)))
+    Arguments:
+        polygons (iterable): Polygons
+        size (iterable): Array size (nx, ny)
+    """
+    im_mask = PIL.Image.new(mode='1', size=tuple(int(size[0]), int(size[1])))
     draw = PIL.ImageDraw.ImageDraw(im_mask)
     for polygon in polygons:
         if isinstance(polygon, np.ndarray):
             polygon = [tuple(row) for row in polygon]
         draw.polygon(polygon, fill=1)
-    mask = np.array(im_mask)
-    if inverse:
-        mask = ~mask
-    return mask
+    return np.array(im_mask)
 
 def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_radius=6.3781e6, refraction=0.13):
     """
@@ -1046,16 +1220,72 @@ def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_r
 
 # ---- Time ----
 
-def find_nearest_datetimes(x, y):
+def datetimes_to_float(datetimes):
     """
-    Datetime wrapper for `find_nearest_neighbors()`.
+    Return datetimes as float.
+
+    Datetimes are converted to POSIX timestamps - the number of seconds since
+    1970-01-01 00:00:00 UTC.
+
+    Arguments:
+        datetimes (iterable): Datetime objects
     """
     try:
-        x = [xi.timestamp() for xi in x]
-        y = [yi.timestamp() for yi in y]
+        return [xi.timestamp() for xi in datetimes]
     except AttributeError:
         # Python 2
         epoch = datetime.datetime.fromtimestamp(0)
-        x = [(xi - epoch).total_seconds() for xi in x]
-        y = [(yi - epoch).total_seconds() for yi in y]
-    return find_nearest_neighbors(x, y, metric='minkowski', p=1)
+        return [(xi - epoch).total_seconds() for xi in datetimes]
+
+def find_nearest_datetimes(x, y):
+    """
+    Return the indices of the nearest neighbors between two sets of datetimes.
+
+    Datetime wrapper for `find_nearest()`.
+
+    Arguments:
+        x (iterable): Datetimes
+        y (iterable): Datetimes
+
+    Returns:
+        array: Indices of the nearest neighbors of `x` in `y`
+    """
+    return find_nearest(
+        datetimes_to_float(x),
+        datetimes_to_float(y),
+        metric='minkowski', p=1)
+
+def datetime_range(start, stop, step):
+    """
+    Return a sequence of datetime.
+
+    Arguments:
+        start (datetime): Start datetime
+        stop (datetime): End datetime (inclusive)
+        step (timedelta): Time step
+    """
+    max_steps = (stop - start) // step
+    return [start + n * step for n in range(max_steps + 1)]
+
+def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
+    """
+    Return points at the specified datetimes along a line.
+
+    Arguments:
+        vertices (array): Coordinates of vertices (n, d)
+        x (iterable): Datetimes of vertices (n, ).
+            Undefined behavior results if not monotonic.
+        xi (iterable): Datetimes of interpolated points
+        n (int): Number of evenly-spaced points to return
+            (ignored if `xi` is not `None`)
+        dx (timedelta): Nominal timedelta between evenly-spaced points
+            (ignored if `xi` or `n` is not `None`)
+        **kwargs (dict): Additional arguments passed to `interpolate_line()`
+    """
+    t0 = x[0]
+    x = [(t - t0).total_seconds() for t in x]
+    if xi is not None:
+        xi = [(t - t0).total_seconds() for t in xi]
+    if dx is not None:
+        dx = dx.total_seconds()
+    return interpolate_line(vertices, x=x, xi=xi, n=n, dx=dx, **kwargs)

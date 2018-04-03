@@ -25,10 +25,11 @@ class Observer(object):
         self.xyz = images[0].cam.xyz
         self.test_images(images)
         self.images = images
-        self.datetimes = np.array([img.datetime for img in self.images])
-        time_deltas = np.array([dt.total_seconds() for dt in np.diff(self.datetimes)])
+        datetimes = np.array([img.datetime for img in self.images])
+        time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
         if any(time_deltas <= 0):
             raise ValueError('Image datetimes are not stricly increasing')
+        self.datetimes = datetimes
         self.sigma = sigma
         self.correction = correction
         self.cache = cache
@@ -249,7 +250,7 @@ class Observer(object):
         The right subplot does not shift tiles; this represents the original
         uncorrected image alignment.
 
-        NOTE: The frame label (index, image basenmae) is drawn inside the axes
+        NOTE: The frame label ('<image index>: <image basename>') is drawn inside the axes
         due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
         See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
 
@@ -289,8 +290,93 @@ class Observer(object):
                 pt[j].set_ydata(puv[1])
             ax[0].set_xlim(puv[0] - halfsize[0], puv[0] + halfsize[0])
             ax[0].set_ylim(puv[1] + halfsize[1], puv[1] - halfsize[0])
-            basename = os.path.splitext(os.path.basename(self.images[i].path))[0]
+            basename = helpers.strip_path(self.images[i].path)
             txt.set_text(str(i) + ' : ' + basename)
             return im + pt + [txt]
         # Build animation
         return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
+
+    def track(self, xyz, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
+        """
+        Animate image tiles tracking a moving point.
+
+        The left subplot shows the first image centered on the first point position
+        (marked as a red dot).
+        The right subplot shows the nth image centered on the nth point position
+        (marked as a red dot) alongside previous positions
+        (marked as a yellow line with dots).
+
+        NOTE: The frame labels (('<image index>: <image basename>')) are drawn inside the axes
+        due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
+        See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
+
+        Arguments:
+            xyz (array): World coordinates (x, y, z)
+            frames (iterable): Integer indices of the images to include
+            size (iterable): Size of the image tiles to plot
+            interval (number): Delay between frames in milliseconds
+            subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
+            animation (dict): Additional arguments to 'matplotlib.animation.FuncAnimation()'
+
+        Returns:
+            `matplotlib.animation.FuncAnimation`
+        """
+        if frames is None:
+            frames = range(len(self.images))
+        halfsize = (size[0] * 0.5, size[1] * 0.5)
+        # Initialize plot
+        fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
+        track_uv = self.images[0].cam.project(xyz[0:1])
+        uv = track_uv[-1]
+        box = self.tile_box(uv, size=size)
+        tile = self.extract_tile(img=frames[0], box=box)
+        im = [self.plot_tile(tile=tile, box=box, axes=axes, zorder=1) for axes in ax]
+        track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], 'y.-', alpha=0.5, zorder=2)[0]
+        pt = [axis.plot(uv[0], uv[1], marker='.', color='red', zorder=3)[0] for axis in ax]
+        basename = helpers.strip_path(self.images[0].path)
+        ax[0].text(uv[0], uv[1] - (halfsize[1] - 10), '0 : ' + basename, color='white',
+            horizontalalignment='center', zorder=4)
+        txt = ax[1].text(uv[0], uv[1] - (halfsize[1] - 10), '', color='white',
+            horizontalalignment='center', zorder=4)
+        # Update plot
+        def update_plot(i):
+            track_uv = self.images[i].cam.project(xyz[:(i + 1)])
+            uv = track_uv[-1]
+            box = self.tile_box(uv, size=size)
+            tile = self.extract_tile(img=i, box=box)
+            im[1].set_array(tile)
+            im[1].set_extent((box[0], box[2], box[3], box[1]))
+            track.set_xdata(track_uv[:, 0])
+            track.set_ydata(track_uv[:, 1])
+            pt[1].set_xdata(uv[0])
+            pt[1].set_ydata(uv[1])
+            basename = helpers.strip_path(self.images[i].path)
+            txt.set_x(uv[0])
+            txt.set_y(uv[1] - (halfsize[1] - 10))
+            txt.set_text(str(i) + ' : ' + basename)
+            return im + [track] + pt + [txt]
+        # Build animation
+        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
+
+    def split(self, n, overlap=0):
+        """
+        Split into multiple Observers.
+
+        Arguments:
+            n: Number of equal-length Observers (int) or datetime breaks (iterable)
+            overlap (int): Number of images from previous Observer to append to start
+                of following Observer
+        """
+        if np.iterable(n):
+            breaks = np.unique(np.hstack((n, self.datetimes[[0, -1]])))
+            midtimes = breaks[:-1] + np.diff(breaks) * 0.5
+        else:
+            dt = (self.datetimes[-1] - self.datetimes[0]) / n
+            midtimes = helpers.datetime_range(
+                self.datetimes[0] + dt * 0.5, self.datetimes[-1], dt)
+        nearest = helpers.find_nearest_datetimes(self.datetimes, midtimes)
+        breaks = np.nonzero(np.diff(np.hstack((-1, nearest, np.inf))))[0]
+        overlaps = (0, ) + (overlap, ) * (len(midtimes) - 1)
+        params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
+        return [Observer(images=self.images[(breaks[i] - overlaps[i]):breaks[i + 1]], **params)
+            for i in range(len(breaks) - 1)]

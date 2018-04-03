@@ -537,10 +537,13 @@ class DEM(Grid):
         Arguments:
             maximum_filter_size (int): Kernel size of maximum filter in pixels
             gaussian_filter_sigma (float): Standard deviation of Gaussian filter
-            mask (array): Boolean mask of cells to include (True) or exclude (False).
+            mask: Boolean array of cells to include (True) or exclude (False),
+                or callable that generates the mask from `self.Z`.
                 If `None`, all cells are included.
             fill (bool): Whether to fill cells excluded by `mask` with interpolated values
         """
+        if callable(mask):
+            mask = mask(self.Z)
         self.Z = helpers.gaussian_filter(
             helpers.maximum_filter(self.Z, size=maximum_filter_size, mask=mask, fill=fill),
             sigma=gaussian_filter_sigma, mask=mask, fill=fill)
@@ -724,15 +727,35 @@ class DEMInterpolant(object):
     Attributes:
         paths (iterable): Paths to DEM files
         datetimes (iterable): Capture datetimes
+        d (float): Target grid cell size.
+            If `None`, the largest DEM cell size is used.
+        xlim (iterable): Crop bounds in x.
+            If `None`, the intersection of the DEMs is used.
+        ylim (iterable): Crop bounds in y.
+            If `None`, the intersection of the DEMs is used.
+        zlim (iterable): Crop bounds in z.
+            Values outside range are set to `np.nan`.
+        extrapolate (bool): Whether to interpolate from the two nearest DEMs (True)
+            or only from DEMs on either side of `t`
+        fun (callable): Function to apply to each DEM before interpolation,
+            with signature `fun(dem, **kwargs)`. Must modify DEM in place.
+        **kwargs (dict): Additional arguments passed to `fun`
     """
 
-    def __init__(self, paths, datetimes):
+    def __init__(self, paths, datetimes, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
         assert len(paths) == len(datetimes)
         assert len(paths) > 1
         assert len(paths) == len(set(paths))
         assert len(datetimes) == len(set(datetimes))
         self.paths = paths
         self.datetimes = datetimes
+        self.d = d
+        self.xlim = xlim
+        self.ylim = ylim
+        self.zlim = zlim
+        self.extrapolate = extrapolate
+        self.fun = fun
+        self.kwargs = kwargs
 
     def __call__(self, t, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
         """
@@ -740,24 +763,18 @@ class DEMInterpolant(object):
 
         Arguments:
             t (datetime.datetime): Datetime of interpolated DEM
-            d (float): Target grid cell size.
-                If `None`, the largest DEM cell size is used.
-            xlim (iterable): Crop bounds in x.
-                If `None`, the intersection of the DEMs is used.
-            ylim (iterable): Crop bounds in y.
-                If `None`, the intersection of the DEMs is used.
-            extrapolate (bool): Whether to interpolate from the two nearest DEMs (True)
-                or only from DEMs on either side of `t`
-            zlim (iterable): Crop bounds in z.
-                Values outside range are set to `np.nan`.
-            fun (callable): Function to apply to each DEM before interpolation,
-                with signature `fun(dem, **kwargs)`. Must modify DEM in place.
-            **kwargs (dict): Additional arguments passed to `fun`
 
         Returns:
             DEM: An interpolated DEM for time `t`
         """
-        dt = np.atleast_1d(self.datetimes) - t
+        d = helpers.first_not(d, self.d)
+        xlim = helpers.first_not(xlim, self.xlim)
+        ylim = helpers.first_not(ylim, self.ylim)
+        zlim = helpers.first_not(zlim, self.zlim)
+        extrapolate = extrapolate or self.extrapolate
+        fun = fun or self.fun
+        kwargs = kwargs or self.kwargs
+        dt = np.asarray(self.datetimes) - t
         if extrapolate:
             # Get two nearest DEMs
             i, j = abs(dt).argsort()[:2]

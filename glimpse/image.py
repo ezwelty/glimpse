@@ -166,7 +166,7 @@ class Camera(object):
 
     @sensorsz.setter
     def sensorsz(self, value):
-        self._sensorsz = helpers.format_list(value, length=2)
+        self._sensorsz = np.array(helpers.format_list(value, length=2), dtype=float)
 
     @property
     def fmm(self):

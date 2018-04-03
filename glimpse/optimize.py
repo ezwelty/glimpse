@@ -133,7 +133,7 @@ class Lines(object):
         self.uvs = (uvs, ) if isinstance(uvs, np.ndarray) else uvs
         self.step = step
         if step:
-            self.uvi = np.vstack((helpers.interpolate_line(uv, step=step, normalized=False) for uv in self.uvs))
+            self.uvi = np.vstack((helpers.interpolate_line(uv, dx=step) for uv in self.uvs))
         else:
             self.uvi = np.vstack(self.uvs)
         self.xyzs = (xyzs, ) if isinstance(xyzs, np.ndarray) else xyzs
@@ -182,7 +182,7 @@ class Lines(object):
                 for cline in helpers.clip_polyline_box(line, xy_box):
                     # Interpolate clipped lines to ~1 pixel density
                     puvs.append(self.cam._camera2image(
-                        helpers.interpolate_line(np.array(cline), step=xy_step, normalized=False)))
+                        helpers.interpolate_line(np.array(cline), dx=xy_step)))
         if puvs:
             return puvs
         else:
@@ -202,7 +202,7 @@ class Lines(object):
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        min_index = helpers.find_nearest_neighbors(self.observed(), puv)
+        min_index = helpers.find_nearest(self.observed(), puv)
         return puv[min_index, :]
 
     def is_static(self):
@@ -253,7 +253,7 @@ class Lines(object):
             if not predicted:
                 puvs = self.project()
             puv = np.row_stack(puvs)
-            min_index = helpers.find_nearest_neighbors(uv, puv)
+            min_index = helpers.find_nearest(uv, puv)
             duv = scale * (puv[min_index, :] - uv)
             defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
             if unselected is not None:
@@ -1390,7 +1390,7 @@ class KeypointMatcher(object):
         n = len(self.images)
         matches = np.full((n, n), None).astype(object)
         if path:
-            basenames = [os.path.splitext(os.path.basename(img.path))[0]
+            basenames = [helpers.strip_path(img.path)
                 for img in self.images]
             if len(basenames) != len(set(basenames)):
                 raise ValueError('Image basenames are not unique')

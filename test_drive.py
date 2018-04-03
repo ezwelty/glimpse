@@ -21,7 +21,7 @@ for station in STATIONS:
     station_dir = os.path.join(DATA_DIR, station)
     cam_paths = glob.glob(os.path.join(station_dir, CAM_DIR, '*.json'))
     cam_paths.sort()
-    basenames = [os.path.splitext(os.path.basename(path))[0] for path in cam_paths]
+    basenames = [glimpse.helpers.strip_path(path) for path in cam_paths]
     images = [glimpse.Image(
         path=os.path.join(station_dir, IMG_DIR, basename + '.JPG'),
         cam=os.path.join(station_dir, CAM_DIR, basename + '.json'))

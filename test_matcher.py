@@ -22,7 +22,7 @@ datetimes = np.array([glimpse.Exif(path).datetime
     for path in all_img_paths])
 inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)
 img_paths = [all_img_paths[i] for i in np.where(inrange)[0]]
-basenames = [os.path.splitext(os.path.basename(path))[0]
+basenames = [glimpse.helpers.strip_path(path)
     for path in img_paths]
 cam_args = cg.load_calibration(image=ANCHOR_BASENAME)
 images = [glimpse.Image(
@@ -108,7 +108,7 @@ for j in (0, 1):
     img = images[image_index[j]]
     img.plot()
     ransac_model.plot(cam=j, params=rvalues, index=rindex, scale=5, width=2, selected='green', unselected='red')
-    matplotlib.pyplot.title(str(image_index[j]) + ' : ' + os.path.splitext(os.path.basename(img.path))[0])
+    matplotlib.pyplot.title(str(image_index[j]) + ' : ' + glimpse.helpers.strip_path(img.path))
 
 # ---- RANSAC (filter matches) ----
 

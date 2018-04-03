@@ -21,15 +21,19 @@ except NameError:
 
 # ---- Environment variables ---
 
-print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and MATCH_PATH')
+print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, MATCH_PATH, and DEM_PATHS')
 IMAGE_PATH = None
 KEYPOINT_PATH = None
 MATCH_PATH = None
+DEM_PATHS = []
 
 # ---- Images ----
 
 @lru_cache(maxsize=1)
 def Sequences():
+    """
+    Return sequences metadata.
+    """
     df = pandas.read_csv(
         os.path.join(CG_PATH, 'sequences.csv'),
         parse_dates=['first_time_utc', 'last_time_utc'])
@@ -39,7 +43,14 @@ def Sequences():
     return df
 
 def parse_image_path(path, sequence=False):
-    basename = path_basename(path)
+    """
+    Return metadata parsed from image path.
+
+    Arguments:
+        path (str): Image path or basename
+        sequence (bool): Whether to include sequence metadata (camera, service, ...)
+    """
+    basename = glimpse.helpers.strip_path(path)
     station, date_str, time_str = re.findall('^([^_]+)_([0-9]{8})_([0-9]{6})', basename)[0]
     capture_time = datetime.datetime.strptime(date_str + time_str, '%Y%m%d%H%M%S')
     results = dict(basename=basename, station=station,
@@ -58,6 +69,12 @@ def parse_image_path(path, sequence=False):
     return results
 
 def find_image(path):
+    """
+    Return path to image file.
+
+    Arguments:
+        path (str): Image path or basename
+    """
     ids = parse_image_path(path, sequence=True)
     service_dir = os.path.join(IMAGE_PATH, ids['station'],
         ids['station'] + '_' + ids['service'])
@@ -70,6 +87,21 @@ def find_image(path):
                 return image_path
 
 def load_images(station, service, start=None, end=None, step=None, use_exif=True):
+    """
+    Return list of calibrated Image objects.
+
+    Any available station, camera, image, and viewdir calibrations are loaded
+    and images with image calibrations are marked as anchors.
+
+    Arguments:
+        station (str): Station identifier
+        service (str): Service identifier
+        start (datetime): Start datetime, or `None` to start at first image
+        end (datetimes): End datetime, or `None` to end with last image
+        step (timedelta): Target sampling frequency, or `None` for all images
+        use_exif (bool): Whether to use image datetimes from EXIF rather than
+            parsed from paths
+    """
     img_paths = glob.glob(os.path.join(IMAGE_PATH, station, station + '_' + service, '*.JPG'))
     if use_exif:
         exifs = [glimpse.Exif(path) for path in img_paths]
@@ -83,7 +115,7 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
     if end:
         selected &= datetimes <= end
     if step:
-        targets = datetime_range(
+        targets = glimpse.helpers.datetime_range(
             start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
         indices = glimpse.helpers.find_nearest_datetimes(targets, datetimes)
         temp = np.zeros(selected.shape, dtype=bool)
@@ -91,11 +123,11 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         selected &= temp
     base_calibration = load_calibrations(img_paths[0], station=True, camera=True, merge=True)
     anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
-    anchor_basenames = [path_basename(path) for path in anchor_paths]
+    anchor_basenames = [glimpse.helpers.strip_path(path) for path in anchor_paths]
     images = []
     for i in np.where(selected)[0]:
         path = img_paths[i]
-        basename = path_basename(path)
+        basename = glimpse.helpers.strip_path(path)
         calibrations = load_calibrations(image=basename, viewdir=basename,
             merge=False, file_errors=False)
         if calibrations['image']:
@@ -113,6 +145,12 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
     return images
 
 def load_masks(images):
+    """
+    Return a list of boolean land masks.
+
+    Arguments:
+        images (iterable): Image objects
+    """
     glimpse.Observer.test_images(images)
     # NOTE: Assumes that all images are from same station
     station = parse_image_path(images[0].path)['station']
@@ -143,6 +181,16 @@ def load_masks(images):
 # ---- Calibration controls ----
 
 def svg_controls(img, svg, keys=None, correction=True):
+    """
+    Return control objects for an Image.
+
+    Arguments:
+        img (Image): Image object
+        svg (str or dict): Path to SVG file or parsed result
+        keys (iterable): SVG layers to include, or all if `None`
+        correction: Whether control objects should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+    """
     if isinstance(svg, (bytes, str)):
         svg = glimpse.svg.parse_svg(svg, imgsz=img.cam.imgsz)
     if keys is None:
@@ -163,6 +211,15 @@ def svg_controls(img, svg, keys=None, correction=True):
     return controls
 
 def gcp_points(img, markup, correction=True):
+    """
+    Return ground control Points object for an Image.
+
+    Arguments:
+        img (Image): Image object
+        markup (dict): Parsed SVG layer
+        correction: Whether Points should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+    """
     uv = np.vstack(markup.values())
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'gcp.geojson'), key='id', crs=32606)
@@ -171,6 +228,14 @@ def gcp_points(img, markup, correction=True):
     return glimpse.optimize.Points(img.cam, uv, xyz, correction=correction)
 
 def coast_lines(img, markup, correction=True):
+    """
+    Return coast Lines object for an Image.
+
+    Arguments:
+        img (Image): Image object
+        markup (dict): Parsed SVG layer
+        correction (bool): Whether to set Lines to use elevation correction
+    """
     luv = tuple(markup.values())
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'coast.geojson'), crs=32606)
@@ -179,6 +244,15 @@ def coast_lines(img, markup, correction=True):
     return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
 def terminus_lines(img, markup, correction=True):
+    """
+    Return terminus Lines object for an Image.
+
+    Arguments:
+        img (Image): Image object
+        markup (dict): Parsed SVG layer
+        correction: Whether Lines should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+    """
     luv = tuple(markup.values())
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'termini.geojson'), key='date', crs=32606)
@@ -188,6 +262,15 @@ def terminus_lines(img, markup, correction=True):
     return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction)
 
 def horizon_lines(img, markup, correction=True):
+    """
+    Return horizon Lines object for an Image.
+
+    Arguments:
+        img (Image): Image object
+        markup (dict): Parsed SVG layer
+        correction: Whether Lines should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+    """
     luv = tuple(markup.values())
     station = parse_image_path(img.path)['station']
     geo = glimpse.helpers.read_geojson(
@@ -196,6 +279,15 @@ def horizon_lines(img, markup, correction=True):
     return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
 
 def moraines_mlines(img, markup, correction=True):
+    """
+    Return list of moraine Lines objects for an Image.
+
+    Arguments:
+        img (Image): Image object
+        markup (dict): Parsed SVG layer
+        correction: Whether Lines should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+    """
     date_str = img.datetime.strftime('%Y%m%d')
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'moraines', date_str + '.geojson'), key='id', crs=32606)
@@ -207,6 +299,16 @@ def moraines_mlines(img, markup, correction=True):
     return mlines
 
 def sea_height(xy, t=None):
+    """
+    Return the height of sea level relative to the WGS 84 ellipsoid.
+
+    Uses the EGM 2008 geoid height and the NOAA tide gauge in Valdez, Alaska.
+
+    Arguments:
+        xy (array): World coordinates (n, 2)
+        t (datetime): Datetime at which to estimate tidal height.
+            If `None`, tide is ignored in result.
+    """
     egm2008 = glimpse.DEM.read(os.path.join(CG_PATH, 'egm2008.tif'))
     geoid_height = egm2008.sample(xy).reshape(-1, 1)
     if t:
@@ -235,6 +337,27 @@ def sea_height(xy, t=None):
 
 def station_svg_controls(station, size=1, force_size=False, keys=None,
     correction=True, station_calib=False, camera_calib=True):
+    """
+    Return all SVG control objects for a station.
+
+    Arguments:
+        station (str): Station identifier
+        size: Image scale factor (number) or image size in pixels (nx, ny)
+        force_size (bool): Whether to force `size` even if different aspect ratio
+            than original size.
+        keys (iterable): SVG layers to include
+        correction: Whether control objects should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+        station_calib (bool): Whether to load station calibration. If `False`,
+            falls back to the station estimate.
+        camera_calib (bool): Whether to load camera calibrations. If `False`,
+            falls back to the EXIF estimate.
+
+    Returns:
+        list: Image objects
+        list: Control objects (Points, Lines)
+        list: Per-camera calibration parameters [{'viewdir': True}, ...]
+    """
     svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '*.svg'))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
@@ -248,7 +371,28 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
     return images, controls, cam_params
 
 def camera_svg_controls(camera, size=1, force_size=False, keys=None,
-    correction=True, station_calib=False, camera_calib=False, fixed=True):
+    correction=True, station_calib=False, camera_calib=False):
+    """
+    Return all SVG control objects available for a camera.
+
+    Arguments:
+        camera (str): Camera identifer
+        size: Image scale factor (number) or image size in pixels (nx, ny)
+        force_size (bool): Whether to force `size` even if different aspect ratio
+            than original size.
+        keys (iterable): SVG layers to include
+        correction: Whether control objects should use elevation correction (bool)
+            or arguments to `glimpse.helpers.elevation_corrections()`
+        station_calib (bool): Whether to load station calibration. If `False`,
+            falls back to the station estimate.
+        camera_calib (bool): Whether to load camera calibrations. If `False`,
+            falls back to the EXIF estimate.
+
+    Returns:
+        list: Image objects
+        list: Control objects (Points, Lines)
+        list: Per-camera calibration parameters [{'viewdir': True}, ...]
+    """
     svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', '*.svg'))
     images, controls, cam_params = [], [], []
     for svg_path in svg_paths:
@@ -260,14 +404,31 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
             images.append(glimpse.Image(img_path, cam=calibration))
             images[-1].cam.resize(size, force=force_size)
             controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
-            params = dict(viewdir=True)
-            if fixed is False:
-                params['xyz'] = True
-            cam_params.append(params)
+            cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
 def camera_motion_matches(camera, size=1, force_size=False,
     station_calib=False, camera_calib=False, detect=dict(), match=dict()):
+    """
+    Returns all motion Matches objects available for a camera.
+
+    Arguments:
+        camera (str): Camera identifier
+        size: Image scale factor (number) or image size in pixels (nx, ny)
+        force_size (bool): Whether to force `size` even if different aspect ratio
+            than original size.
+        station_calib (bool): Whether to load station calibration. If `False`,
+            falls back to the station estimate.
+        camera_calib (bool): Whether to load camera calibrations. If `False`,
+            falls back to the EXIF estimate.
+        detect (dict): Arguments passed to `glimpse.optimize.detect_keypoints()`
+        match (dict): Arguments passed to `glimpse.optimize.match_keypoints()`
+
+    Returns:
+        list: Image objects
+        list: Matches objects
+        list: Per-camera calibration parameters [{}, {'viewdir': True}, ...]
+    """
     motion = glimpse.helpers.read_json(os.path.join(CG_PATH, 'motion.json'))
     sequences = [item['paths'] for item in motion
         if parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
@@ -288,6 +449,14 @@ def camera_motion_matches(camera, size=1, force_size=False,
     return images, matches, cam_params
 
 def build_sequential_matches(images, detect=dict(), match=dict()):
+    """
+    Returns Matches objects for sequential Image pairs.
+
+    Arguments:
+        images (iterable): Image objects
+        detect (dict): Arguments passed to `glimpse.optimize.detect_keypoints()`
+        match (dict): Arguments passed to `glimpse.optimize.match_keypoints()`
+    """
     keypoints = [glimpse.optimize.detect_keypoints(img.read(), **detect) for img in images]
     matches = []
     for i in range(len(images) - 1):
@@ -300,6 +469,31 @@ def build_sequential_matches(images, detect=dict(), match=dict()):
 
 def load_calibrations(path=None, station_estimate=False, station=False,
     camera=False, image=False, viewdir=False, merge=False, file_errors=True):
+    """
+    Return camera calibrations.
+
+    Arguments:
+        path (str): Image basename or path
+        station_estimate: Whether to load station estimate (bool) or
+            station identifier to load (str).
+            If `True`, the station identifier is parsed from `path`.
+        station: Whether to load station (bool) or
+            station identifier to load (str).
+            If `True`, the station identifier is parsed from `path`.
+        camera: Whether to load camera (bool) or
+            camera identifier to load (str).
+            If `True`, the camera identifier is parsed from `path`.
+        image: Whether to load image (bool) or
+            image to load (str).
+            If `True`, the image basename is parsed from `path`.
+        viewdir: Whether to load view direction (bool) or
+            view direction to load (str).
+            If `True`, the image basename is parsed from `path`.
+        merge (bool): Whether to merge calibrations, in the order
+            station_estimate, station, camera, image, viewdir
+        file_errors (bool): Whether to raise an error if a requested calibration
+            file is not found
+    """
     def _try_except(fun, arg):
         try:
             return fun(arg)
@@ -337,6 +531,14 @@ def load_calibrations(path=None, station_estimate=False, station=False,
         return calibrations
 
 def merge_calibrations(calibrations, keys=('station_estimate', 'station', 'camera', 'image', 'viewdir')):
+    """
+    Merge camera calibrations.
+
+    Arguments:
+        calibrations (iterable): Dictionaries of calibration parameters
+        keys (iterable): Calibration types, in order from lowest to highest
+            overwrite priority
+    """
     calibration = dict()
     for key in keys:
         if key in calibrations and calibrations[key]:
@@ -359,18 +561,26 @@ def _load_camera(camera):
     return glimpse.helpers.read_json(camera_path)
 
 def _load_image(path):
-    basename = path_basename(path)
+    basename = glimpse.helpers.strip_path(path)
     image_path = os.path.join(CG_PATH, 'images', basename + '.json')
     return glimpse.helpers.read_json(image_path)
 
 def _load_viewdir(path):
-    basename = path_basename(path)
+    basename = glimpse.helpers.strip_path(path)
     viewdir_path = os.path.join(CG_PATH, 'viewdirs', basename + '.json')
     return glimpse.helpers.read_json(viewdir_path)
 
 def write_image_viewdirs(images, viewdirs=None):
+    """
+    Write Image view directions to file.
+
+    Arguments:
+        images (iterable): Image objects
+        viewdirs (iterable): Camera view directions to write.
+            If `None`, these are read from `images[i].cam.viewdirs`.
+    """
     for i, img in enumerate(images):
-        basename = path_basename(img.path)
+        basename = glimpse.helpers.strip_path(img.path)
         path = os.path.join(CG_PATH, 'viewdirs', basename + '.json')
         if viewdirs is None:
             d = dict(viewdir=tuple(img.cam.viewdir))
@@ -380,10 +590,37 @@ def write_image_viewdirs(images, viewdirs=None):
 
 # ---- Helpers ----
 
-def path_basename(path):
-    return os.path.splitext(os.path.basename(path))[0]
+def load_dem_interpolant(**kwargs):
+    """
+    Return a canonical DEMInterpolant object.
+
+    Loads all '*.tif' files found in `DEM_PATHS`, parsing dates from the first
+    sequence of 8 numeric digits in each basename.
+
+    Arguments:
+        **kwargs (dict): Additional arguments to `glimpse.DEMInterpolant()`
+    """
+    paths = [path for directory in DEM_PATHS
+        for path in glob.glob(os.path.join(directory, '*.tif'))]
+    dates = [re.findall(r'([0-9]{8})', glimpse.helpers.strip_path(path))[0] for path in paths]
+    # DEMs are produced from imagery taken near local noon, about 22:00 UTC
+    datetimes = [datetime.datetime.strptime(date + '22', '%Y%m%d%H') for date in dates]
+    return glimpse.DEMInterpolant(paths, datetimes, **kwargs)
 
 def project_dem(cam, dem, array=None, mask=None, correction=True):
+    """
+    Return a grayscale image formed by projecting a DEM into a Camera.
+
+    Arguments:
+        cam (Camera): Camera object
+        dem (DEM): DEM object
+        array (array): Array (with shape `dem.Z`) of pixel values to project.
+            If `None`, `dem.Z` is used.
+        mask (array): Boolean array (with shape `dem.Z`) indicating which values
+            to project
+        correction: Whether to apply elevation corrections (bool) or arguments
+            to `glimpse.helpers.elevation_corrections()`
+    """
     if mask is None:
         mask = ~np.isnan(dem.Z)
     xyz = np.column_stack((dem.X[mask], dem.Y[mask], dem.Z[mask]))
@@ -391,7 +628,3 @@ def project_dem(cam, dem, array=None, mask=None, correction=True):
     if array is None:
         array = dem.Z
     return cam.rasterize(uv, array[mask])
-
-def datetime_range(start, stop, step):
-    max_steps = (stop - start) // step
-    return [start + n * step for n in range(max_steps + 1)]

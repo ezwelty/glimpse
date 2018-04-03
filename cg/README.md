@@ -20,12 +20,13 @@ Module [`cg.py`](cg.py) provides functions to access Columbia Glacier timelapse 
 - `cameras/<camera>.json` - Internal camera parameters ('fmm', 'cmm', 'k', 'p', 'sensorsz')
 - `stations/<station>.json` - External camera parameters ('xyz', average 'viewdir')
 - `images/<image>.json` - Complete camera solution ('xyz', 'viewdir', 'fmm', 'cmm', 'k', 'p', 'sensorsz')
+- `viewdirs/<image>.json` - Refined camera view directions ('viewdir')
 
 `*_stderr.json` are standard errors for the optimized parameters, as computed by [lmfit](https://lmfit.github.io/lmfit-py/parameters.html?highlight=stderr#lmfit.parameter.Parameter.stderr).
 
 ### Image archive (`cg.IMAGE_PATH`)
 
-Functions in `cg` expect timelapse images to be filed as `IMAGE_PATH/<station>/<station_service>/*/<image>.JPG`, with images at most two levels below `<station_service>`. More specifically, the archive is organized as the following:
+Functions in `cg` expect timelapse images to be filed as `IMAGE_PATH/<station>/<station_service>/*/<image>.JPG`, with images at most two levels below `<station_service>`. More specifically, the archive is organized as follows:
 
 - `<station>/` - Each station has a top-level directory
   - `<station_service>/` - which contains one or more service directories
@@ -41,22 +42,16 @@ Functions in `cg` expect timelapse images to be filed as `IMAGE_PATH/<station>/<
 - `<station>/`
   - ...
 
-All images taken with a timelapse camera (`<image>.JPG`) are named as `<station>_<yyyymmdd>_<hhmmss>[A-Z]`.
+All images taken with a timelapse camera (`<image>.JPG`) are named `<station>_<yyyymmdd>_<hhmmss>[A-Z].JPG`.
 
-<!-- ### Keypoints file cache (`cg.KEYPOINT_PATH`)
+### Keypoints file cache (`cg.KEYPOINT_PATH`)
 
-Keypoints are cached as tuples (list of `cv2.KeyPoint` objects, `numpy.ndarry` of descriptors) and saved as a binary pickle with `protocol=2`.
-
-- `full/` - Image keypoints.
-  - `<image>.pkl`
-- `masked/` - Image keypoints restricted to the static regions of the scene.
-  - `<image>.pkl`
+Keypoints - restricted to the static regions of the scene - are cached as tuples (list of `cv2.KeyPoint` objects, `numpy.ndarry` of descriptors) and saved as a binary pickle in `cg.KEYPOINT_PATH` with names `<image>.pkl`.
 
 ### Matches file cache (`cg.MATCH_PATH`)
 
-Keypoint matches are cached as `glimpse.optimize.Matches` and saved as a binary pickle with `protocol=2`.
+Keypoint matches are cached as `glimpse.optimize.Matches` and saved as a binary pickle in `cg.MATCH_PATH` with names `<imageA>-<imageB>.pkl`.
 
-- `full/` - Matches between full keypoints.
-  - `<imageA>-<imageB>.pkl`
-- `masked/` - Matches between masked keypoints.
-  - `<imageA>-<imageB>.pkl` -->
+### DEM file paths (`cg.DEM_PATHS`)
+
+Digital elevation models (DEMs) are stored as GeoTIFF files in the directories listed in `cg.DEM_PATHS` with names `*<yyyymmdd>*.tif`.

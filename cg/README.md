@@ -11,7 +11,13 @@ Module [`cg.py`](cg.py) provides functions to access Columbia Glacier timelapse 
   - `gcp.geojson` - Named ground control points (used as point control)
   - `stations.geojson` - List of stations with nominal camera positions and orientations
   - `termini.geojson` - Glacier terminus traced from map data (used as line control for same-day images)
-- `svg/<image>.svg` - Image coordinates of line and point control (any of 'gcp', 'coast', 'terminus', 'horizon', 'moraines')
+- `svg/<image>.svg` - Image coordinates of control and polygon regions parsed from SVG layer groups:
+  - `gcp`: Ground control points, as one or more `<path>` (single vertex) or `<circle>` whose `id` matches a feature `id` in `gcp.geojson`
+  - `horizon`: Mountain horizon segments, as one or more `<path>`, `<line>`, or `<polyline>`
+  - `terminus`: Glacier terminus segments (traced at the water line), as one or more `<path>`, `<line>`, or `<polyline>`
+  - `coast`: Coastline segments (traced at the water line), as one or more `<path>`, `<line>`, or `<polyline>`
+  - `moraines`: Glacier medial moraines, as one or more `<path>`, `<line>`, or `<polyline>` whose `id` matches a feature `id` in `moraines/<yyyymmdd>.geojson`
+  - `land`: Static land areas, as one or more `<polygon>`
 - `motion.json` - Lists of images separated by large motion (used for matches control)
 - `sequences.csv` - List of image sequences with station, camera, image time range, and other metadata
 
@@ -44,6 +50,10 @@ Functions in `cg` expect timelapse images to be filed as `IMAGE_PATH/<station>/<
 
 All images taken with a timelapse camera (`<image>.JPG`) are named `<station>_<yyyymmdd>_<hhmmss>[A-Z].JPG`.
 
+### DEM archive (`cg.DEM_PATHS`)
+
+Digital elevation models (DEMs) are stored as GeoTIFF files in the directories listed in `cg.DEM_PATHS` with names `*<yyyymmdd>*.tif`.
+
 ### Keypoints file cache (`cg.KEYPOINT_PATH`)
 
 Keypoints - restricted to the static regions of the scene - are cached as tuples (list of `cv2.KeyPoint` objects, `numpy.ndarry` of descriptors) and saved as a binary pickle in `cg.KEYPOINT_PATH` with names `<image>.pkl`.
@@ -51,7 +61,3 @@ Keypoints - restricted to the static regions of the scene - are cached as tuples
 ### Matches file cache (`cg.MATCH_PATH`)
 
 Keypoint matches are cached as `glimpse.optimize.Matches` and saved as a binary pickle in `cg.MATCH_PATH` with names `<imageA>-<imageB>.pkl`.
-
-### DEM file paths (`cg.DEM_PATHS`)
-
-Digital elevation models (DEMs) are stored as GeoTIFF files in the directories listed in `cg.DEM_PATHS` with names `*<yyyymmdd>*.tif`.

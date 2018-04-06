@@ -97,7 +97,7 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         station (str): Station identifier
         service (str): Service identifier
         start (datetime): Start datetime, or `None` to start at first image
-        end (datetimes): End datetime, or `None` to end with last image
+        end (datetime): End datetime, or `None` to end with last image
         step (timedelta): Target sampling frequency, or `None` for all images
         use_exif (bool): Whether to use image datetimes from EXIF rather than
             parsed from paths
@@ -109,23 +109,12 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
     else:
         datetimes = np.array([parse_image_path(path)['datetime']
             for path in img_paths])
-    selected = np.ones(datetimes.shape, dtype=bool)
-    if start:
-        selected &= datetimes >= start
-    if end:
-        selected &= datetimes <= end
-    if step:
-        targets = glimpse.helpers.datetime_range(
-            start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
-        indices = glimpse.helpers.find_nearest_datetimes(targets, datetimes)
-        temp = np.zeros(selected.shape, dtype=bool)
-        temp[indices] = True
-        selected &= temp
+    index = glimpse.helpers.select_datetimes(datetimes, start=start, end=end, step=step)
     base_calibration = load_calibrations(img_paths[0], station=True, camera=True, merge=True)
     anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
     anchor_basenames = [glimpse.helpers.strip_path(path) for path in anchor_paths]
     images = []
-    for i in np.where(selected)[0]:
+    for i in index:
         path = img_paths[i]
         basename = glimpse.helpers.strip_path(path)
         calibrations = load_calibrations(image=basename, viewdir=basename,

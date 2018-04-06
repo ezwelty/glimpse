@@ -1289,3 +1289,28 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
     if dx is not None:
         dx = dx.total_seconds()
     return interpolate_line(vertices, x=x, xi=xi, n=n, dx=dx, **kwargs)
+
+def select_datetimes(datetimes, start=None, end=None, step=None):
+    """
+    Return indices of datetimes matching the specified criteria.
+
+    Arguments:
+        datetimes (iterable): Datetime objects
+        start (datetime): Start datetime
+        end (datetime): End datetime
+        step (timedelta): Target sampling frequency
+    """
+    datetimes = as_array(datetimes)
+    selected = np.ones(datetimes.shape, dtype=bool)
+    if start:
+        selected &= datetimes >= start
+    if end:
+        selected &= datetimes <= end
+    if step:
+        targets = datetime_range(
+            start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
+        indices = find_nearest_datetimes(targets, datetimes)
+        temp = np.zeros(selected.shape, dtype=bool)
+        temp[indices] = True
+        selected &= temp
+    return np.nonzero(selected)[0]

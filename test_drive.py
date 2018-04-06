@@ -65,7 +65,7 @@ tracker = glimpse.Tracker(
     time_unit=time_unit, resample_method='systematic')
 results = glimpse.parallel.track(tracker, xy,
     n=5000, xy_sigma=(2, 2), vxy=(0, 0), vxy_sigma=(10, 10),
-    datetimes=None, maxdt=0, tile_size=(15, 15), axy=(0, 0), axy_sigma=(0, 0))
+    datetimes=None, maxdt=0, tile_size=(15, 15), axy=(0, 0), axy_sigma=(2, 2))
 
 # ---- Plot track ----
 

@@ -13,7 +13,7 @@ class Observer(object):
         images (list): Image objects with equal camera position (xyz),
             focal length (f), image size (imgsz) and
             strictly increasing in time (`datetime`)
-        datetimes (array): Image capture times
+        datetimes (array): Image capture times, by default read from `images[i].datetime`
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
         correction: Curvature and refraction correction (see `Camera.project()`)
@@ -21,11 +21,16 @@ class Observer(object):
         grid (glimpse.dem.Grid): Grid object for operations on image coordinates
     """
 
-    def __init__(self, images, sigma=0.3, correction=True, cache=True):
+    def __init__(self, images, datetimes=None, sigma=0.3, correction=True, cache=True):
+        if len(images) < 2:
+            raise ValueError('Observer must have two or more images')
         self.xyz = images[0].cam.xyz
         self.test_images(images)
         self.images = images
-        datetimes = np.array([img.datetime for img in self.images])
+        if datetimes is None:
+            datetimes = np.array([img.datetime for img in self.images])
+        else:
+            datetimes = np.asarray(datetimes)
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
         if any(time_deltas <= 0):
             raise ValueError('Image datetimes are not stricly increasing')
@@ -358,7 +363,21 @@ class Observer(object):
         # Build animation
         return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
 
-    def split(self, n, overlap=0):
+    def subset(self, start=None, end=None, step=None):
+        """
+        Return a new Observer with a subset of the original images.
+
+        Arguments:
+            start (datetime): Start datetime, or `None` to start at first image
+            end (datetime): End datetime, or `None` to end with last image
+            step (timedelta): Target sampling frequency, or `None` for all images
+        """
+        index = helpers.select_datetimes(self.datetimes, start=start, end=end, step=step)
+        images = [self.images[i] for i in index]
+        params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
+        return Observer(images, datetimes=self.datetimes[index], **params)
+
+    def split(self, n, overlap=1):
         """
         Split into multiple Observers.
 
@@ -369,14 +388,19 @@ class Observer(object):
         """
         if np.iterable(n):
             breaks = np.unique(np.hstack((n, self.datetimes[[0, -1]])))
-            midtimes = breaks[:-1] + np.diff(breaks) * 0.5
         else:
             dt = (self.datetimes[-1] - self.datetimes[0]) / n
-            midtimes = helpers.datetime_range(
-                self.datetimes[0] + dt * 0.5, self.datetimes[-1], dt)
-        nearest = helpers.find_nearest_datetimes(self.datetimes, midtimes)
-        breaks = np.nonzero(np.diff(np.hstack((-1, nearest, np.inf))))[0]
-        overlaps = (0, ) + (overlap, ) * (len(midtimes) - 1)
-        params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
-        return [Observer(images=self.images[(breaks[i] - overlaps[i]):breaks[i + 1]], **params)
-            for i in range(len(breaks) - 1)]
+            breaks = helpers.datetime_range(
+                self.datetimes[0], self.datetimes[-1], dt)
+        observers = []
+        start = breaks[0]
+        for i in range(len(breaks) - 1):
+            observer = self.subset(start=start, end=breaks[i + 1])
+            if overlap:
+                lag = min(overlap, len(observer.datetimes))
+                start = observer.datetimes[-lag]
+            else:
+                # HACK: Prevent overlap by moving start by smallest timedelta
+                start = observer.datetimes[-1] + datetime.timedelta(microseconds=1)
+            observers.append(observer)
+        return observers

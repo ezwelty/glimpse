@@ -429,8 +429,7 @@ class DEM(Grid):
         if self._Zf is None:
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RegularGridInterpolator(
-                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]],
-                method='linear', bounds_error=False)
+                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]])
         return self._Zf
 
     # ---- Methods (public) ----
@@ -438,19 +437,23 @@ class DEM(Grid):
     def copy(self):
         return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
 
-    def sample(self, xy, indices=False, method='linear'):
+    def sample(self, xy, method='linear', bounds_error=True, fill_value=np.nan):
         """
         Sample `Z` at points.
 
+        Calls a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`).
+
         Arguments:
-            xy (array): Point coordinates (Nx2)
-            method (str): Interpolation method,
-                either 'linear' (default) or 'nearest'
+            xy (array): Point coordinates (n, 2)
+            method (str): Interpolation method
+            bounds_error (bool): Whether an error is thrown if `xy` are outside bounds
+            fill_value (number): Value to use for points outside bounds.
+                If `None`, values outside bounds are extrapolated.
         """
-        if indices:
-            return self.Z.flat[self.rowcol_to_idx(xy)]
-        else:
-            return self.Zf(xy, method=method)
+        Zf = self.Zf
+        Zf.bounds_error = bounds_error
+        Zf.fill_value = fill_value
+        return Zf(xy, method=method)
 
     def resample(self, dem, method='linear'):
         xy = np.column_stack((dem.X.ravel(), dem.Y.ravel()))

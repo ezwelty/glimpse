@@ -982,9 +982,9 @@ def intersect_boxes(boxes):
     else:
         return np.hstack((boxmin, boxmax))
 
-def find_nearest(x, y, metric='sqeuclidean', **params):
+def pairwise_distance(x, y, metric='sqeuclidean', **params):
     """
-    Return the indices of the nearest neighbors between two sets of points.
+    Return the pairwise distance between two sets of points.
 
     Arguments:
         x (iterable): First set of n-d points
@@ -994,15 +994,14 @@ def find_nearest(x, y, metric='sqeuclidean', **params):
         **params (dict): Additional arguments to `scipy.spatial.distance.cdist()`
 
     Returns:
-        array: Indices of the nearest neighbors of `x` in `y`
+        array: Pairwise distances, where [i, j] = distance(x[i], y[j])
     """
     x = as_array(x)
     y = as_array(y)
-    distances = scipy.spatial.distance.cdist(
+    return scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
         metric=metric, **params)
-    return np.argmin(distances, axis=1)
 
 def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fill='endpoints'):
     """
@@ -1224,7 +1223,7 @@ def datetimes_to_float(datetimes):
     """
     Return datetimes as float.
 
-    Datetimes are converted to POSIX timestamps - the number of seconds since
+    Converts datetimes to POSIX timestamps - the number of seconds since
     1970-01-01 00:00:00 UTC.
 
     Arguments:
@@ -1237,22 +1236,21 @@ def datetimes_to_float(datetimes):
         epoch = datetime.datetime.fromtimestamp(0)
         return [(xi - epoch).total_seconds() for xi in datetimes]
 
-def find_nearest_datetimes(x, y):
+def pairwise_distance_datetimes(x, y):
     """
-    Return the indices of the nearest neighbors between two sets of datetimes.
+    Return the pairwise distances between two sets of datetimes.
 
-    Datetime wrapper for `find_nearest()`.
+    Datetime wrapper for `pairwise_distance()`.
 
     Arguments:
-        x (iterable): Datetimes
-        y (iterable): Datetimes
+        x (iterable): Datetime objects
+        y (iterable): Datetime objects
 
     Returns:
-        array: Indices of the nearest neighbors of `x` in `y`
+        array: Pairwise distances in seconds, where [i, j] = distance(x[i], y[j])
     """
-    return find_nearest(
-        datetimes_to_float(x),
-        datetimes_to_float(y),
+    return pairwise_distance(
+        datetimes_to_float(x), datetimes_to_float(y),
         metric='minkowski', p=1)
 
 def datetime_range(start, stop, step):
@@ -1309,7 +1307,8 @@ def select_datetimes(datetimes, start=None, end=None, step=None):
     if step:
         targets = datetime_range(
             start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
-        indices = find_nearest_datetimes(targets, datetimes)
+        distances = pairwise_distance_datetimes(targets, datetimes)
+        indices = np.argmin(distances, axis=1)
         temp = np.zeros(selected.shape, dtype=bool)
         temp[indices] = True
         selected &= temp

@@ -153,8 +153,9 @@ def load_masks(images):
     svg_datetimes = [parse_image_path(path)['datetime']
         for path in np.array(svg_paths)[land_index]]
     img_datetimes = [img.datetime for img in images]
-    nearest_index = glimpse.helpers.find_nearest_datetimes(
+    distances = glimpse.helpers.pairwise_distance_datetimes(
         img_datetimes, svg_datetimes)
+    nearest_index = np.argmin(distances, axis=1)
     nearest = np.unique(nearest_index)
     # Make masks and expand per image without copying
     land_markups = np.array(markups)[land_index]

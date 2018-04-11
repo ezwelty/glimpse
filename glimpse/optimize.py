@@ -202,7 +202,8 @@ class Lines(object):
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        min_index = helpers.find_nearest(self.observed(), puv)
+        distances = helpers.pairwise_distance(self.observed(), puv)
+        min_index = np.argmin(distances, axis=1)
         return puv[min_index, :]
 
     def is_static(self):
@@ -253,7 +254,8 @@ class Lines(object):
             if not predicted:
                 puvs = self.project()
             puv = np.row_stack(puvs)
-            min_index = helpers.find_nearest(uv, puv)
+            distances = helpers.pairwise_distance(uv, puv)
+            min_index = np.argmin(distances, axis=1)
             duv = scale * (puv[min_index, :] - uv)
             defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
             if unselected is not None:

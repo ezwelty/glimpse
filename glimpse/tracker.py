@@ -10,10 +10,9 @@ class Tracker(object):
     Attributes:
         observers (list): Observer objects
         dem (DEM): Digital elevation model of the surface on which to track points
+        time_unit (timedelta): Length of time unit for temporal arguments
         viewshed (DEM): `DEM` object of a binary viewshed.
             Can also be an array, in which case it must be the same shape as `dem.Z`.
-        time_unit (float): Length of time unit for temporal arguments, in seconds
-            (e.g., 1 minute = 60, 1 hour = 3600)
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
         grayscale (dict): Grayscale conversion
@@ -38,7 +37,7 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, dem, viewshed=None, time_unit=1, resample_method='systematic',
+    def __init__(self, observers, dem, time_unit, viewshed=None, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
         self.dem = dem
@@ -85,10 +84,10 @@ class Tracker(object):
 
         Arguments:
             n (int): Number of particles
-            xy (array-like): Mean position (x, y)
-            xy_sigma (array-like): Standard deviation of positions (x, y)
-            vxy (array-like): Mean velocity (x, y)
-            vxy_sigma (array-like): Standard deviation of velocities (x, y)
+            xy (iterable): Mean position (x, y)
+            xy_sigma (iterable): Standard deviation of positions (x, y)
+            vxy (iterable): Mean velocity (x, y)
+            vxy_sigma (iterable): Standard deviation of velocities (x, y)
         """
         if self.particles is None or len(self.particles) != n:
             self.particles = np.zeros((n, 5))
@@ -98,22 +97,24 @@ class Tracker(object):
         self._test_particles()
         self.weights = np.full(n, 1.0 / n)
 
-    def evolve_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
+    def evolve_particles(self, dt, axy=(0, 0), axy_sigma=(0, 0)):
         """
         Evolve particles through time by stochastic differentiation.
 
-        Temporal arguments (`dt`, `axy`, `axy_sigma`) are assumed to be in
-        `self.time_unit` time units.
+        Accelerations (`axy`, `axy_sigma`) are assumed to be with respect to
+        `self.time_unit`.
 
         Arguments:
-            dt (float): Time step
-            axy (array-like): Mean of random accelerations (x, y)
-            axy_sigma (array-like): Standard deviation of random accelerations (x, y)
+            dt (timedelta): Time difference to evolve particles forward or backward
+            axy (iterable): Mean of random accelerations (x, y)
+            axy_sigma (iterable): Standard deviation of random accelerations (x, y)
         """
+        time_units = dt.total_seconds() / self.time_unit.total_seconds()
         daxy = axy_sigma * np.random.randn(len(self.particles), 2)
-        self.particles[:, 0:2] += dt * self.particles[:, 3:5] + 0.5 * (axy + daxy) * dt**2
+        self.particles[:, 0:2] += (time_units * self.particles[:, 3:5]
+            + 0.5 * (axy + daxy) * time_units**2)
         self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
-        self.particles[:, 3:5] += dt * (axy + daxy)
+        self.particles[:, 3:5] += time_units * (axy + daxy)
         self._test_particles()
 
     def update_weights(self, likelihoods):
@@ -192,24 +193,24 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, datetimes=None, maxdt=0, tile_size=(15, 15),
+    def track(self, datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
         axy=(0, 0), axy_sigma=(0, 0)):
         """
         Track particles through time.
 
-        Temporal arguments (`maxdt`, `axy`, `axy_sigma`) are assumed to be in
-        `self.time_unit` time units.
+        Accelerations (`axy`, `axy_sigma`) are assumed to be with respect to
+        `self.time_unit`.
         Tracking results are saved in
         `self.datetimes`, `self.means`, and `self.covariances`.
 
         Arguments:
-            datetimes (array-like): Monotonically increasing sequence of
-                datetimes at which to track particles.
-                If `None`, defaults to all unique datetimes in `self.observers`.
-            maxdt (float): Maximum time delta for an image to match `datetimes`
-            tile_size (array-like): Size of reference tiles in pixels (width, height)
-            axy (array-like): Mean of random accelerations (x, y)
-            axy_sigma (array-like) Standard deviation of random accelerations (x, y)
+            datetimes (iterable): Monotonic sequence of datetimes at which to
+                track particles. If `None`, defaults to all unique datetimes in
+                `self.observers`.
+            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
+            tile_size (iterable): Size of reference tiles in pixels (width, height)
+            axy (iterable): Mean of random accelerations (x, y)
+            axy_sigma (iterable) Standard deviation of random accelerations (x, y)
         """
         if self.particles is None or self.weights is None:
             raise ValueError('Particles are not initialized')
@@ -224,7 +225,7 @@ class Tracker(object):
                 self.initialize_template(obs=obs, img=img, tile_size=tile_size)
         self.means = [self.particle_mean]
         self.covariances = [self.particle_covariance]
-        dts = (dt.total_seconds() / self.time_unit for dt in np.diff(self.datetimes))
+        dts = np.diff(self.datetimes)
         for i, dt in enumerate(dts, start=1):
             self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
             # Initialize templates for Observers starting at datetimes[i]
@@ -237,7 +238,7 @@ class Tracker(object):
             self.means.append(self.particle_mean)
             self.covariances.append(self.particle_covariance)
 
-    def initialize_datetimes(self, datetimes=None, maxdt=0):
+    def initialize_datetimes(self, datetimes=None, maxdt=datetime.timedelta(0)):
         """
         Initialize track datetimes (`self.datetimes`).
 
@@ -250,7 +251,7 @@ class Tracker(object):
                 datetimes at which to track particles.
                 If `None`, defaults to all unique datetimes in `self.observers`
                 in increasing order.
-            maxdt (float): Maximum time delta for an image to match `datetimes`
+            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
         """
         observed_datetimes = np.unique(np.concatenate([
             obs.datetimes for obs in self.observers]))
@@ -271,7 +272,7 @@ class Tracker(object):
                 datetimes = datetimes[selected]
             # Datetimes must match at least one Observer
             distances = helpers.pairwise_distance_datetimes(datetimes, observed_datetimes)
-            selected = distances.min(axis=1) <= maxdt * self.time_unit
+            selected = distances.min(axis=1) <= abs(maxdt.total_seconds())
             if not all(selected):
                 warnings.warn('Dropping datetimes not matching any Observers')
                 datetimes = datetimes[selected]
@@ -279,13 +280,13 @@ class Tracker(object):
             raise ValueError('Fewer than two valid datetimes')
         self.datetimes = datetimes
 
-    def match_datetimes(self, datetimes, maxdt=0):
+    def match_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
         """
         Return matching image indices for each Observer and datetime.
 
         Arguments:
             datetimes (iterable): Datetime objects
-            maxdt (float): Maximum time delta for an image to match `datetimes`
+            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
 
         Returns:
             array: Grid of matching image indices ([i, j] for datetimes[i], observers[j]),
@@ -295,9 +296,9 @@ class Tracker(object):
         for i, observer in enumerate(self.observers):
             distances = helpers.pairwise_distance_datetimes(datetimes, observer.datetimes)
             nearest_index = np.argmin(distances, axis=1)
-            nearest_distance = distances[np.arange(distances.shape[0]), nearest_index]
-            not_selected = nearest_distance > maxdt * self.time_unit
             matches[:, i] = nearest_index
+            nearest_distance = distances[np.arange(distances.shape[0]), nearest_index]
+            not_selected = nearest_distance > abs(maxdt.total_seconds())
             matches[not_selected, i] = None
         return matches
 

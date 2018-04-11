@@ -51,22 +51,21 @@ class Observer(object):
             if any(img.cam.imgsz != images[0].cam.imgsz):
                 raise ValueError('Image sizes (imgsz) are not equal')
 
-    def index(self, value, max_seconds=1):
+    def index(self, value, maxdt=datetime.timedelta(0)):
         """
         Retrieve the index of an image.
 
         Arguments:
             value: Either Image object to find in `self.images` or
                 Date and time to match against `self.datetimes` (datetime)
-            max_seconds (float): If `value` is datetime,
-                maximum time delta in seconds to be considered a match.
+            maxdt (timedelta): Maximum timedelta for `value` (datetime) to be
+                considered a match. If `None`, no limit is placed on the match.
         """
         if isinstance(value, datetime.datetime):
-            time_deltas = np.abs(value - self.datetimes)
-            index = np.argmin(time_deltas)
-            seconds = time_deltas[index].total_seconds()
-            if seconds > max_seconds:
-                raise IndexError('Nearest image out of range by ' + str(seconds - max_seconds) + ' s')
+            dts = np.abs(value - self.datetimes)
+            index = np.argmin(dts)
+            if maxdt is not None and dts[index] > abs(maxdt):
+                raise IndexError('Nearest image out of range by ' + str(dts[index] - abs(maxdt)))
             return index
         else:
             return self.images.index(value)

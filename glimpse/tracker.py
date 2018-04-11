@@ -98,9 +98,9 @@ class Tracker(object):
         self._test_particles()
         self.weights = np.full(n, 1.0 / n)
 
-    def advance_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
+    def evolve_particles(self, dt=1, axy=(0, 0), axy_sigma=(0, 0)):
         """
-        Advance particles forward in time by stochastic differentiation.
+        Evolve particles through time by stochastic differentiation.
 
         Temporal arguments (`dt`, `axy`, `axy_sigma`) are assumed to be in
         `self.time_unit` time units.
@@ -226,7 +226,7 @@ class Tracker(object):
         self.covariances = [self.particle_covariance]
         dts = (dt.total_seconds() / self.time_unit for dt in np.diff(self.datetimes))
         for i, dt in enumerate(dts, start=1):
-            self.advance_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
+            self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
             # Initialize templates for Observers starting at datetimes[i]
             for obs, img in enumerate(matches[i]):
                 if img is not None and not self.templates[obs]:
@@ -270,7 +270,7 @@ class Tracker(object):
                 warnings.warn('Dropping duplicate datetimes')
                 datetimes = datetimes[selected]
             # Datetimes must match at least one Observer
-            distances = helper.pairwise_distance_datetime(datetimes, observed_datetimes)
+            distances = helpers.pairwise_distance_datetimes(datetimes, observed_datetimes)
             selected = distances.min(axis=1) <= maxdt * self.time_unit
             if not all(selected):
                 warnings.warn('Dropping datetimes not matching any Observers')

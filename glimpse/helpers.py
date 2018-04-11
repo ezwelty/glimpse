@@ -1011,7 +1011,7 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
         vertices (array): Coordinates of vertices (n, d)
         x (iterable): Distance measure at each vertex (n, ). If `None`,
             the cumulative Euclidean distance is used.
-            Undefined behavior results if not monotonic.
+            Undefined behavior results if not strictly monotonic.
         xi (iterable): Distance of interpolated points along line
         n (int): Number of evenly-spaced points to return
             (ignored if `xi` is not `None`)
@@ -1022,9 +1022,6 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
             If 'endpoints', uses (`vertices[0]`, `vertices[-1]`).
     """
     assert not all((xi is None, n is None, dx is None))
-    if xi is None:
-        error = False
-        fill = 'endpoints'
     if x is None:
         # Compute total distance at each vertex
         x = np.cumsum(np.sqrt(np.sum(np.diff(vertices, axis=0)**2, axis=1)))
@@ -1037,6 +1034,14 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
                 n += 1
             n = int(round(n))
         xi = np.linspace(start=x[0], stop=x[-1], num=n, endpoint=True)
+        # Ensure defaults for speed
+        error = False
+        fill = 'endpoints'
+    # x must be increasing
+    if len(x) > 1 and x[1] < x[0]:
+        sort_index = np.argsort(x)
+        x = x[sort_index]
+        vertices = vertices[sort_index, :]
     # Interpolate each dimension and combine
     result = np.column_stack((
         np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1])))
@@ -1272,7 +1277,7 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
     Arguments:
         vertices (array): Coordinates of vertices (n, d)
         x (iterable): Datetimes of vertices (n, ).
-            Undefined behavior results if not monotonic.
+            Undefined behavior results if not strictly monotonic.
         xi (iterable): Datetimes of interpolated points
         n (int): Number of evenly-spaced points to return
             (ignored if `xi` is not `None`)
@@ -1281,9 +1286,9 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
         **kwargs (dict): Additional arguments passed to `interpolate_line()`
     """
     t0 = x[0]
-    x = [(t - t0).total_seconds() for t in x]
+    x = np.asarray([(t - t0).total_seconds() for t in x])
     if xi is not None:
-        xi = [(t - t0).total_seconds() for t in xi]
+        xi = np.asarray([(t - t0).total_seconds() for t in xi])
     if dx is not None:
         dx = dx.total_seconds()
     return interpolate_line(vertices, x=x, xi=xi, n=n, dx=dx, **kwargs)

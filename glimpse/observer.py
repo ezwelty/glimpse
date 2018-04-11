@@ -317,7 +317,8 @@ class Observer(object):
 
         Arguments:
             xyz (array): World coordinates (x, y, z)
-            frames (iterable): Integer indices of the images to include
+            frames (iterable): Integer indices of the images to include.
+                If `None`, defaults to `range(len(xyz))`.
             size (iterable): Size of the image tiles to plot
             interval (number): Delay between frames in milliseconds
             subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
@@ -327,25 +328,26 @@ class Observer(object):
             `matplotlib.animation.FuncAnimation`
         """
         if frames is None:
-            frames = range(len(self.images))
+            frames = range(len(xyz))
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
-        track_uv = self.images[0].cam.project(xyz[0:1])
+        track_uv = self.images[frames[0]].cam.project(xyz[0:1])
         uv = track_uv[-1]
         box = self.tile_box(uv, size=size)
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes, zorder=1) for axes in ax]
         track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], 'y.-', alpha=0.5, zorder=2)[0]
         pt = [axis.plot(uv[0], uv[1], marker='.', color='red', zorder=3)[0] for axis in ax]
-        basename = helpers.strip_path(self.images[0].path)
+        basename = helpers.strip_path(self.images[frames[0]].path)
         ax[0].text(uv[0], uv[1] - (halfsize[1] - 10), '0 : ' + basename, color='white',
             horizontalalignment='center', zorder=4)
         txt = ax[1].text(uv[0], uv[1] - (halfsize[1] - 10), '', color='white',
             horizontalalignment='center', zorder=4)
         # Update plot
         def update_plot(i):
-            track_uv = self.images[i].cam.project(xyz[:(i + 1)])
+            j = np.where(frames == i)[0][0]
+            track_uv = self.images[i].cam.project(xyz[:(j + 1)])
             uv = track_uv[-1]
             box = self.tile_box(uv, size=size)
             tile = self.extract_tile(img=i, box=box)

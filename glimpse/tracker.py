@@ -135,34 +135,18 @@ class Tracker(object):
             method (str): Optional override of `self.resample_method`
         """
         n = len(self.particles)
-        # Systematic resample
+        # Systematic resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
         def systematic():
             positions = (np.arange(n) + np.random.random()) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
-            indexes = np.zeros(n, dtype=int)
-            i, j = 0, 0
-            while i < n:
-                if positions[i] < cumulative_weight[j]:
-                    indexes[i] = j
-                    i += 1
-                else:
-                    j += 1
-            return indexes
-        # Stratified resample
+            return np.searchsorted(cumulative_weight, positions)
+        # Stratified resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
         def stratified():
             positions = (np.arange(n) + np.random.random(n)) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
-            indexes = np.zeros(n, dtype=int)
-            i, j = 0, 0
-            while i < n:
-                if positions[i] < cumulative_weight[j]:
-                    indexes[i] = j
-                    i += 1
-                else:
-                    j += 1
-            return indexes
+            return np.searchsorted(cumulative_weight, positions)
         # Residual resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
         def residual():

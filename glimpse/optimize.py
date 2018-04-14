@@ -1364,8 +1364,8 @@ class KeypointMatcher(object):
         with sharedmem.MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def build_matches(self, maxdt=datetime.timedelta(days=1), path=None,
-        overwrite=False, clear_keypoints=True, **params):
+    def build_matches(self, maxdt, path=None, overwrite=False,
+        clear_keypoints=True, parallel=False, **params):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -1380,40 +1380,63 @@ class KeypointMatcher(object):
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
             clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
+            parallel: Number of image keypoints to detect in parallel (int),
+                or whether to detect in parallel (bool). If `True`,
+                all available CPU cores are used.
             **params: Additional arguments to `optimize.match_keypoints()`
         """
-        n = len(self.images)
-        matches = np.full((n, n), None).astype(object)
+        if parallel is True:
+            parallel = sharedmem.cpu_count()
+        elif parallel is False:
+            parallel = 0
+        # Compute basenames
         if path:
             basenames = [helpers.strip_path(img.path)
                 for img in self.images]
             if len(basenames) != len(set(basenames)):
                 raise ValueError('Image basenames are not unique')
-        for i, imgA in enumerate(self.images[:-1]):
-            if i > 0:
-                print('') # new line
-            print('Matching', i, '->', end=' ')
-            for j, imgB in enumerate(self.images[(i + 1):], i + 1):
-                dt = imgB.datetime - imgA.datetime
-                if maxdt is not None and abs(dt) > maxdt:
-                    continue
-                print(j, end=' ')
+        # Match images
+        datetimes = [img.datetime for img in self.images]
+        distances = helpers.pairwise_distance_datetimes(datetimes, datetimes)
+        if maxdt is None:
+            matching = distances <= np.inf
+        else:
+            matching = distances <= abs(maxdt.total_seconds())
+        matching_images = [np.where(row)[0] for row in np.triu(matching, k=1)]
+        # Define parallel process
+        def process(i, js):
+            row_matches = np.full(len(self.images), None).astype(object)
+            print('Matching', i, '->', ', '.join(js.astype(str)))
+            imgA = self.images[i]
+            for j in js:
+                imgB = self.images[j]
                 if path:
                     outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
                 if path and not overwrite and os.path.exists(outfile):
                     match = helpers.read_pickle(outfile)
                     # Point matches to existing Camera objects
                     match.cams = (imgA.cam, imgB.cam)
-                    matches[i, j] = match
+                    row_matches[j] = match
                 else:
                     uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
                     match = Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
-                    matches[i, j] = match
+                    row_matches[j] = match
                     if path is not None:
                         helpers.write_pickle(match, outfile)
-                if clear_keypoints:
-                    imgA.keypoints = None
-                    imgB.keypoints = None
+            if clear_keypoints:
+                imgA.keypoints = None
+            return row_matches
+        # Run process in parallel
+        with sharedmem.MapReduce(np=parallel) as pool:
+            matches = np.row_stack(pool.map(process, tuple(enumerate(matching_images)), star=True))
+        # Assign camera objects outside process
+        if parallel:
+            for i, js in enumerate(matching_images):
+                imgA = self.images[i]
+                for j in js:
+                    imgB = self.images[j]
+                    # Point matches to existing Camera objects
+                    matches[i, j].cams = (imgA.cam, imgB.cam)
         self.matches = matches
 
     def matches_as_type(self, mtype, copy=False):

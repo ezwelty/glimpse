@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, cv2, warnings, datetime, scipy)
+from .imports import (np, cv2, warnings, datetime, scipy, sharedmem, matplotlib)
 from . import (helpers, dem as DEM)
 
 class Tracker(object):
@@ -21,17 +21,13 @@ class Tracker(object):
             (arguments to scipy.ndimage.filters.median_filter)
         interpolation (dict): Subpixel interpolation
             (arguments to scipy.interpolate.RectBivariateSpline)
-        n (int): Number of particles (more particles gives better results at higher expense)
         particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
         weights (array): Particle likelihoods (n, )
-        particle_mean (array): Weighted mean of `particles` (1, 5) [[x, y, z, vx, vy]]
+        particle_mean (array): Weighted mean of `particles` (5, ) [x, y, z, vx, vy]
         particle_covariance (array): Weighted covariance matrix of `particles` (5, 5)
-        datetimes (array): Date and times at which particle positions were estimated
-        means (list): `particle_mean` at each `datetimes`
-        covariances (list): `particle_covariance` at each `datetimes`
         templates (list): For each Observer, a template extracted from the first image
             matching a `datetimes` centered around the `particle_mean` at that time.
-            Templates are dictionaries that include
+            Templates are dictionaries that include at least
 
             - 'tile': Image tile used as a template for image cross-correlation
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
@@ -49,25 +45,23 @@ class Tracker(object):
         self.grayscale = grayscale
         self.highpass = highpass
         self.interpolation = interpolation
-        # Placeholders: particles
+        # Placeholders
         self.particles = None
         self.weights = None
-        # Placeholders: templates
         self.templates = None
-        # Placeholders: track
-        self.datetimes = None
-        self.means = None
-        self.covariances = None
 
     @property
     def particle_mean(self):
-        return np.average(self.particles, weights=self.weights, axis=0).reshape(1, -1)
+        return np.average(self.particles, weights=self.weights, axis=0)
 
     @property
     def particle_covariance(self):
         return np.cov(self.particles.T, aweights=self.weights)
 
     def _test_particles(self):
+        """
+        Particle test run after each particle initialization or evolution.
+        """
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], method='nearest')
             if not all(is_visible):
@@ -75,7 +69,7 @@ class Tracker(object):
         if any(np.isnan(self.particles[:, 2])):
             raise ValueError('Some particles are on NaN dem cells')
 
-    def initialize_particles(self, n, xy, xy_sigma, vxy=(0, 0), vxy_sigma=(0, 0)):
+    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0)):
         """
         Initialize particles given an initial normal distribution.
 
@@ -83,11 +77,11 @@ class Tracker(object):
         `self.time_unit` time units.
 
         Arguments:
-            n (int): Number of particles
             xy (iterable): Mean position (x, y)
-            xy_sigma (iterable): Standard deviation of positions (x, y)
+            n (int): Number of particles
+            xy_sigma (iterable): Standard deviation of position (x, y)
             vxy (iterable): Mean velocity (x, y)
-            vxy_sigma (iterable): Standard deviation of velocities (x, y)
+            vxy_sigma (iterable): Standard deviation of velocity (x, y)
         """
         if self.particles is None or len(self.particles) != n:
             self.particles = np.zeros((n, 5))
@@ -177,54 +171,121 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
-        axy=(0, 0), axy_sigma=(0, 0)):
+    def track(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0),
+        axy=(0, 0), axy_sigma=(0, 0), datetimes=None, maxdt=datetime.timedelta(0),
+        tile_size=(15, 15), parallel=False):
         """
         Track particles through time.
 
-        Accelerations (`axy`, `axy_sigma`) are assumed to be with respect to
-        `self.time_unit`.
-        Tracking results are saved in
-        `self.datetimes`, `self.means`, and `self.covariances`.
+        Velocities and accelerations (`vxy`, `vxy_sigma`, `axy`, `axy_sigma`)
+        are assumed to be in `self.time_unit` time units.
+
+        If `parallel == True`, errors are caught silently and included in the result.
+        If `len(xy) > 1`, matching images from Observers with `cache = True` are cached.
 
         Arguments:
+            xy (iterable): Single (x, y) or multiple ((xi, yi), ...) initial positions
+            n (int): Number of particles
+            xy_sigma (iterable): Standard deviation of initial position (x, y)
+            vxy (iterable): Mean velocity (x, y)
+            vxy_sigma (iterable): Standard deviation of velocity (x, y)
+            axy (iterable): Mean acceleration (x, y)
+            axy_sigma (iterable) Standard deviation of acceleration (x, y)
             datetimes (iterable): Monotonic sequence of datetimes at which to
                 track particles. If `None`, defaults to all unique datetimes in
                 `self.observers`.
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
             tile_size (iterable): Size of reference tiles in pixels (width, height)
-            axy (iterable): Mean of random accelerations (x, y)
-            axy_sigma (iterable) Standard deviation of random accelerations (x, y)
-        """
-        if self.particles is None or self.weights is None:
-            raise ValueError('Particles are not initialized')
-        if len(self.particles) != len(self.weights):
-            raise ValueError('The number of particles and weights are not equal')
-        self.initialize_datetimes(datetimes=datetimes, maxdt=maxdt)
-        matches = self.match_datetimes(datetimes=self.datetimes, maxdt=maxdt)
-        # Initialize templates for Observers starting at datetimes[0]
-        self.initialize_blank_templates()
-        for obs, img in enumerate(matches[0]):
-            if img is not None:
-                self.initialize_template(obs=obs, img=img, tile_size=tile_size)
-        self.means = [self.particle_mean]
-        self.covariances = [self.particle_covariance]
-        dts = np.diff(self.datetimes)
-        for i, dt in enumerate(dts, start=1):
-            self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
-            # Initialize templates for Observers starting at datetimes[i]
-            for obs, img in enumerate(matches[i]):
-                if img is not None and not self.templates[obs]:
-                    self.initialize_template(obs=obs, img=img, tile_size=tile_size)
-            likelihoods = self.compute_likelihoods(imgs=matches[i])
-            self.update_weights(likelihoods)
-            self.resample_particles()
-            self.means.append(self.particle_mean)
-            self.covariances.append(self.particle_covariance)
+            parallel: Number of initial positions to track in parallel (int),
+                or whether to track in parallel (bool). If `True`,
+                all available CPU cores are used.
 
-    def initialize_datetimes(self, datetimes=None, maxdt=datetime.timedelta(0)):
+        Returns:
+            `Tracks`: Tracks object
         """
-        Initialize track datetimes (`self.datetimes`).
+        # Save function arguments for Tracks
+        # NOTE: Must be called first
+        params = locals().copy()
+        # Clear any previous tracking state
+        self.reset()
+        # Enforce defaults
+        errors = not parallel
+        if parallel is True:
+            parallel = sharedmem.cpu_count()
+        elif parallel is False:
+            parallel = 0
+        xy = np.atleast_2d(xy)
+        if datetimes is None:
+            datetimes = np.unique(np.concatenate([
+                obs.datetimes for obs in self.observers]))
+        else:
+            datetimes = self.parse_datetimes(datetimes=datetimes, maxdt=maxdt)
+        # Compute matching images
+        matching_images = self.match_datetimes(datetimes=datetimes, maxdt=maxdt)
+        template_images = (matching_images != None).argmax(axis=0)
+        # Cache matching images
+        if len(xy) > 1:
+            for i, observer in enumerate(self.observers):
+                if observer.cache:
+                    index = [img for img in matching_images[:, i] if img is not None]
+                    observer.cache_images(index=index)
+        # Define parallel process
+        def process(xyi):
+            means = np.full((len(datetimes), 5), np.nan)
+            covariances = np.full((len(datetimes), 5, 5), np.nan)
+            error = None
+            all_warnings = None
+            try:
+                with warnings.catch_warnings(record=True) as caught:
+                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma, vxy=vxy, vxy_sigma=vxy_sigma)
+                    # Initialize templates for Observers starting at datetimes[0]
+                    for obs, img in enumerate(template_images):
+                        if img == 0:
+                            self.initialize_template(obs=obs, img=img, tile_size=tile_size)
+                    means[0] = self.particle_mean
+                    covariances[0] = self.particle_covariance
+                    dts = np.diff(datetimes)
+                    for i, dt in enumerate(dts, start=1):
+                        self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
+                        # Initialize templates for Observers starting at datetimes[i]
+                        for obs, img in enumerate(template_images):
+                            if img == i:
+                                self.initialize_template(obs=obs, img=img, tile_size=tile_size)
+                        likelihoods = self.compute_likelihoods(imgs=matching_images[i])
+                        self.update_weights(likelihoods)
+                        self.resample_particles()
+                        means[i] = self.particle_mean
+                        covariances[i] = self.particle_covariance
+                if caught:
+                    warns = tuple(caught)
+            except Exception as e:
+                error = e
+                if errors:
+                    raise e
+            return means, covariances, error, all_warnings
+        # Run process in parallel
+        with sharedmem.MapReduce(np=parallel) as pool:
+            results = pool.map(process, xy)
+        # Return results as Tracks
+        means, covariances, errors, all_warnings = zip(*results)
+        return Tracks(
+            datetimes=datetimes, means=means, covariances=covariances,
+            tracker=self, images=matching_images, params=params,
+            errors=errors, warnings=all_warnings)
+
+    def reset(self):
+        """
+        Reset to initial state.
+
+        Resets tracking attributes to `None`.
+        """
+        self.particles = None
+        self.weights = None
+        self.templates = None
+
+    def parse_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
+        """
+        Parse track datetimes.
 
         Datetimes are tested to be monotonic, duplicates are dropped,
         those matching no Observers are dropped,
@@ -233,36 +294,29 @@ class Tracker(object):
         Arguments:
             datetimes (iterable): Monotonically increasing sequence of
                 datetimes at which to track particles.
-                If `None`, defaults to all unique datetimes in `self.observers`
-                in increasing order.
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
         """
-        observed_datetimes = np.unique(np.concatenate([
-            obs.datetimes for obs in self.observers]))
-        if datetimes is None:
-            datetimes = observed_datetimes
-        else:
-            datetimes = np.asarray(datetimes)
-            # Datetimes must be monotonic
-            monotonic = (
-                (datetimes[1:] > datetimes[:-1]).all() or
-                (datetimes[1:] < datetimes[:-1]).all())
-            if not monotonic:
-                raise ValueError('Datetimes must be monotonic')
-            # Datetimes must be unique
-            selected = np.concatenate(((True, ), datetimes[1:] != datetimes[:-1]))
-            if not all(selected):
-                warnings.warn('Dropping duplicate datetimes')
-                datetimes = datetimes[selected]
-            # Datetimes must match at least one Observer
-            distances = helpers.pairwise_distance_datetimes(datetimes, observed_datetimes)
-            selected = distances.min(axis=1) <= abs(maxdt.total_seconds())
-            if not all(selected):
-                warnings.warn('Dropping datetimes not matching any Observers')
-                datetimes = datetimes[selected]
+        datetimes = np.asarray(datetimes)
+        # Datetimes must be monotonic
+        monotonic = (
+            (datetimes[1:] >= datetimes[:-1]).all() or
+            (datetimes[1:] <= datetimes[:-1]).all())
+        if not monotonic:
+            raise ValueError('Datetimes must be monotonic')
+        # Datetimes must be unique
+        selected = np.concatenate(((True, ), datetimes[1:] != datetimes[:-1]))
+        if not all(selected):
+            warnings.warn('Dropping duplicate datetimes')
+            datetimes = datetimes[selected]
+        # Datetimes must match at least one Observer
+        distances = helpers.pairwise_distance_datetimes(datetimes, observed_datetimes)
+        selected = distances.min(axis=1) <= abs(maxdt.total_seconds())
+        if not all(selected):
+            warnings.warn('Dropping datetimes not matching any Observers')
+            datetimes = datetimes[selected]
         if len(datetimes) < 2:
             raise ValueError('Fewer than two valid datetimes')
-        self.datetimes = datetimes
+        return datetimes
 
     def match_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
         """
@@ -285,15 +339,6 @@ class Tracker(object):
             not_selected = nearest_distance > abs(maxdt.total_seconds())
             matches[not_selected, i] = None
         return matches
-
-    def initialize_blank_templates(self):
-        """
-        Initialize observer templates (`self.templates`).
-
-        Each Observer template should be initialized with `self.initialize_template`
-        when tracking reaches the first matching datetime for that Observer.
-        """
-        self.templates = [None] * len(self.observers)
 
     def _extract_tile(self, obs, img, box, histogram=None, return_histogram=False):
         """
@@ -335,13 +380,16 @@ class Tracker(object):
             img (int): Observer image index
             tile_size (iterable): Size of template tile in pixels (nx, ny)
         """
+        if self.templates is None:
+            self.templates = [None] * len(self.observers)
         # Compute image box centered around particle mean
-        xyz = self.particle_mean[:, 0:3]
+        xyz = self.particle_mean[None, 0:3]
         uv = self.observers[obs].project(xyz, img=img).ravel()
         box = self.observers[obs].tile_box(uv, size=tile_size)
         # Build template
-        template = dict()
-        template['duv'] = uv - box.reshape(2, -1).mean(axis=0)
+        template = dict(
+            obs=obs, img=img, box=box,
+            duv=uv - box.reshape(2, -1).mean(axis=0))
         template['tile'], template['histogram'] = self._extract_tile(
             obs=obs, img=img, box=box, return_histogram=True)
         self.templates[obs] = template
@@ -410,3 +458,86 @@ class Tracker(object):
         sampled_sse = self.observers[obs].sample_tile(uv, tile=sse,
             box=sse_box, grid=False, **self.interpolation)
         return sampled_sse * (1 / self.observers[obs].sigma**2)
+
+class Tracks(object):
+    """
+    A `Tracks' contains the estimated trajectories of world points.
+
+    In the array dimensions below, n: number of tracks, m: number of datetimes.
+
+    Attributes:
+        datetimes (array): Datetimes at which particles were estimated (m, )
+        means (array): Mean particle positions and velocities (x, y, z, vx, vy) (n, m, 5)
+        covariances (array): Covariance of particle positions and velocities (n, m, 5, 5)
+        tracker (Tracker): Tracker object used for tracking
+        images (array): Grid of image indices ([i, j] for `datetimes[i]`, `tracker.observers`[j]`).
+            `None` indicates no image from `tracker.observers[j]` matched `datetimes[i]`.
+        params (dict): Arguments to `Tracker.track`
+        errors (array): The error, if any, caught for each track (n, ).
+            An error indicates that the track did not complete successfully.
+        warnings (array): Warnings, if any, caught for each track (n, ).
+            Warnings indicate the track completed but may not be valid.
+    """
+
+    def __init__(self, datetimes, means, covariances=None,
+        tracker=None, images=None, params=None, errors=None, warnings=None):
+        self.datetimes = np.asarray(datetimes)
+        if not isinstance(means, np.ndarray):
+            means = np.stack(means, axis=0)
+        self.means = means
+        if not isinstance(covariances, np.ndarray):
+            covariances = np.stack(covariances, axis=0)
+        self.covariances = covariances
+        self.tracker = tracker
+        self.images = np.asarray(images)
+        self.params = params
+        self.errors = np.asarray(errors)
+        self.warnings = np.asarray(warnings)
+
+    @property
+    def xyz(self):
+        """
+        array: Mean particle positions (n, m, [x, y, z])
+        """
+        return self.means[:, :, 0:3]
+
+    @property
+    def vxy(self):
+        """
+        array: Mean particle velocities (n, m, [vx, vy])
+        """
+        return self.means[:, :, 3:5]
+
+    @property
+    def xyz_sigma(self):
+        """
+        array: Standard deviation of particle positions (n, m, [x, y, z])
+        """
+        if self.covariances is not None:
+            return np.sqrt(self.covariances[:, :, (0, 1, 2), (0, 1, 2)])
+
+    @property
+    def vxy_sigma(self):
+        """
+        array: Standard deviation of particle velocities (n, m, [vx, vy])
+        """
+        if self.covariances is not None:
+            return np.sqrt(self.covariances[:, :, (3, 4), (3, 4)])
+
+    @property
+    def success(self):
+        """
+        array: Whether track completed without errors (n, )
+        """
+        if self.errors is not None:
+            return np.array([error is None for error in self.errors])
+
+    def plot_xy(self, **kwargs):
+        matplotlib.pyplot.plot(self.xyz[:, :, 0].T, self.xyz[:, :, 1].T, **kwargs)
+        matplotlib.pyplot.plot(self.xyz[:, 0, 0], self.xyz[:, 0, 1], marker='.', linestyle='None', **kwargs)
+
+    def plot_vx(self, **kwargs):
+        matplotlib.pyplot.plot(self.datetimes, self.vxy[:, :, 0].T, **kwargs)
+
+    def plot_vy(self, **kwargs):
+        matplotlib.pyplot.plot(self.datetimes, self.vxy[:, :, 1].T, **kwargs)

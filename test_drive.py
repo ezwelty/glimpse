@@ -30,11 +30,6 @@ for station in STATIONS:
     inrange = np.logical_and(datetimes > start, datetimes < end)
     observers.append(glimpse.Observer(list(np.array(images)[inrange])))
 
-# ---- Cache images into memory ----
-
-for obs in observers:
-    obs.cache_images()
-
 # ---- Prepare DEM ----
 
 boxes = [obs.images[0].cam.viewbox(radius=MAX_DISTANCE)
@@ -45,7 +40,7 @@ dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3])
 dem.crop(zlim=(0, np.inf))
 dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
 for obs in observers:
-    dem.fill_circle(obs.xyz, radius=100, value=np.nan)
+    dem.fill_circle(obs.xyz, radius=100)
 
 # ---- Prepare viewshed ----
 
@@ -59,16 +54,16 @@ for v in viewsheds:
 xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
     itertools.product(range(-300, 400, 100), range(-300, 400, 100))])
-time_unit = datetime.timedelta(days=1).total_seconds()
+time_unit = datetime.timedelta(days=1)
 tracker = glimpse.Tracker(
-    observers=observers, dem=dem, viewshed=viewshed,
-    time_unit=time_unit, resample_method='systematic')
-results = glimpse.parallel.track(tracker, xy,
-    n=5000, xy_sigma=(2, 2), vxy=(0, 0), vxy_sigma=(10, 10),
-    datetimes=None, maxdt=0, tile_size=(15, 15), axy=(0, 0), axy_sigma=(2, 2))
+    observers=observers, dem=dem, viewshed=viewshed, time_unit=time_unit)
+import timeit
+start = timeit.default_timer()
+tracks = tracker.track(
+    xy=xy, n=5000, xy_sigma=(2, 2), vxy_sigma=(10, 10), axy_sigma=(2, 2),
+    tile_size=(15, 15), parallel=True)
+timeit.default_timer() - start
 
-# ---- Plot track ----
+# ---- Plot tracks ----
 
-for means, covariances in results:
-    matplotlib.pyplot.plot(means[:, 0], means[:, 1], marker='.', color='red')
-    matplotlib.pyplot.plot(means[0, 0], means[0, 1], marker='.', color='green')
+tracks.plot_xy(color='red')

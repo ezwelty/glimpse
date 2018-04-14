@@ -180,8 +180,8 @@ class Tracker(object):
         Velocities and accelerations (`vxy`, `vxy_sigma`, `axy`, `axy_sigma`)
         are assumed to be in `self.time_unit` time units.
 
-        If `parallel == True`, errors are caught silently and included in the result.
-        If `len(xy) > 1`, matching images from Observers with `cache = True` are cached.
+        If `len(xy) > 1`, errors and warnings are caught silently,
+        and matching images from Observers with `cache = True` are cached.
 
         Arguments:
             xy (iterable): Single (x, y) or multiple ((xi, yi), ...) initial positions
@@ -209,7 +209,7 @@ class Tracker(object):
         # Clear any previous tracking state
         self.reset()
         # Enforce defaults
-        errors = not parallel
+        errors = len(xy) <= 1
         if parallel is True:
             parallel = sharedmem.cpu_count()
         elif parallel is False:

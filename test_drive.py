@@ -57,13 +57,10 @@ xy = xy0 + np.vstack([xy for xy in
 time_unit = datetime.timedelta(days=1)
 tracker = glimpse.Tracker(
     observers=observers, dem=dem, viewshed=viewshed, time_unit=time_unit)
-import timeit
-start = timeit.default_timer()
 tracks = tracker.track(
     xy=xy, n=5000, xy_sigma=(2, 2), vxy_sigma=(10, 10), axy_sigma=(2, 2),
     tile_size=(15, 15), parallel=True)
-timeit.default_timer() - start
 
 # ---- Plot tracks ----
 
-tracks.plot_xy(color='red')
+tracks.plot_xy()

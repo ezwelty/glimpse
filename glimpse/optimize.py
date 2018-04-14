@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
-    warnings, datetime)
+    warnings, datetime, sharedmem)
 from . import (helpers)
 
 # ---- Controls ----
@@ -1317,29 +1317,15 @@ class KeypointMatcher(object):
             I = helpers.match_histogram(I, template=self.template)
         return I.astype(np.uint8)
 
-    def _build_image_keypoints(self, img, mask=None, overwrite=False,
-        clear_images=True, clear_keypoints=False, **params):
-        """
-        Build keypoints for a single image.
-        """
-        print(img.path)
-        if overwrite or img.read_keypoints() is None:
-            I = self._prepare_image(img.read())
-            img.keypoints = detect_keypoints(I, mask=mask, **params)
-            if img.keypoints_path:
-                img.write_keypoints()
-                if clear_keypoints:
-                    img.keypoints = None
-            if clear_images:
-                img.I = None
-
     def build_keypoints(self, masks=None, overwrite=False,
-        clear_images=True, clear_keypoints=False, **params):
+        clear_images=True, clear_keypoints=False, parallel=False, **params):
         """
         Build image keypoints and their descriptors.
 
         The result for each `Image` is stored in `Image.keypoints`
         and written to a binary `pickle` file if `Image.keypoints_path` is set.
+        If `parallel == True`, `Image` attributes are not modified (for speed),
+        so `Image.keypoints_path` must be set for all images.
 
         Arguments:
             masks (iterable): Boolean array(s) (uint8) indicating regions in which to detect keypoints
@@ -1347,31 +1333,38 @@ class KeypointMatcher(object):
             clear_images (bool): Whether to clear cached image data (`self.observer.images[i].I`)
             clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`).
                 Ignored if `Image.keypoints_path` is `None`.
+            parallel: Number of image keypoints to detect in parallel (int),
+                or whether to detect in parallel (bool). If `True`,
+                all available CPU cores are used.
             **params: Additional arguments to `optimize.detect_keypoints()`
         """
+        # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks, ) * len(self.images)
-        for img, mask in zip(self.images, masks):
-            self._build_image_keypoints(img, mask=mask, overwrite=overwrite,
-                clear_images=clear_images, clear_keypoints=clear_keypoints, **params)
+        if parallel is True:
+            parallel = sharedmem.cpu_count()
+        elif parallel is False:
+            parallel = 0
+        if parallel and any((img.keypoints_path is None for img in self.images)):
+            raise ValueError('Image.keypoints_path must be set for parallel processing')
+        # Define parallel process
+        def process(img, mask):
+            print(img.path)
+            no_keypoints_file = img.keypoints_path is None or not os.path.isfile(img.keypoints_path)
+            if overwrite or (img.keypoints is None and no_keypoints_file):
+                I = self._prepare_image(img.read())
+                img.keypoints = detect_keypoints(I, mask=mask, **params)
+                if img.keypoints_path:
+                    img.write_keypoints()
+                    if clear_keypoints:
+                        img.keypoints = None
+                if clear_images:
+                    img.I = None
+        # Run process in parallel
+        with sharedmem.MapReduce(np=parallel) as pool:
+            pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def _build_image_matches(self, img, mask=None, overwrite=False,
-        clear_images=True, clear_keypoints=False, **params):
-        """
-        Build matches for a single starting image.
-        """
-        print(img.path)
-        if overwrite or img.read_keypoints() is None:
-            I = self._prepare_image(img.read())
-            img.keypoints = detect_keypoints(I, mask=mask, **params)
-            if img.keypoints_path:
-                img.write_keypoints()
-                if clear_keypoints:
-                    img.keypoints = None
-            if clear_images:
-                img.I = None
-
-    def build_matches(self, max_dt=datetime.timedelta(days=1), path=None,
+    def build_matches(self, maxdt=datetime.timedelta(days=1), path=None,
         overwrite=False, clear_keypoints=True, **params):
         """
         Build matches between each image and its nearest neighbors.
@@ -1381,7 +1374,7 @@ class KeypointMatcher(object):
         file with name `basenames[i]-basenames[j].pkl`.
 
         Arguments:
-            max_dt (`datetime.timedelta`): Maximum time seperation between
+            maxdt (`datetime.timedelta`): Maximum time seperation between
                 pairs of images to match
             path (str): Directory for match files.
                 If `None`, no files are written.
@@ -1402,7 +1395,7 @@ class KeypointMatcher(object):
             print('Matching', i, '->', end=' ')
             for j, imgB in enumerate(self.images[(i + 1):], i + 1):
                 dt = imgB.datetime - imgA.datetime
-                if max_dt is not None and abs(dt) > max_dt:
+                if maxdt is not None and abs(dt) > maxdt:
                     continue
                 print(j, end=' ')
                 if path:

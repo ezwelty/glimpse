@@ -24,36 +24,43 @@ inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)
 img_paths = [all_img_paths[i] for i in np.where(inrange)[0]]
 basenames = [glimpse.helpers.strip_path(path)
     for path in img_paths]
-cam_args = cg.load_calibration(image=ANCHOR_BASENAME)
+cam_args = cg.load_calibrations(image=ANCHOR_BASENAME, merge=True)
 images = [glimpse.Image(
     path, cam=cam_args.copy(), anchor=(basename == ANCHOR_BASENAME),
     keypoints_path=os.path.join(KEYPOINT_DIR, basename + '.pkl'))
     for path, basename in zip(img_paths, basenames)]
 observer = glimpse.Observer(images)
 
-# ---- Align Observer (ObserverCameras + RotationMatchesXYZ) ----
+# ---- Build keypoint matches ----
 
 mask = np.load(MASK_PATH)
-model = glimpse.optimize.ObserverCameras(observer)
-# model.build_keypoints(masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
-glimpse.parallel.build_keypoints(model.matcher, processes=4,
-    masks=mask, contrastThreshold=0.02, overwrite=False, clear_images=True)
-model.build_matches(max_dt=datetime.timedelta(days=1), path=MATCH_DIR, overwrite=False, max_ratio=0.6, max_distance=10)
+matcher = glimpse.optimize.KeypointMatcher(images)
+matcher.build_keypoints(
+    masks=mask, contrastThreshold=0.02, overwrite=False, parallel=True)
+matcher.build_matches(
+    maxdt=datetime.timedelta(days=1), path=MATCH_DIR,
+    overwrite=False, max_ratio=0.6, max_distance=10)
+
+# ---- Align Observer (ObserverCameras + RotationMatchesXYZ) ----
+
+model = glimpse.optimize.ObserverCameras(observer,
+    matches=matcher.matches_as_type(glimpse.optimize.RotationMatchesXYZ))
 fit = model.fit(tol=1)
 
 # ---- Align Observer (Cameras) ----
 
-cams = [img.cam for img in model.observer.images]
-cam_params = [dict() if img.anchor else dict(viewdir=True) for img in model.observer.images]
-matchesXYZ = [m for m in np.triu(model.matches).ravel() if m]
+cams = [img.cam for img in images]
+cam_params = [dict() if img.anchor else dict(viewdir=True) for img in images]
 
 # RotationMatches
-matches = [m.as_type(glimpse.optimize.RotationMatches) for m in matchesXYZ]
+matches = [m.as_type(glimpse.optimize.RotationMatches)
+    for m in np.triu(matcher.matches).ravel() if m]
 model_Cameras = glimpse.optimize.Cameras(cams, matches, cam_params=cam_params)
 fit_Cameras = model_Cameras.fit(ftol=1, full=True)
 
 # RotationMatchesXY
-matchesXY = [m.as_type(glimpse.optimize.RotationMatchesXY) for m in matchesXYZ]
+matchesXY = [m.as_type(glimpse.optimize.RotationMatchesXY)
+    for m in np.triu(matcher.matches).ravel() if m]
 model_CamerasXY = glimpse.optimize.Cameras(cams, matchesXY, cam_params=cam_params)
 fit_CamerasXY = model_CamerasXY.fit(ftol=1, full=True)
 

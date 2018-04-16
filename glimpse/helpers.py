@@ -544,9 +544,19 @@ def apply_geojson_coords(obj, fun, **kwargs):
         fun (callable): Called as `fun(coordinates, **kwargs)`
         **kwargs (dict): Additional arguments passed to `fun`
     """
+    def _is_multi(coords):
+        if np.ndim(coords) == 1:
+            return True
+        elif np.ndim(coords) == 2:
+            return False
+        else:
+            raise ValueError('Unknown coordinates format')
     for feature in geojson_iterfeatures(obj):
         coords = _get_geojson_coords(feature)
-        _set_geojson_coords(feature, fun(coords, **kwargs))
+        if _is_multi(coords):
+            _set_geojson_coords(feature, [fun(X, **kwargs) for X in coords])
+        else:
+            _set_geojson_coords(feature, fun(coords, **kwargs))
 
 def elevate_geojson(obj, elevation):
     """
@@ -1140,7 +1150,7 @@ def grid_to_points(grid):
     """
     return np.reshape(grid, (len(grid), -1)).T
 
-def polygon_to_grid_points(polygon, **params):
+def polygon_to_grid_points(polygon, holes=None, **params):
     """
     Return grid of points inside polygon.
 
@@ -1149,6 +1159,7 @@ def polygon_to_grid_points(polygon, **params):
 
     Arguments:
         polygon (iterable): Polygon vertices
+        holes (iterable): Polygons representing holes in `polygon`
         **params (dict): Arguments passed to `box_to_grid()`
     """
     box = bounding_box(polygon)
@@ -1156,6 +1167,11 @@ def polygon_to_grid_points(polygon, **params):
     points = grid_to_points(grid)
     path = matplotlib.path.Path(polygon)
     is_in = path.contains_points(points)
+    if holes is None:
+        holes = []
+    for hole in holes:
+        path = matplotlib.path.Path(hole)
+        is_in &= ~path.contains_points(points)
     return points[is_in, :]
 
 # ---- Image formation ---- #
@@ -1185,13 +1201,14 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
     grid.flat[idx] = groups.value.as_matrix()
     return grid
 
-def polygons_to_mask(polygons, size):
+def polygons_to_mask(polygons, size, holes=None):
     """
     Returns a boolean array of cells inside polygons.
 
     Arguments:
         polygons (iterable): Polygons
         size (iterable): Array size (nx, ny)
+        holes (iterable): Polygons representing holes in `polygons`
     """
     im_mask = PIL.Image.new(mode='1', size=tuple(int(size[0]), int(size[1])))
     draw = PIL.ImageDraw.ImageDraw(im_mask)
@@ -1199,6 +1216,12 @@ def polygons_to_mask(polygons, size):
         if isinstance(polygon, np.ndarray):
             polygon = [tuple(row) for row in polygon]
         draw.polygon(polygon, fill=1)
+    if holes is None:
+        holes = []
+    for hole in holes:
+        if isinstance(hole, np.ndarray):
+            hole = [tuple(row) for row in hole]
+        draw.polygon(hole, fill=0)
     return np.array(im_mask)
 
 def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_radius=6.3781e6, refraction=0.13):

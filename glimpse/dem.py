@@ -455,9 +455,9 @@ class DEM(Grid):
         Zf.fill_value = fill_value
         return Zf(xy, method=method)
 
-    def resample(self, dem, method='linear'):
+    def resample(self, dem, method='linear', bounds_error=False, fill_value=np.nan):
         xy = np.column_stack((dem.X.ravel(), dem.Y.ravel()))
-        Z = self.sample(xy, method=method)
+        Z = self.sample(xy, method=method, bounds_error=bounds_error, fill_value=fill_value)
         self.Z = Z.reshape(dem.Z.shape)
         self.xlim, self._x, self._X = self._parse_x(dem.X)
         self.ylim, self._y, self._Y = self._parse_y(dem.Y)
@@ -745,7 +745,8 @@ class DEMInterpolant(object):
         **kwargs (dict): Additional arguments passed to `fun`
     """
 
-    def __init__(self, paths, datetimes, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
+    def __init__(self, paths, datetimes, d=None, xlim=None, ylim=None, zlim=None,
+        extrapolate=False, fun=None, **kwargs):
         assert len(paths) == len(datetimes)
         assert len(paths) > 1
         assert len(paths) == len(set(paths))
@@ -819,7 +820,7 @@ class DEMInterpolant(object):
             different_grids = (any(dems[0].d != dems[1].d) or any(dems[0].n != dems[1].n)
                 or any(dems[0].xlim != dems[1].xlim) or any(dems[0].ylim != dems[1].ylim))
             if different_grids:
-                dems[1].resample(dems[0], method='linear')
+                dems[1].resample(dems[0], method='linear', bounds_error=False, fill_value=np.nan)
             total_seconds = np.sum(abs(dt[list(ij)])).total_seconds()
             i_ratio = abs(dt[i]).total_seconds() / total_seconds
             j_ratio = abs(dt[j]).total_seconds() / total_seconds

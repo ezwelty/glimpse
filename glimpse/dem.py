@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, scipy, gdal, matplotlib, datetime)
+from .imports import (np, scipy, gdal, matplotlib, datetime, copy)
 from . import (helpers)
 
 class Grid(object):
@@ -112,10 +112,10 @@ class Grid(object):
         if obj is None:
             obj = [0, self.n[0]]
         if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, float)
+            obj = np.asarray(obj, dtype=float)
         is_X = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
         if is_X:
-            # TODO: Check if all rows equal
+            # TODO: Check if all columns equal
             X = obj
             obj = obj[0, :]
         else:
@@ -124,7 +124,7 @@ class Grid(object):
         if is_x:
             x = obj
             # TODO: Check if equally spaced monotonic
-            dx = abs(np.diff(obj[0:2]))
+            dx = np.diff(obj[0:2])
             xlim = np.append(obj[0] - dx / 2, obj[-1] + dx / 2)
         else:
             x = None
@@ -141,7 +141,7 @@ class Grid(object):
         if obj is None:
             obj = [0, self.n[1]]
         if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, float)
+            obj = np.asarray(obj, dtype=float)
         is_Y = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
         if is_Y:
             # TODO: Check if all rows equal
@@ -153,8 +153,8 @@ class Grid(object):
         if is_y:
             y = obj
             # TODO: Check if equally spaced monotonic
-            dy = abs(np.diff(obj[0:2]))
-            ylim = np.append(obj[0] + dy / 2, obj[-1] - dy / 2)
+            dy = np.diff(obj[0:2])
+            ylim = np.append(obj[0] - dy / 2, obj[-1] + dy / 2)
         else:
             y = None
             ylim = obj
@@ -163,7 +163,7 @@ class Grid(object):
     # ---- Methods ---- #
 
     def copy(self):
-        return Grid(n=self.n, xlim=self.xlim, y=self.ylim)
+        return Grid(n=self.n.copy(), xlim=self.xlim.copy(), y=self.ylim.copy())
 
     def resize(self, scale):
         """
@@ -404,12 +404,12 @@ class DEM(Grid):
     def Z(self, value):
         if hasattr(self, '_Z'):
             original_shape = self._Z.shape
-            self._Z = np.asarray(value, float)
+            self._Z = np.asarray(value, dtype=float)
             self._clear_cache(['Zf'])
             if self._Z.shape != original_shape:
                 self._clear_cache(['x', 'X', 'y', 'Y'])
         else:
-            self._Z = np.asarray(value, float)
+            self._Z = np.asarray(value, dtype=float)
 
     # ---- Properties (dependent) ----
 
@@ -435,7 +435,7 @@ class DEM(Grid):
     # ---- Methods (public) ----
 
     def copy(self):
-        return DEM(self.Z, x=self.xlim, y=self.ylim, datetime=self.datetime)
+        return DEM(self.Z.copy(), x=self.xlim.copy(), y=self.ylim.copy(), datetime=copy.copy(self.datetime))
 
     def sample(self, xy, method='linear', bounds_error=True, fill_value=np.nan):
         """

@@ -12,6 +12,10 @@ except ImportError:
     import pickle
 import cv2
 import datetime
+# NOTE: Import shapely before gdal/osgeo/ogr
+# https://github.com/Toblerity/Shapely/issues/260#issue-65012660
+import shapely
+import shapely.geometry
 import gdal
 import gzip
 import json

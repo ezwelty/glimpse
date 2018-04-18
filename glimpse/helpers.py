@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copyreg, os, re, datetime, matplotlib)
+    sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely)
 
 # ---- General ---- #
 
@@ -1173,6 +1173,82 @@ def polygon_to_grid_points(polygon, holes=None, **params):
         path = matplotlib.path.Path(hole)
         is_in &= ~path.contains_points(points)
     return points[is_in, :]
+
+def side(points, edge):
+    """
+    Return which side points are relative to an edge.
+
+    Arguments:
+        points (array): Point coordinates (n, 2)
+        edge (array): Start and end points (2, 2)
+
+    Returns:
+        array: Side for each point (-1: left, 0: colinear, 1: right)
+    """
+    cross = np.cross(edge[0] - edge[1], points - edge[0])
+    return np.sign(cross).astype(int)
+
+def cartesian_to_polyline(points, line):
+    """
+    Convert cartesian coordinates to polyline coordinates.
+
+    Arguments:
+        points (array): Cartesian coordinates (n, 2)
+        line (array): Cartesian coordinates (m, 2)
+
+    Returns:
+        array: Polyline coordinates - distance along line, distance from line (n, 2)
+    """
+    Line = shapely.geometry.LineString(line)
+    # Compute distance along line
+    # NOTE: Slow
+    M = [Line.project(shapely.geometry.Point(p)) for p in points]
+    # Compute signed distance to line (- left, + right)
+    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0)**2, axis=1)))
+    x = np.insert(x, 0, 0)
+    mi = np.interp(x=M, xp=x, fp=np.arange(len(x)))
+    starts = np.floor(mi).astype(int)
+    is_last = starts == len(line) - 1
+    starts[is_last] = len(line) - 2
+    signs = np.zeros(len(points), dtype=int)
+    for start in np.unique(starts):
+        index = starts == start
+        signs[index] = side(points[index, :], line[start:(start + 2), :])
+    projected_points = interpolate_line(line, x=x, xi=M)
+    # Distances to line
+    D = np.linalg.norm(projected_points - points, axis=1)
+    return np.column_stack((M, D * signs))
+
+def polyline_to_cartesian(points, line):
+    """
+    Convert polyline coordinates to cartesian coordinates.
+
+    Arguments:
+        points (array): Polyline coordinates (n, 2)
+        line (array): Cartesian coordinates (m, 2)
+
+    Returns:
+        array: Cartesian coordinates (n, 2)
+    """
+    projected_points = interpolate_line(line, xi=points[:, 0])
+    # Locate start of line segment
+    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0)**2, axis=1)))
+    x = np.insert(x, 0, 0)
+    mi = np.interp(x=points[:, 0], xp=x, fp=np.arange(len(x)))
+    starts = np.floor(mi).astype(int)
+    is_last = starts == len(line) - 1
+    is_inner_vertex = (mi == starts) & (starts != 0) & ~is_last
+    # Last vertex: Segment starts at previous vertex
+    starts[is_last] = len(line) - 2
+    # Compute directions to points
+    dxy = np.diff(line, axis=0)
+    directions = np.arctan2(dxy[:, 1], dxy[:, 0])
+    new_directions = directions[starts]
+    # Inner vertex: Take average of adjacent segment slopes
+    new_directions[is_inner_vertex] = (0.5 * (directions[:-1] + directions[1:]))[starts[is_inner_vertex] - 1]
+    new_directions -= np.sign(points[:, 1]) * (np.pi * 0.5)
+    return projected_points + np.abs(points[:, 1:2]) * np.column_stack((
+        np.cos(new_directions), np.sin(new_directions)))
 
 # ---- Image formation ---- #
 

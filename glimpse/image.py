@@ -88,17 +88,6 @@ class Camera(object):
         args = helpers.merge_dicts(json_args, kwargs)
         return cls(**args)
 
-    @classmethod
-    def from_matlab(cls, imgsz, sensorsz, fc, cc, kc):
-        # http://www.vision.caltech.edu/bouguetj/calib_doc/htmls/parameters.html
-        args = dict(
-            f=fc,
-            c=np.array(cc) + 0.5 - np.array(imgsz) / 2,
-            k=kc[0:2] + [kc[4]],
-            p=kc[2:4]
-        )
-        return cls(imgsz=imgsz, sensorsz=sensorsz, **args)
-
     # ---- Properties (dependent) ----
 
     @property
@@ -166,7 +155,9 @@ class Camera(object):
 
     @sensorsz.setter
     def sensorsz(self, value):
-        self._sensorsz = np.array(helpers.format_list(value, length=2), dtype=float)
+        if value is not None:
+            value = np.array(helpers.format_list(value, length=2), dtype=float)
+        self._sensorsz = value
 
     @property
     def fmm(self):
@@ -260,10 +251,7 @@ class Camera(object):
             'Canon Canon EOS 20D': [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
             'Canon Canon EOS 40D': [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
         }
-        if make and model:
-            make_model = make.strip() + " " + model.strip()
-        else:
-            make_model = ""
+        make_model = make.strip() + " " + model.strip()
         if make_model in sensor_sizes:
             return sensor_sizes[make_model]
         else:
@@ -327,7 +315,7 @@ class Camera(object):
         """
         if attributes is None:
             attributes = Camera.__init__.__code__.co_varnames[2:]
-        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes if hasattr(self, name))
+        obj = collections.OrderedDict((name, getattr(self, name)) for name in attributes if hasattr(self, name))
         return helpers.write_json(obj, path=path, **kwargs)
 
     def idealize(self):
@@ -436,25 +424,29 @@ class Camera(object):
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
 
-    def centers(self, mode=None):
+    def grid(self, step, snap=None, mode='vectors'):
         """
-        Return image coordinates of all grid cell centers.
+        Return grid of image coordinates.
 
         Arguments:
-            mode (str): Image coordinates, returned as either
+            step: Grid spacing for all (float) or each (iterable) dimension
+            snap (iterable): Point (x, y) to align grid to.
+                If `None`, (0, 0) is used.
+            mode (str): Return format
 
                 - 'vectors': x (nx, ) and y (ny, ) coordinates
                 - 'grids': x (ny, nx) and y (ny, nx) coordinates
-                - otherwise: x, y coordinates (ny * nx, 2)
+                - 'points': x, y coordinates (ny * nx, 2)
         """
-        u = np.linspace(0.5, self.imgsz[0] - 0.5, int(self.imgsz[0]))
-        v = np.linspace(0.5, self.imgsz[1] - 0.5, int(self.imgsz[1]))
+        box = (0, 0, self.imgsz[0], self.imgsz[1])
+        vectors = helpers.box_to_grid(box, step=step, snap=snap, mode='vectors')
         if mode == 'vectors':
-            return u, v
-        U, V = np.meshgrid(u, v)
+            return vectors
+        grid = np.meshgrid(*vectors)
         if mode == 'grids':
-            return U, V
-        return np.column_stack((U.flatten(), V.flatten()))
+            return grid
+        if mode == 'points':
+            return helpers.grid_to_points(grid)
 
     def edges(self, step=(1, 1)):
         """

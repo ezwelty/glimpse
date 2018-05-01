@@ -37,7 +37,7 @@ def format_list(x, length=None, default=None, dtype=None):
         return x
     if not np.iterable(x):
         x = [x]
-    elif not isinstance(x, (tuple, list)):
+    elif not isinstance(x, list):
         x = list(x)
     if length:
         nx = len(x)
@@ -1112,7 +1112,7 @@ def box_to_polygon(box):
         box[(0, 0, 1, 1, 0), 0],
         box[(0, 1, 1, 0, 0), 1]))
 
-def box_to_grid(box, step, snap=None):
+def box_to_grid(box, step, snap=None, mode='grids'):
     """
     Return grid of points inside box.
 
@@ -1120,10 +1120,11 @@ def box_to_grid(box, step, snap=None):
         box (iterable): Box (minx, ..., maxx, ...)
         step: Grid spacing for all (float) or each (iterable) dimension
         snap (iterable): Point to align grid to (need not be inside box).
-            If `None`, the `box` minimum is used.
+            If `None`, the `box` minimum is used
+        mode (str): Return format ('vectors' or 'grids')
 
     Returns:
-        tuple: Array of grid coordinates for each dimension (see `np.meshgrid()`)
+        tuple: Either vectors or grids for each dimension
     """
     box = unravel_box(box)
     ndim = box.shape[1]
@@ -1136,7 +1137,10 @@ def box_to_grid(box, step, snap=None):
         box[0, i] + shift[i] + n[i] * step[i],
         int(n[i]) + 1)
         for i in range(ndim))
-    return np.meshgrid(*arrays)
+    if mode == 'vectors':
+        return tuple(arrays)
+    else:
+        return np.meshgrid(*arrays)
 
 def grid_to_points(grid):
     """

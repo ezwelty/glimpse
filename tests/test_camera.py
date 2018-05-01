@@ -21,7 +21,7 @@ def test_idealize(c=1, k=1, p=1):
 
 def reprojection_errors(cam):
     """Compute reprojection errors at all pixel centers."""
-    uv = cam.centers()
+    uv = cam.grid(step=1, snap=(0.5, 0.5), mode='points')
     dxyz = cam.invproject(uv)
     puv = cam.project(dxyz, directions=True)
     return np.linalg.norm(puv - uv, axis=1)

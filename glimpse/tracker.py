@@ -173,7 +173,7 @@ class Tracker(object):
 
     def track(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0),
         axy=(0, 0), axy_sigma=(0, 0), datetimes=None, maxdt=datetime.timedelta(0),
-        tile_size=(15, 15), parallel=False):
+        tile_size=(15, 15), parallel=False, return_particles=False):
         """
         Track particles through time.
 
@@ -199,6 +199,8 @@ class Tracker(object):
             parallel: Number of initial positions to track in parallel (int),
                 or whether to track in parallel (bool). If `True`,
                 all available CPU cores are used.
+            return_particles (bool): Whether to return all particles and weights
+                at each timestep
 
         Returns:
             `Tracks`: Tracks object
@@ -233,6 +235,9 @@ class Tracker(object):
         def process(xyi):
             means = np.full((len(datetimes), 5), np.nan)
             covariances = np.full((len(datetimes), 5, 5), np.nan)
+            if return_particles:
+                particles = np.full((len(datetimes), n, 5), np.nan)
+                weights = np.full((len(datetimes), n), np.nan)
             error = None
             all_warnings = None
             try:
@@ -244,6 +249,9 @@ class Tracker(object):
                             self.initialize_template(obs=obs, img=img, tile_size=tile_size)
                     means[0] = self.particle_mean
                     covariances[0] = self.particle_covariance
+                    if return_particles:
+                        particles[0] = self.particles
+                        weights[0] = self.weights
                     dts = np.diff(datetimes)
                     for i, dt in enumerate(dts, start=1):
                         self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
@@ -256,20 +264,31 @@ class Tracker(object):
                         self.resample_particles()
                         means[i] = self.particle_mean
                         covariances[i] = self.particle_covariance
+                        if return_particles:
+                            particles[i] = self.particles
+                            weights[i] = self.weights
                 if caught:
                     warns = tuple(caught)
             except Exception as e:
                 error = e
                 if errors:
                     raise e
-            return means, covariances, error, all_warnings
+            results = (means, covariances, error, all_warnings)
+            if return_particles:
+                results += (particles, weights)
+            return results
         # Run process in parallel
         with sharedmem.MapReduce(np=parallel) as pool:
             results = pool.map(process, xy)
         # Return results as Tracks
-        means, covariances, errors, all_warnings = zip(*results)
+        if return_particles:
+            means, covariances, errors, all_warnings, particles, weights = zip(*results)
+        else:
+            means, covariances, errors, all_warnings = zip(*results)
+            particles, weights = None, None
         return Tracks(
             datetimes=datetimes, means=means, covariances=covariances,
+            particles=particles, weights=weights,
             tracker=self, images=matching_images, params=params,
             errors=errors, warnings=all_warnings)
 
@@ -463,12 +482,15 @@ class Tracks(object):
     """
     A `Tracks' contains the estimated trajectories of world points.
 
-    In the array dimensions below, n: number of tracks, m: number of datetimes.
+    In the array dimensions below, n: number of tracks, m: number of datetimes,
+    p: number of particles.
 
     Attributes:
         datetimes (array): Datetimes at which particles were estimated (m, )
         means (array): Mean particle positions and velocities (x, y, z, vx, vy) (n, m, 5)
         covariances (array): Covariance of particle positions and velocities (n, m, 5, 5)
+        particles (array): Particle positions and velocities (n, m, p, 5)
+        weights (array): Particle weights (n, m, p)
         tracker (Tracker): Tracker object used for tracking
         images (array): Grid of image indices ([i, j] for `datetimes[i]`, `tracker.observers`[j]`).
             `None` indicates no image from `tracker.observers[j]` matched `datetimes[i]`.
@@ -479,15 +501,21 @@ class Tracks(object):
             Warnings indicate the track completed but may not be valid.
     """
 
-    def __init__(self, datetimes, means, covariances=None,
+    def __init__(self, datetimes, means, covariances=None, particles=None, weights=None,
         tracker=None, images=None, params=None, errors=None, warnings=None):
         self.datetimes = np.asarray(datetimes)
-        if not isinstance(means, np.ndarray):
+        if np.iterable(means) and not isinstance(means, np.ndarray):
             means = np.stack(means, axis=0)
         self.means = means
-        if not isinstance(covariances, np.ndarray):
+        if np.iterable(covariances) and not isinstance(covariances, np.ndarray):
             covariances = np.stack(covariances, axis=0)
         self.covariances = covariances
+        if np.iterable(particles) and not isinstance(particles, np.ndarray):
+            particles = np.stack(particles, axis=0)
+        self.particles = particles
+        if np.iterable(weights) and not isinstance(weights, np.ndarray):
+            weights = np.stack(weights, axis=0)
+        self.weights = weights
         self.tracker = tracker
         self.images = np.asarray(images)
         self.params = params
@@ -532,12 +560,265 @@ class Tracks(object):
         if self.errors is not None:
             return np.array([error is None for error in self.errors])
 
-    def plot_xy(self, **kwargs):
-        matplotlib.pyplot.plot(self.xyz[:, :, 0].T, self.xyz[:, :, 1].T, **kwargs)
-        matplotlib.pyplot.plot(self.xyz[:, 0, 0], self.xyz[:, 0, 1], marker='.', linestyle='None', **kwargs)
+    def plot_xy(self, tracks=None, start=True, mean=True, sigma=False):
+        """
+        Plot tracks on the x-y plane.
 
-    def plot_vx(self, **kwargs):
-        matplotlib.pyplot.plot(self.datetimes, self.vxy[:, :, 0].T, **kwargs)
+        Arguments:
+            tracks: Slice object or iterable of indices of tracks to include.
+                If `None`, all tracks are included.
+            start: Whether to plot starting x, y (bool) or arguments to
+                `matplotlib.pyplot.plot()` (dict)
+            mean: Whether to plot mean x, y (bool) or arguments to
+                `matplotlib.pyplot.plot()` (dict)
+            sigma: Whether to plot sigma x, y (bool) or arguments to
+                `matplotlib.pyplot.plot()` (dict)
+        """
+        if tracks is None:
+            tracks = slice(None)
+        if mean:
+            if mean is True:
+                mean = dict()
+            default = dict(color='black')
+            mean = helpers.merge_dicts(default, mean)
+            matplotlib.pyplot.plot(self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean)
+        if start:
+            if start is True:
+                start = dict()
+            default = dict(color='black', marker='.', linestyle='none')
+            if isinstance(mean, dict) and 'color' in mean:
+                default['color'] = mean['color']
+            start = helpers.merge_dicts(default, start)
+            matplotlib.pyplot.plot(self.xyz[tracks, 0, 0], self.xyz[tracks, 0, 1], **start)
+        if sigma:
+            if sigma is True:
+                sigma = dict()
+            default = dict(color='black', alpha=0.25)
+            if isinstance(mean, dict) and 'color' in mean:
+                default['color'] = mean['color']
+            sigma = helpers.merge_dicts(default, sigma)
+            for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
+                matplotlib.pyplot.errorbar(
+                    self.xyz[i, :, 0], self.xyz[i, :, 1],
+                    xerr=self.xyz_sigma[i, :, 0], yerr=self.xyz_sigma[i, :, 1],
+                    **sigma)
 
-    def plot_vy(self, **kwargs):
-        matplotlib.pyplot.plot(self.datetimes, self.vxy[:, :, 1].T, **kwargs)
+    def plot_vxy(self, tracks=None, **kwargs):
+        """
+        Plot velocities as vector fields.
+
+        Arguments:
+            tracks: Slice object or iterable of indices of tracks to include.
+                If `None`, all tracks are included.
+            **kwargs: Additional arguments to `matplotlib.pyplot.quiver()`
+        """
+        if tracks is None:
+            tracks = slice(None)
+        default = dict(angles='xy')
+        kwargs = helpers.merge_dicts(default, kwargs)
+        for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
+            matplotlib.pyplot.quiver(
+                self.xyz[i, :, 0], self.xyz[i, :, 1],
+                self.vxy[i, :, 0], self.vxy[i, :, 1], **kwargs)
+
+    def plot_vx(self, tracks=None, mean=True, sigma=False):
+        """
+        Plot velocity in x.
+
+        Arguments:
+            tracks: Slice object or iterable of indices of tracks to include.
+                If `None`, all tracks are included.
+            mean: Whether to plot mean vx (bool) or arguments to
+                `matplotlib.pyplot.plot()` (dict)
+            sigma: Whether to plot sigma vx (bool) or arguments to
+                `matplotlib.pyplot.fill_between()` (dict)
+        """
+        if tracks is None:
+            tracks = slice(None)
+        if mean:
+            if mean is True:
+                mean = dict()
+            default = dict(color='black')
+            mean = helpers.merge_dicts(default, mean)
+            matplotlib.pyplot.plot(self.datetimes, self.vxy[tracks, :, 0].T, **mean)
+        if sigma:
+            if sigma is True:
+                sigma = dict()
+            default = dict(facecolor='black', edgecolor='none', alpha=0.25)
+            if isinstance(mean, dict) and 'color' in mean:
+                default['facecolor'] = mean['color']
+            sigma = helpers.merge_dicts(default, sigma)
+            for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
+                matplotlib.pyplot.fill_between(
+                    self.datetimes,
+                    y1=self.vxy[i, :, 0] + self.vxy_sigma[i, :, 0],
+                    y2=self.vxy[i, :, 0] - self.vxy_sigma[i, :, 0],
+                    **sigma)
+
+    def plot_vy(self, tracks=None, mean=True, sigma=False):
+        """
+        Plot velocity in y.
+
+        Arguments:
+            tracks: Slice object or iterable of indices of tracks to include.
+                If `None`, all tracks are included.
+            mean: Whether to plot mean vy (bool) or arguments to
+                `matplotlib.pyplot.plot()` (dict)
+            sigma: Whether to plot sigma vy (bool) or arguments to
+                `matplotlib.pyplot.fill_between()` (dict)
+        """
+        if tracks is None:
+            tracks = slice(None)
+        if mean:
+            if mean is True:
+                mean = dict()
+            default = dict(color='black')
+            mean = helpers.merge_dicts(default, mean)
+            matplotlib.pyplot.plot(self.datetimes, self.vxy[tracks, :, 1].T, **mean)
+        if sigma:
+            if sigma is True:
+                sigma = dict()
+            default = dict(facecolor='black', edgecolor='none', alpha=0.25)
+            if isinstance(mean, dict) and 'color' in mean:
+                default['facecolor'] = mean['color']
+            sigma = helpers.merge_dicts(default, sigma)
+            for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
+                matplotlib.pyplot.fill_between(
+                    self.datetimes,
+                    y1=self.vxy[i, :, 1] + self.vxy_sigma[i, :, 1],
+                    y2=self.vxy[i, :, 1] - self.vxy_sigma[i, :, 1],
+                    **sigma)
+
+    def animate(self, track, obs=0, frames=None, images=None, particles=None,
+        map_size=(20, 20), img_size=(100, 100), subplots=dict(), animation=dict()):
+        """
+        Animate track.
+
+        Arguments:
+            track (int): Track index
+            obs (int): Observer index
+            frames (iterable): Datetime index.
+                Any requested datetimes with missing data are skipped.
+                If `None`, all times with a result for `track`, `obs` are used.
+            images (bool): Whether to plot images,
+                or `None` to plot only if `self.tracker` is set
+            particles (bool): Whether to plot particles,
+                or `None` to plot only if `self.particles` and `self.weights` are set
+            map_size (iterable): Size of map window in world units
+            img_size (iterable): Size of image window in pixels
+            subplots (dict): Optional arguments to `matplotlib.pyplot.subplots()`
+            animation (dict): Optional arguments to `matplotlib.animation.FuncAnimation`
+        """
+        if images is None:
+            images = self.tracker is not None
+        if particles is None:
+            particles = self.particles is not None and self.weights is not None
+        if images:
+            fig, axes = matplotlib.pyplot.subplots(ncols=2, **subplots)
+        else:
+            fig, axes = matplotlib.pyplot.subplots(ncols=1, **subplots)
+            axes = [axes]
+        # Select frames for which track has a solution and observer has an image
+        if frames is None:
+            frames = np.arange(len(self.datetimes))
+        has_frame = np.where(
+            ~np.isnan(self.xyz[track, :, 0]) &
+            self.images[:, obs] != None)[0]
+        frames = np.intersect1d(frames, has_frame)
+        # Initialize plot
+        i = frames[0]
+        img = self.images[i, obs]
+        # Map: Track
+        track_xyz = self.xyz[track, :(i + 1)]
+        map_track = axes[0].plot(track_xyz[:, 0], track_xyz[:, 1], color='black', marker='.')[0]
+        if images:
+            # Image: Track
+            track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
+            image_track = axes[1].plot(track_uv[:, 0], track_uv[:, 1], color='black', marker='.')[0]
+            # Image: Mean
+            image_mean = axes[1].plot(track_uv[-1, 0], track_uv[-1, 1], color='red', marker='.')[0]
+            # Image: Tile
+            box = self.tracker.observers[obs].tile_box(track_uv[-1], size=img_size)
+            tile = self.tracker.observers[obs].extract_tile(img=img, box=box)
+            image_tile = self.tracker.observers[obs].plot_tile(tile=tile, box=box, axes=axes[1])
+        # Map: Basename
+        if images:
+            basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
+        else:
+            basename = str(obs) + ' : ' + str(img)
+        map_txt = axes[0].text(0.5, 0.9, basename, color='black',
+            horizontalalignment='center', transform=axes[0].transAxes)
+        if particles:
+            # Compute quiver scales
+            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+            # Compute weight limits for static colormap
+            clim = (
+                self.weights[track, :].ravel().min(),
+                self.weights[track, :].ravel().max())
+        elif self.tracker is not None:
+            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+        else:
+            scales = np.ones(len(frames) - 1)
+        # Discard last frame
+        frames = frames[:-1]
+        def update_plot(i):
+            # PathCollections cannot set x, y, so new objects have to be created
+            for ax in axes:
+                ax.collections = []
+            img = self.images[i, obs]
+            if particles:
+                # Map: Particles
+                particle_xyz = self.particles[track, i, :, 0:3]
+                particle_vxy = self.particles[track, i, :, 3:5] * scales[i]
+                axes[0].quiver(
+                    particle_xyz[:, 0], particle_xyz[:, 1],
+                    particle_vxy[:, 0], particle_vxy[:, 1],
+                    self.weights[track, i],
+                    cmap=matplotlib.pyplot.cm.gnuplot2, alpha=0.25,
+                    angles='xy', scale=1, scale_units='xy', units='xy', clim=clim)
+                    # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label='Weight')
+            if images and particles:
+                # Image: Particles
+                particle_uv = self.tracker.observers[obs].project(particle_xyz, img=img)
+                axes[1].scatter(
+                    particle_uv[:, 0], particle_uv[:, 1],
+                    c=self.weights[track, i], marker='.',
+                    cmap=matplotlib.pyplot.cm.gnuplot2, alpha=0.25, edgecolors='none',
+                    vmin=clim[0], vmax=clim[1])
+                # matplotlib.pyplot.colorbar(image_particles, ax=axes[1], label='Weight')
+            # Map: Track
+            track_xyz = self.xyz[track, :(i + 1)]
+            map_track.set_data(track_xyz[:, 0], track_xyz[:, 1])
+            axes[0].set_xlim(track_xyz[-1, 0] - map_size[0] / 2, track_xyz[-1, 0] + map_size[0] / 2)
+            axes[0].set_ylim(track_xyz[-1, 1] - map_size[1] / 2, track_xyz[-1, 1] + map_size[1] / 2)
+            # Map: Mean
+            axes[0].quiver(
+                self.xyz[track, i, 0], self.xyz[track, i, 1],
+                self.vxy[track, i, 0] * scales[i], self.vxy[track, i, 1] * scales[i],
+                color='red', alpha=1,
+                angles='xy', scale=1, scale_units='xy', units='xy')
+            if images:
+                # Image: Track
+                track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
+                image_track.set_data(track_uv[:, 0], track_uv[:, 1])
+                axes[1].set_xlim(track_uv[-1, 0] - img_size[0] / 2, track_uv[-1, 0] + img_size[0] / 2)
+                axes[1].set_ylim(track_uv[-1, 1] + img_size[1] / 2, track_uv[-1, 1] - img_size[1] / 2)
+                # Image: Mean
+                image_mean.set_data(track_uv[-1, 0], track_uv[-1, 1])
+                # Image: Tile
+                box = self.tracker.observers[obs].tile_box(uv=track_uv[-1, :], size=img_size)
+                tile = self.tracker.observers[obs].extract_tile(box=box, img=img)
+                image_tile.set_data(tile)
+                image_tile.set_extent((box[0], box[2], box[3], box[1]))
+            # Map: Basename
+            if images:
+                basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
+            else:
+                basename = str(obs) + ' : ' + str(img)
+            basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
+            map_txt.set_text(basename)
+            if images:
+                return map_track, map_txt, image_track, image_tile, image_mean
+            else:
+                return map_track, map_txt
+        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, blit=True, **animation)

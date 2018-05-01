@@ -273,7 +273,7 @@ class Observer(object):
         if uv is None:
             uv = self.images[0].cam.imgsz / 2
         if frames is None:
-            frames = range(len(self.images))
+            frames = np.arange(len(self.images))
         dxyz = self.images[frames[0]].cam.invproject(np.atleast_2d(uv))
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
@@ -327,7 +327,7 @@ class Observer(object):
             `matplotlib.animation.FuncAnimation`
         """
         if frames is None:
-            frames = range(len(xyz))
+            frames = np.arange(len(xyz))
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)

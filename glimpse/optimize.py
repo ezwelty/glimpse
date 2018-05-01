@@ -107,6 +107,22 @@ class Points(object):
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
+    def resize(self, size, force=False):
+        """
+        Resize to new image size.
+
+        Resizes both the camera and image coordinates.
+
+        Arguments:
+            size: Scale factor (float) or target image size (iterable)
+            force (bool): Whether to use `size` even if it does not preserve
+                the original aspect ratio
+        """
+        original_imgsz = self.cam.imgsz.copy()
+        self.cam.resize(size=size, force=force)
+        scale = self.cam.imgsz / original_imgsz
+        self.uv *= scale
+
 class Lines(object):
     """
     `Lines` store image and world lines believed to overlap.
@@ -271,6 +287,24 @@ class Lines(object):
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
+    def resize(self, size, force=False):
+        """
+        Resize to new image size.
+
+        Resizes both the camera and image coordinates.
+
+        Arguments:
+            size: Scale factor (float) or target image size (iterable)
+            force (bool): Whether to use `size` even if it does not preserve
+                the original aspect ratio
+        """
+        original_imgsz = self.cam.imgsz.copy()
+        self.cam.resize(size=size, force=force)
+        scale = self.cam.imgsz / original_imgsz
+        for uv in self.uvs:
+            uv *= scale
+        self.uvi *= scale
+
 class Matches(object):
     """
     `Matches` store image-image point correspondences.
@@ -395,6 +429,24 @@ class Matches(object):
             return self
         else:
             return mtype(cams=self.cams, uvs=self.uvs)
+
+    def resize(self, size, force=False):
+        """
+        Resize to new image size.
+
+        Resizes both the cameras and their image coordinates.
+
+        Arguments:
+            size: Scale factor (float) or target image size (iterable)
+            force (bool): Whether to use `size` even if it does not preserve
+                the original aspect ratio
+        """
+        for i, cam in enumerate(self.cams):
+            original_imgsz = cam.imgsz.copy()
+            cam.resize(size=size, force=force)
+            scale = cam.imgsz / original_imgsz
+            uv = self.uvs[i]
+            uv *= scale
 
 class RotationMatches(Matches):
     """

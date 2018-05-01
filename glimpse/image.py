@@ -332,12 +332,13 @@ class Camera(object):
         """
         Resize the camera.
 
-        Image size (`imgsz`), focal length (`f`), and principal point offset (`c`) are scaled accordingly.
+        Image size (`imgsz`), focal length (`f`), and principal point offset (`c`)
+        are scaled accordingly.
 
         Arguments:
-            size: Either scale factor (scalar) or target image size (length-2)
-            force: Whether to use the target image size even if it cannot be achieved
-                by a scalar scale factor
+            size: Scale factor (float) or target image size (iterable)
+            force (bool): Whether to use `size` even if it does not preserve
+                the original aspect ratio
         """
         scale1d = np.atleast_1d(size)
         if len(scale1d) > 1 and force:

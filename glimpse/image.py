@@ -210,6 +210,10 @@ class Camera(object):
         return Rprime * (np.pi / 180)
 
     @property
+    def original_imgsz(self):
+        return self.original_vector[6:8]
+
+    @property
     def cameraMatrix(self):
         """
         OpenCV camera matrix.
@@ -336,7 +340,8 @@ class Camera(object):
         are scaled accordingly.
 
         Arguments:
-            size: Scale factor (float) or target image size (iterable)
+            size: Scale factor relative to original size (float)
+                or target image size (iterable)
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
@@ -347,12 +352,12 @@ class Camera(object):
         else:
             if len(scale1d) > 1:
                 # Compute scalar scale factor (if one exists)
-                scale1d = Camera.get_scale_from_size(self.imgsz, scale1d)
+                scale1d = Camera.get_scale_from_size(self.original_imgsz, scale1d)
                 if scale1d is None:
-                    raise ValueError('Target size cannot be achieved with scalar scale factor')
-            new_size = np.floor(scale1d * self.imgsz + 0.5)
-        scale2d = new_size / self.imgsz
-        self.imgsz = np.round(self.imgsz * scale2d) # ensure whole numbers
+                    raise ValueError('Target size does not preserve original aspect ratio')
+            new_size = np.floor(scale1d * self.original_imgsz + 0.5)
+        scale2d = new_size / self.original_imgsz
+        self.imgsz = np.round(self.original_imgsz * scale2d) # ensure whole numbers
         self.f *= scale2d
         self.c *= scale2d
 

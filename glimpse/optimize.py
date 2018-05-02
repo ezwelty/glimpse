@@ -23,9 +23,10 @@ class Points(object):
         uv (array): Image coordinates (Nx2)
         xyz (array): World coordinates (Nx3)
         directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
-        original_cam_xyz (array): Original camera position (`cam.xyz`)
         correction (dict or bool): See `cam.project()`
         size (int): Number of point pairs
+        xyz (array): Initial camera position (`cam.xyz`)
+        imgsz (array): Initial image size (`cam.imgsz`)
     """
 
     def __init__(self, cam, uv, xyz, directions=False, correction=False):
@@ -36,8 +37,9 @@ class Points(object):
         self.xyz = xyz
         self.directions = directions
         self.correction = correction
-        self.original_cam_xyz = cam.xyz.copy()
         self.size = len(self.uv)
+        self.xyz = cam.xyz.copy()
+        self.imgsz = cam.imgsz.copy()
 
     def observed(self, index=None):
         """
@@ -70,7 +72,7 @@ class Points(object):
         """
         Test whether the camera is at its original position.
         """
-        return (self.cam.xyz == self.original_cam_xyz).all()
+        return (self.cam.xyz == self.xyz).all()
 
     def plot(self, index=None, scale=1, width=5, selected='red', unselected=None):
         """
@@ -114,14 +116,16 @@ class Points(object):
         Resizes both the camera and image coordinates.
 
         Arguments:
-            size: Scale factor (float) or target image size (iterable)
+            size: Scale factor relative to the camera's original size (float)
+                or target image size (iterable)
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
-        original_imgsz = self.cam.imgsz.copy()
         self.cam.resize(size=size, force=force)
-        scale = self.cam.imgsz / original_imgsz
-        self.uv *= scale
+        scale = self.cam.imgsz / self.imgsz
+        if any(scale != 1):
+            self.uv = self.uv * scale
+            self.imgsz = self.cam.imgsz.copy()
 
 class Lines(object):
     """
@@ -133,30 +137,32 @@ class Lines(object):
 
     Attributes:
         cam (Camera): Camera object
-        uvs (array or iterable): Arrays of image line vertices (Nx2)
+        uvs (iterable): Image line vertices (n, 2)
         uvi (array): Image coordinates interpolated from `uvs` by `step`
-        xyzs (array or iterable): Arrays of world line vertices (Nx3)
+        xyzs (iterable): World line vertices (n, 3)
         directions (bool): Whether `xyzs` are absolute coordinates (False) or ray directions (True)
         correction (dict or bool): See `cam.project()`
         step (float): Along-line distance between image points interpolated from lines `uvs`
-        original_cam_xyz (array): Original camera position (`cam.xyz`)
         size (int): Number of image points
+        xyz (array): Initial camera position (`cam.xyz`)
+        imgsz (array): Initial image size (`cam.imgsz`)
     """
 
     def __init__(self, cam, uvs, xyzs, directions=False, correction=False, step=None):
         self.cam = cam
         # Retain image lines for plotting
-        self.uvs = (uvs, ) if isinstance(uvs, np.ndarray) else uvs
+        self.uvs = list(uvs)
         self.step = step
         if step:
             self.uvi = np.vstack((helpers.interpolate_line(uv, dx=step) for uv in self.uvs))
         else:
             self.uvi = np.vstack(self.uvs)
-        self.xyzs = (xyzs, ) if isinstance(xyzs, np.ndarray) else xyzs
+        self.xyzs = xyzs
         self.directions = directions
         self.correction = correction
-        self.original_cam_xyz = cam.xyz.copy()
         self.size = len(self.uvi)
+        self.xyz = cam.xyz.copy()
+        self.imgsz = cam.imgsz.copy()
 
     def observed(self, index=None):
         """
@@ -218,7 +224,7 @@ class Lines(object):
             array: Image coordinates (Nx2)
         """
         puv = np.row_stack(self.project())
-        distances = helpers.pairwise_distance(self.observed(), puv)
+        distances = helpers.pairwise_distance(self.observed(index=index), puv)
         min_index = np.argmin(distances, axis=1)
         return puv[min_index, :]
 
@@ -226,7 +232,7 @@ class Lines(object):
         """
         Test whether the camera is at its original position.
         """
-        return (self.cam.xyz == self.original_cam_xyz).all()
+        return (self.cam.xyz == self.xyz).all()
 
     def plot(self, index=None, scale=1, width=5, selected='red', unselected=None,
         observed='green', predicted='yellow'):
@@ -294,16 +300,18 @@ class Lines(object):
         Resizes both the camera and image coordinates.
 
         Arguments:
-            size: Scale factor (float) or target image size (iterable)
+            size: Scale factor relative to the camera's original size (float)
+                or target image size (iterable)
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
-        original_imgsz = self.cam.imgsz.copy()
         self.cam.resize(size=size, force=force)
-        scale = self.cam.imgsz / original_imgsz
-        for uv in self.uvs:
-            uv *= scale
-        self.uvi *= scale
+        scale = self.cam.imgsz / self.imgsz
+        if any(scale != 1):
+            for i, uv in enumerate(self.uvs):
+                self.uvs[i] = self.uvs[i] * scale
+            self.uvi *= scale
+            self.imgsz = self.cam.imgsz.copy()
 
 class Matches(object):
     """
@@ -314,15 +322,17 @@ class Matches(object):
 
     Attributes:
         cams (list): Pair of Camera objects
-        uvs (list): Pair of image coordinate arrays (Nx2)
+        uvs (list): Pair of image coordinate arrays (n, 2)
         size (int): Number of point pairs
+        imgszs (list): Initial image sizes (`cam.imgsz`)
     """
 
     def __init__(self, cams, uvs):
         self.cams = cams
-        self.uvs = uvs
+        self.uvs = list(uvs)
         self._test_matches()
         self.size = len(self.uvs[0])
+        self.imgszs = [cam.imgsz.copy() for cam in cams]
 
     def _test_matches(self):
         if self.cams[0] is self.cams[1]:
@@ -437,16 +447,17 @@ class Matches(object):
         Resizes both the cameras and their image coordinates.
 
         Arguments:
-            size: Scale factor (float) or target image size (iterable)
+            size: Scale factor relative to the cameras' original sizes (float)
+                or target image size (iterable)
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
         for i, cam in enumerate(self.cams):
-            original_imgsz = cam.imgsz.copy()
             cam.resize(size=size, force=force)
-            scale = cam.imgsz / original_imgsz
-            uv = self.uvs[i]
-            uv *= scale
+            scale = cam.imgsz / self.imgszs[i]
+            if any(scale != 1):
+                self.uvs[i] = self.uvs[i] * scale
+                self.imgszs[i] = cam.imgsz.copy()
 
 class RotationMatches(Matches):
     """

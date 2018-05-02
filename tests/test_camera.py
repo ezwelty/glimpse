@@ -9,7 +9,7 @@ def test_resize(imgsz=(200, 100)):
     cam = glimpse.Camera(imgsz=imgsz)
     cam.resize(0.5)
     assert all(cam.imgsz * 2 == imgsz)
-    cam.resize(2)
+    cam.resize(1)
     assert all(cam.imgsz == imgsz)
 
 def test_idealize(c=1, k=1, p=1):

@@ -356,8 +356,8 @@ class Camera(object):
                 if scale1d is None:
                     raise ValueError('Target size does not preserve original aspect ratio')
             new_size = np.floor(scale1d * self.original_imgsz + 0.5)
-        scale2d = new_size / self.original_imgsz
-        self.imgsz = np.round(self.original_imgsz * scale2d) # ensure whole numbers
+        scale2d = new_size / self.imgsz
+        self.imgsz = np.round(new_size) # ensure whole numbers
         self.f *= scale2d
         self.c *= scale2d
 

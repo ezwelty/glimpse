@@ -544,19 +544,15 @@ def apply_geojson_coords(obj, fun, **kwargs):
         fun (callable): Called as `fun(coordinates, **kwargs)`
         **kwargs (dict): Additional arguments passed to `fun`
     """
-    def _is_multi(coords):
-        if np.ndim(coords) == 1:
-            return True
-        elif np.ndim(coords) == 2:
-            return False
-        else:
-            raise ValueError('Unknown coordinates format')
     for feature in geojson_iterfeatures(obj):
         coords = _get_geojson_coords(feature)
-        if _is_multi(coords):
+        ndim = np.ndim(coords)
+        if ndim == 1 or ndim == 3:
             _set_geojson_coords(feature, [fun(X, **kwargs) for X in coords])
-        else:
+        elif ndim == 2:
             _set_geojson_coords(feature, fun(coords, **kwargs))
+        else:
+            raise ValueError('Unknown coordinates format')
 
 def elevate_geojson(obj, elevation):
     """
@@ -651,6 +647,19 @@ def boolean_split(x, mask, axis=0, circular=False, include='all'):
         return splits[index]
     else:
         return list()
+
+def project_points_plane(points, plane):
+    """
+    Return projection of points on plane.
+
+    Arguments:
+        points (iterable): Point coordinates ((x, y, z), ...)
+        plane (iterable): Plane (a, b, c, d), where ax + by + cz + d = 0
+    """
+    # http://www.9math.com/book/projection-point-plane
+    n = np.asarray(plane[0:3])
+    d = plane[3]
+    return points - n * ((np.dot(points, n) + d) * (1 / sum(n**2)))[:, None]
 
 def intersect_rays_plane(origin, directions, plane):
     """
@@ -1154,6 +1163,17 @@ def grid_to_points(grid):
     """
     return np.reshape(grid, (len(grid), -1)).T
 
+def points_in_polygon(points, polygon):
+    """
+    Return whether each point is contained by the polygon.
+
+    Arguments:
+        points (iterable): Point coordinates ((x, y), ...)
+        polygon (iterable): Polygon vertices ((x, y), ...)
+    """
+    path = matplotlib.path.Path(polygon)
+    return path.contains_points(points)
+
 def polygon_to_grid_points(polygon, holes=None, **params):
     """
     Return grid of points inside polygon.
@@ -1167,15 +1187,12 @@ def polygon_to_grid_points(polygon, holes=None, **params):
         **params (dict): Arguments passed to `box_to_grid()`
     """
     box = bounding_box(polygon)
-    grid = box_to_grid(box, **params)
+    grid = box_to_grid(box, mode='grids', **params)
     points = grid_to_points(grid)
-    path = matplotlib.path.Path(polygon)
-    is_in = path.contains_points(points)
-    if holes is None:
-        holes = []
-    for hole in holes:
-        path = matplotlib.path.Path(hole)
-        is_in &= ~path.contains_points(points)
+    is_in = points_in_polygon(points, polygon)
+    if holes:
+        for hole in holes:
+            is_in &= ~points_in_polygon(points, hole)
     return points[is_in, :]
 
 def side(points, edge):

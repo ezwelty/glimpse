@@ -332,7 +332,7 @@ class Camera(object):
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
 
-    def resize(self, size, force=False):
+    def resize(self, size=1, force=False):
         """
         Resize the camera.
 
@@ -476,16 +476,48 @@ class Camera(object):
             np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1]))
         ))
 
-    def viewbox(self, radius=1, directions=False):
-        uv = self.edges(step=self.imgsz / 2)
+    def viewbox(self, radius):
+        """
+        Return bounding box of the camera viewshed.
+
+        The camera viewshed is constructed by projecting out edge pixles
+        at a fixed distance from the camera.
+
+        Arguments:
+            radius (float): Distance of point projections
+        """
+        uv = self.edges(step=1)
         dxyz = self.invproject(uv)
         dxyz *= radius / np.linalg.norm(dxyz, axis=1)[:, None]
         vertices = np.vstack(([[0, 0, 0]], dxyz))
-        if not directions:
-            vertices += self.xyz
-        return np.hstack((
-            np.min(vertices, axis=0),
-            np.max(vertices, axis=0)))
+        vertices += self.xyz
+        return helpers.bounding_box(vertices)
+
+    def viewpoly(self, radius, step=1, plane=None):
+        """
+        Return bounding polygon of the camera viewshed.
+
+        The polygon is constructed by projecting out the pixel row passing
+        through the principal point, then projecting the result onto a plane.
+
+        Arguments:
+            radius (float): Distance of point projections
+            step (float): Pixel spacing between projected image coordinates
+            plane (iterable): Plane (a, b, c, d), where ax + by + cz + d = 0.
+                If `None`, no planar projection is performed.
+        """
+        n = int(self.imgsz[0] / step) + 1
+        uv = np.column_stack((
+            np.linspace(0, self.imgsz[0], n),
+            np.repeat(self.imgsz[1] / 2 + self.c[1], n)))
+        dxyz = self.invproject(uv)
+        dxyz *= radius / np.linalg.norm(dxyz, axis=1)[:, None]
+        vertices = np.row_stack(((0, 0, 0), dxyz, (0, 0, 0)))
+        vertices += self.xyz
+        if plane is None:
+            return vertices
+        else:
+            return helpers.project_points_plane(points=vertices, plane=plane)
 
     def rasterize(self, uv, values, fun=np.mean):
         """

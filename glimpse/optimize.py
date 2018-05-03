@@ -109,7 +109,7 @@ class Points(object):
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
-    def resize(self, size, force=False):
+    def resize(self, size=None, force=False):
         """
         Resize to new image size.
 
@@ -117,11 +117,14 @@ class Points(object):
 
         Arguments:
             size: Scale factor relative to the camera's original size (float)
-                or target image size (iterable)
+                or target image size (iterable).
+                If `None`, image coordinates are resized to fit current
+                camera image size.
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
-        self.cam.resize(size=size, force=force)
+        if size is not None:
+            self.cam.resize(size=size, force=force)
         scale = self.cam.imgsz / self.imgsz
         if any(scale != 1):
             self.uv = self.uv * scale
@@ -293,7 +296,7 @@ class Lines(object):
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
 
-    def resize(self, size, force=False):
+    def resize(self, size=None, force=False):
         """
         Resize to new image size.
 
@@ -301,11 +304,14 @@ class Lines(object):
 
         Arguments:
             size: Scale factor relative to the camera's original size (float)
-                or target image size (iterable)
+                or target image size (iterable).
+                If `None`, image coordinates are resized to fit current
+                camera image size.
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
-        self.cam.resize(size=size, force=force)
+        if size is not None:
+            self.cam.resize(size=size, force=force)
         scale = self.cam.imgsz / self.imgsz
         if any(scale != 1):
             for i, uv in enumerate(self.uvs):
@@ -440,7 +446,7 @@ class Matches(object):
         else:
             return mtype(cams=self.cams, uvs=self.uvs)
 
-    def resize(self, size, force=False):
+    def resize(self, size=None, force=False):
         """
         Resize to new image size.
 
@@ -448,12 +454,15 @@ class Matches(object):
 
         Arguments:
             size: Scale factor relative to the cameras' original sizes (float)
-                or target image size (iterable)
+                or target image size (iterable).
+                If `None`, image coordinates are resized to fit current
+                camera image sizes.
             force (bool): Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
         for i, cam in enumerate(self.cams):
-            cam.resize(size=size, force=force)
+            if size is not None:
+                cam.resize(size=size, force=force)
             scale = cam.imgsz / self.imgszs[i]
             if any(scale != 1):
                 self.uvs[i] = self.uvs[i] * scale
@@ -1202,7 +1211,7 @@ class ObserverCameras(object):
 
 # ---- RANSAC ----
 
-def ransac(model, sample_size, max_error, min_inliers, iterations=100):
+def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws):
     """
     Fit model parameters to data using the Random Sample Consensus (RANSAC) algorithm.
 
@@ -1219,6 +1228,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100):
         max_error (float): Error below which a sample element is considered a model inlier
         min_inliers (int): Number of inliers (in addition to `sample_size`) for a model to be considered valid
         iterations (int): Number of iterations
+        **fit_kws: Additional arguments to `model.fit()`
 
     Returns:
         array (int): Values of model parameters
@@ -1231,7 +1241,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100):
     while i < iterations:
         maybe_idx, test_idx = ransac_sample(sample_size, model.data_size())
         # maybe_inliers = data[maybe_idx]
-        maybe_params = model.fit(maybe_idx)
+        maybe_params = model.fit(maybe_idx, **fit_kws)
         if maybe_params is None:
             continue
         # test_data = data[test_idx]
@@ -1240,7 +1250,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100):
         if len(also_idx) > min_inliers:
             # also_inliers = data[also_idx]
             better_idx = np.concatenate((maybe_idx, also_idx))
-            better_params = model.fit(better_idx)
+            better_params = model.fit(better_idx, **fit_kws)
             if better_params is None:
                 continue
             better_errs = model.errors(better_params, better_idx)

@@ -21,10 +21,10 @@ class Tracker(object):
             (arguments to scipy.ndimage.filters.median_filter)
         interpolation (dict): Subpixel interpolation
             (arguments to scipy.interpolate.RectBivariateSpline)
-        particles (array): Positions and velocities of particles (n, 5) [[x, y, z, vx, vy], ...]
+        particles (array): Positions and velocities of particles (n, 6) [[x, y, z, vx, vy], ...]
         weights (array): Particle likelihoods (n, )
-        particle_mean (array): Weighted mean of `particles` (5, ) [x, y, z, vx, vy]
-        particle_covariance (array): Weighted covariance matrix of `particles` (5, 5)
+        particle_mean (array): Weighted mean of `particles` (6, ) [x, y, z, vx, vy]
+        particle_covariance (array): Weighted covariance matrix of `particles` (6, 6)
         templates (list): For each Observer, a template extracted from the first image
             matching a `datetimes` centered around the `particle_mean` at that time.
             Templates are dictionaries that include at least
@@ -69,7 +69,7 @@ class Tracker(object):
         if any(np.isnan(self.particles[:, 2])):
             raise ValueError('Some particles are on NaN dem cells')
 
-    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0)):
+    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0), vz_sigma=0.0):
         """
         Initialize particles given an initial normal distribution.
 
@@ -84,14 +84,15 @@ class Tracker(object):
             vxy_sigma (iterable): Standard deviation of velocity (x, y)
         """
         if self.particles is None or len(self.particles) != n:
-            self.particles = np.zeros((n, 5))
+            self.particles = np.zeros((n, 6))
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
-        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2]) + self.dem.Z_sigma*np.random.randn(n)
         self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
+        self.particles[:, 5] = vz_sigma * np.random.randn(n)
         self._test_particles()
         self.weights = np.full(n, 1.0 / n)
 
-    def evolve_particles(self, dt, axy=(0, 0), axy_sigma=(0, 0)):
+    def evolve_particles(self, dt, axy=(0, 0), axy_sigma=(0, 0), az_sigma=0.0):
         """
         Evolve particles through time by stochastic differentiation.
 
@@ -105,10 +106,12 @@ class Tracker(object):
         """
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
         daxy = axy_sigma * np.random.randn(len(self.particles), 2)
+        daz = az_sigma * np.random.randn(len(self.particles))
         self.particles[:, 0:2] += (time_units * self.particles[:, 3:5]
             + 0.5 * (axy + daxy) * time_units**2)
-        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2])
+        self.particles[:, 2] += time_units * self.particles[:,5] + 0.5 * daz * time_units**2
         self.particles[:, 3:5] += time_units * (axy + daxy)
+        self.particles[:, 5] += time_units * daz
         self._test_particles()
 
     def update_weights(self, likelihoods):
@@ -171,8 +174,8 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0),
-        axy=(0, 0), axy_sigma=(0, 0), datetimes=None, maxdt=datetime.timedelta(0),
+    def track(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0), vz_sigma=0.0,
+        axy=(0, 0), axy_sigma=(0, 0), az_sigma=0.0, datetimes=None, maxdt=datetime.timedelta(0),
         tile_size=(15, 15), parallel=False, return_particles=False):
         """
         Track particles through time.
@@ -233,16 +236,16 @@ class Tracker(object):
                     observer.cache_images(index=index)
         # Define parallel process
         def process(xyi):
-            means = np.full((len(datetimes), 5), np.nan)
-            covariances = np.full((len(datetimes), 5, 5), np.nan)
+            means = np.full((len(datetimes), 6), np.nan)
+            covariances = np.full((len(datetimes), 6, 6), np.nan)
             if return_particles:
-                particles = np.full((len(datetimes), n, 5), np.nan)
+                particles = np.full((len(datetimes), n, 6), np.nan)
                 weights = np.full((len(datetimes), n), np.nan)
             error = None
             all_warnings = None
             try:
                 with warnings.catch_warnings(record=True) as caught:
-                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma, vxy=vxy, vxy_sigma=vxy_sigma)
+                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma, vxy=vxy, vxy_sigma=vxy_sigma,vz_sigma=vz_sigma)
                     # Initialize templates for Observers starting at datetimes[0]
                     for obs, img in enumerate(template_images):
                         if img == 0:
@@ -254,7 +257,7 @@ class Tracker(object):
                         weights[0] = self.weights
                     dts = np.diff(datetimes)
                     for i, dt in enumerate(dts, start=1):
-                        self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma)
+                        self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma, az_sigma=az_sigma)
                         # Initialize templates for Observers starting at datetimes[i]
                         for obs, img in enumerate(template_images):
                             if img == i:
@@ -420,9 +423,11 @@ class Tracker(object):
         Arguments:
             imgs (iterable): Image index for each Observer, or `None` to skip
         """
-        log_likelihoods = [self._compute_observer_log_likelihoods(obs, img)
+        log_likelihoods_observer = [self._compute_observer_log_likelihoods(obs, img)
             for obs, img in enumerate(imgs)]
-        return np.exp(-sum(log_likelihoods))
+        log_likelihoods_dem = 1./(2*self.dem.Z_sigma**2)*(
+            self.dem.sample(self.particles[:, 0:2]) - self.particles[:,2])**2
+        return np.exp(-sum(log_likelihoods_observer) - log_likelihoods_dem)
 
     def _compute_observer_log_likelihoods(self, obs, img):
         """
@@ -476,7 +481,7 @@ class Tracker(object):
         # Sample at projected particles
         sampled_sse = self.observers[obs].sample_tile(uv, tile=sse,
             box=sse_box, grid=False, **self.interpolation)
-        return sampled_sse * (1 / self.observers[obs].sigma**2)
+        return sampled_sse * (1 / (2*self.observers[obs].sigma**2))
 
 class Tracks(object):
     """
@@ -487,9 +492,9 @@ class Tracks(object):
 
     Attributes:
         datetimes (array): Datetimes at which particles were estimated (m, )
-        means (array): Mean particle positions and velocities (x, y, z, vx, vy) (n, m, 5)
-        covariances (array): Covariance of particle positions and velocities (n, m, 5, 5)
-        particles (array): Particle positions and velocities (n, m, p, 5)
+        means (array): Mean particle positions and velocities (x, y, z, vx, vy) (n, m, 6)
+        covariances (array): Covariance of particle positions and velocities (n, m, 6, 6)
+        particles (array): Particle positions and velocities (n, m, p, 6)
         weights (array): Particle weights (n, m, p)
         tracker (Tracker): Tracker object used for tracking
         images (array): Grid of image indices ([i, j] for `datetimes[i]`, `tracker.observers`[j]`).

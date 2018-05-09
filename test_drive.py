@@ -35,8 +35,10 @@ for station in STATIONS:
 boxes = [obs.images[0].cam.viewbox(radius=MAX_DISTANCE)
     for obs in observers]
 box = glimpse.helpers.intersect_boxes(boxes)
-path = glob.glob(os.path.join(DEM_DIR, '*.tif'))[0]
-dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3])
+paths = glob.glob(os.path.join(DEM_DIR, '*.tif'))
+paths.sort()
+path = paths[0]
+dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3],Z_sigma=3.0)
 dem.crop(zlim=(0, np.inf))
 dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
 for obs in observers:
@@ -53,13 +55,13 @@ for v in viewsheds:
 
 xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
-    itertools.product(range(-300, 400, 100), range(-300, 400, 100))])
+    itertools.product(range(-400, 300, 100), range(-400, 300, 100))])
 time_unit = datetime.timedelta(days=1)
 tracker = glimpse.Tracker(
     observers=observers, dem=dem, viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
-    xy=xy, n=5000, xy_sigma=(2, 2), vxy_sigma=(10, 10), axy_sigma=(2, 2),
-    tile_size=(15, 15), parallel=True)
+    xy=xy, n=5000, xy_sigma=(2, 2), vxy_sigma=(5, 5), axy_sigma=(2, 2),
+    vz_sigma=0.1, az_sigma=0.1, tile_size=(15, 15), parallel=True, return_particles=True)
 
 # ---- Plot tracks ----
 

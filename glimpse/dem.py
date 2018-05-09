@@ -342,15 +342,16 @@ class DEM(Grid):
         datetime (datetime): Capture date and time
     """
 
-    def __init__(self, Z, x=None, y=None, datetime=None):
+    def __init__(self, Z, x=None, y=None, datetime=None, Z_sigma=0.0):
         self.Z = Z
+        self.Z_sigma = Z_sigma
         self._Zf = None
         self.xlim, self._x, self._X = self._parse_x(x)
         self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
 
     @classmethod
-    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
+    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None, Z_sigma=0.0):
         """
         Read DEM from raster file.
 
@@ -394,7 +395,7 @@ class DEM(Grid):
         nan_value = band.GetNoDataValue()
         if np.issubdtype(Z.dtype, np.floating) and nan_value:
             Z[Z == nan_value] = np.nan
-        return cls(Z, x=xlim, y=ylim, datetime=datetime)
+        return cls(Z, x=xlim, y=ylim, datetime=datetime, Z_sigma=Z_sigma)
 
     @property
     def Z(self):

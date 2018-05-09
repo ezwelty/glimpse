@@ -20,10 +20,13 @@ ANCHOR_BASENAME = 'AK01b_20130615_220325'
 all_img_paths = glob.glob(os.path.join(IMG_DIR, "*.JPG"))
 datetimes = np.array([glimpse.Exif(path).datetime
     for path in all_img_paths])
+datetimes.sort()
 inrange = np.logical_and(datetimes > START_TIME, datetimes < END_TIME)
 img_paths = [all_img_paths[i] for i in np.where(inrange)[0]]
+img_paths.sort()
 basenames = [glimpse.helpers.strip_path(path)
     for path in img_paths]
+basenames.sort()
 cam_args = cg.load_calibrations(image=ANCHOR_BASENAME, merge=True)
 images = [glimpse.Image(
     path, cam=cam_args.copy(), anchor=(basename == ANCHOR_BASENAME),
@@ -39,7 +42,7 @@ matcher.build_keypoints(
     masks=mask, contrastThreshold=0.02, overwrite=False, parallel=True)
 matcher.build_matches(
     maxdt=datetime.timedelta(days=1), path=MATCH_DIR,
-    overwrite=False, max_ratio=0.6, max_distance=10, parallel=True)
+    overwrite=True, max_ratio=0.6, max_distance=10, parallel=True)
 # Precompute xys
 _ = matcher.matches_as_type(glimpse.optimize.RotationMatches)
 

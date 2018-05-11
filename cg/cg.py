@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.join(CG_PATH, '..'))
 import glimpse
 from glimpse.backports import *
-from glimpse.imports import (np, pandas, re, datetime, sharedmem)
+from glimpse.imports import (np, pandas, re, datetime, sharedmem, cv2)
 import glob
 import requests
 try:
@@ -40,7 +40,41 @@ def Sequences():
     # Floor start time subseconds for comparisons to filename times
     df.first_time_utc = df.first_time_utc.apply(
         datetime.datetime.replace, microsecond=0)
-    return df
+    return df.sort_values('first_time_utc').reset_index(drop=True)
+
+@lru_cache(maxsize=1)
+def Stations():
+    """
+    Return stations metadata.
+    """
+    stations_path = os.path.join(CG_PATH, 'geojson', 'stations.geojson')
+    return glimpse.helpers.read_geojson(stations_path, crs=32606, key='id')['features']
+
+def _station_break_index(path):
+    """
+    Return index of image in motion break sequence.
+
+    Arguments:
+        path (str): Image path
+
+    Returns:
+        int: Either 0 (original viewdir) or i (viewdir of break i + 1)
+    """
+    stations = Stations()
+    ids = parse_image_path(path)
+    station = stations[ids['station']]
+    if 'breaks' not in station['properties']:
+        return 0
+    breaks = station['properties']['breaks']
+    if not breaks:
+        return 0
+    break_images = np.array([x['start'] for x in breaks])
+    idx = np.argsort(break_images)
+    i = np.where(break_images[idx] <= ids['basename'])[0]
+    if i.size > 0:
+        return idx[i[-1]] + 1
+    else:
+        return 0
 
 def parse_image_path(path, sequence=False):
     """
@@ -141,7 +175,6 @@ def load_masks(images):
         images (iterable): Image objects
     """
     glimpse.Observer.test_images(images)
-    # NOTE: Assumes that all images are from same station
     station = parse_image_path(images[0].path)['station']
     imgsz = images[0].cam.imgsz
     # Find all svg files for station with 'land' markup
@@ -149,38 +182,66 @@ def load_masks(images):
     markups = [glimpse.svg.parse_svg(path, imgsz=imgsz)
         for path in svg_paths]
     land_index = np.where(['land' in markup for markup in markups])[0]
-    # Select svg files nearest to images
-    svg_datetimes = [parse_image_path(path)['datetime']
-        for path in np.array(svg_paths)[land_index]]
+    if len(land_index) == 0:
+        raise ValueError('No land masks found for station')
+    svg_paths = np.array(svg_paths)[land_index]
+    land_markups = np.array(markups)[land_index]
+    # Select svg files nearest to images, with preference within breaks
+    svg_datetimes = np.array([parse_image_path(path)['datetime']
+        for path in svg_paths])
+    svg_break_indices = np.array([_station_break_index(path)
+        for path in svg_paths])
     img_datetimes = [img.datetime for img in images]
     distances = glimpse.helpers.pairwise_distance_datetimes(
         img_datetimes, svg_datetimes)
-    nearest_index = np.argmin(distances, axis=1)
+    nearest_index = []
+    for i, img in enumerate(images):
+        break_index = _station_break_index(img.path)
+        same_break = np.where(break_index == svg_break_indices)[0]
+        if same_break.size > 0:
+            i = same_break[np.argmin(distances[i][same_break])]
+        else:
+            print('No mask found within motion breaks for image', i)
+            i = np.argmin(distances[i])
+        nearest_index.append(i)
+    print('Max distance to mask:', datetime.timedelta(seconds=np.max(distances[:, nearest_index])))
     nearest = np.unique(nearest_index)
     # Make masks and expand per image without copying
-    land_markups = np.array(markups)[land_index]
     masks = [None] * len(images)
+    image_sizes = np.array([img.cam.imgsz for img in images])
+    sizes = np.unique(image_sizes, axis=0)
     for i in nearest:
         polygons = land_markups[i]['land'].values()
-        mask = glimpse.helpers.polygons_to_mask(polygons, imgsz=imgsz).astype(np.uint8)
+        mask = glimpse.helpers.polygons_to_mask(polygons, size=imgsz).astype(np.uint8)
         mask = sharedmem.copy(mask)
-        for j in np.where(nearest_index == i)[0]:
-            masks[j] = mask
+        is_nearest = nearest_index == i
+        for size in sizes:
+            if np.all(size == imgsz):
+                rmask = mask
+            else:
+                rmask = cv2.resize(mask, dsize=(int(size[0]), int(size[1])), interpolation=cv2.INTER_NEAREST)
+                rmask = sharedmem.copy(rmask)
+            for j in np.where(is_nearest & np.all(image_sizes == size, axis=1))[0]:
+                masks[j] = rmask
     return masks
 
 # ---- Calibration controls ----
 
-def svg_controls(img, svg, keys=None, correction=True):
+def svg_controls(img, svg=None, keys=None, correction=True):
     """
     Return control objects for an Image.
 
     Arguments:
         img (Image): Image object
-        svg (str or dict): Path to SVG file or parsed result
+        svg: Path to SVG file (str) or parsed result (dict).
+            If `None`, looks for SVG file 'svg/<image>.svg'.
         keys (iterable): SVG layers to include, or all if `None`
         correction: Whether control objects should use elevation correction (bool)
             or arguments to `glimpse.helpers.elevation_corrections()`
     """
+    if svg is None:
+        basename = parse_image_path(img.path)['basename']
+        svg = os.path.join(CG_PATH, 'svg', basename + '.svg')
     if isinstance(svg, (bytes, str)):
         svg = glimpse.svg.parse_svg(svg, imgsz=img.cam.imgsz)
     if keys is None:
@@ -398,7 +459,7 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
     return images, controls, cam_params
 
 def camera_motion_matches(camera, size=1, force_size=False,
-    station_calib=False, camera_calib=False, detect=dict(), match=dict()):
+    station_calib=False, camera_calib=False):
     """
     Returns all motion Matches objects available for a camera.
 
@@ -411,8 +472,6 @@ def camera_motion_matches(camera, size=1, force_size=False,
             falls back to the station estimate.
         camera_calib (bool): Whether to load camera calibrations. If `False`,
             falls back to the EXIF estimate.
-        detect (dict): Arguments passed to `glimpse.optimize.detect_keypoints()`
-        match (dict): Arguments passed to `glimpse.optimize.match_keypoints()`
 
     Returns:
         list: Image objects
@@ -422,21 +481,23 @@ def camera_motion_matches(camera, size=1, force_size=False,
     motion = glimpse.helpers.read_json(os.path.join(CG_PATH, 'motion.json'))
     sequences = [item['paths'] for item in motion
         if parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
-    images, matches, cam_params = [], [], []
+    all_images, all_matches, cam_params = [], [], []
     for sequence in sequences:
-        sys.stdout.write('.')
-        sys.stdout.flush()
         paths = [find_image(path) for path in sequence]
-        images.extend([glimpse.Image(path,
-            cam=load_calibrations(path,  camera=camera_calib,
-            station=station_calib, station_estimate=not station_calib, merge=True))
-            for path in paths])
-        idx = slice(-len(sequence), None)
-        for img in images[idx]:
-            img.cam.resize(size, force=force_size)
-        matches.extend(build_sequential_matches(images[idx], detect=detect, match=match))
+        cams = [load_calibrations(path,  camera=camera_calib,
+            station=station_calib, station_estimate=not station_calib, merge=True)
+            for path in paths]
+        images = [glimpse.Image(path, cam=cam)
+            for path, cam in zip(paths, cams)]
+        matches = [load_motion_match(images[i], images[i + 1])
+            for i in range(len(sequence) - 1)]
+        if size != 1:
+            for math in matches:
+                match.resize(size, force=force_size)
+        all_images.extend(images)
+        all_matches.extend(matches)
         cam_params.extend([dict()] + [dict(viewdir=True)] * (len(sequence) - 1))
-    return images, matches, cam_params
+    return all_images, all_matches, cam_params
 
 def build_sequential_matches(images, detect=dict(), match=dict()):
     """
@@ -455,6 +516,20 @@ def build_sequential_matches(images, detect=dict(), match=dict()):
             cams=(images[i].cam, images[i + 1].cam), uvs=(uvA, uvB)))
     return matches
 
+def load_motion_match(imgA, imgB):
+    """
+    Returns motion Matches object for an Image pair.
+
+    Arguments:
+        imgA (Image): Image object
+        imgB (Image): Image object
+    """
+    basename = glimpse.helpers.strip_path(imgA.path) + '-' + glimpse.helpers.strip_path(imgB.path)
+    path = os.path.join('motion', basename + '.pkl')
+    match = glimpse.helpers.read_pickle(path)
+    match.cams = (imgA.cam, imgB.cam)
+    return match
+
 # ---- Calibrations ----
 
 def load_calibrations(path=None, station_estimate=False, station=False,
@@ -470,6 +545,7 @@ def load_calibrations(path=None, station_estimate=False, station=False,
         station: Whether to load station (bool) or
             station identifier to load (str).
             If `True`, the station identifier is parsed from `path`.
+            viewdir is loaded from station_estimate.
         camera: Whether to load camera (bool) or
             camera identifier to load (str).
             If `True`, the camera identifier is parsed from `path`.
@@ -484,9 +560,9 @@ def load_calibrations(path=None, station_estimate=False, station=False,
         file_errors (bool): Whether to raise an error if a requested calibration
             file is not found
     """
-    def _try_except(fun, arg):
+    def _try_except(fun, arg, **kwargs):
         try:
-            return fun(arg)
+            return fun(arg, **kwargs)
         except FileNotFoundError as e:
             if file_errors:
                 raise e
@@ -506,9 +582,10 @@ def load_calibrations(path=None, station_estimate=False, station=False,
             viewdir = ids['basename']
     calibrations = dict()
     if station_estimate:
-        calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate)
+        calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate, path=path)
     if station:
         calibrations['station'] = _try_except(_load_station, station)
+        calibrations['station']['viewdir'] = _try_except(_load_station_estimate, station, path=path)['viewdir']
     if camera:
         calibrations['camera'] = _try_except(_load_camera, camera)
     if image:
@@ -535,12 +612,16 @@ def merge_calibrations(calibrations, keys=('station_estimate', 'station', 'camer
             calibration = glimpse.helpers.merge_dicts(calibration, calibrations[key])
     return calibration
 
-def _load_station_estimate(station):
-    stations_path = os.path.join(CG_PATH, 'geojson', 'stations.geojson')
-    geo = glimpse.helpers.read_geojson(stations_path, crs=32606, key='id')
+def _load_station_estimate(station, path=None):
+    stations = Stations()
+    feature = stations[station]
+    viewdir = feature['properties']['viewdir']
+    i = _station_break_index(path) if path else 0
+    if i and 'viewdir' in feature['properties']['breaks'][i - 1]:
+        viewdir = feature['properties']['breaks'][i - 1]['viewdir']
     return dict(
-        xyz=np.reshape(geo['features'][station]['geometry']['coordinates'], -1),
-        viewdir=geo['features'][station]['properties']['viewdir'])
+        xyz=np.reshape(feature['geometry']['coordinates'], -1),
+        viewdir=viewdir)
 
 def _load_station(station):
     station_path = os.path.join(CG_PATH, 'stations', station + '.json')

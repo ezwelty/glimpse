@@ -19,14 +19,15 @@ Module [`cg.py`](cg.py) provides functions to access Columbia Glacier timelapse 
   - `moraines`: Glacier medial moraines, as one or more `<path>`, `<line>`, or `<polyline>` whose `id` matches a feature `id` in `moraines/<yyyymmdd>.geojson`
   - `land`: Static land areas, as one or more `<polygon>`
 - `motion.json` - Lists of images separated by large motion (used for matches control)
+- `motion/<imageA>-<imageB>.pkl` - RANSAC-filtered keypoint matches for sequential image pairs in `motion.json`
 - `sequences.csv` - List of image sequences with station, camera, image time range, and other metadata
 
 ### Calibration outputs
 
 - `cameras/<camera>.json` - Internal camera parameters ('fmm', 'cmm', 'k', 'p', 'sensorsz')
-- `stations/<station>.json` - External camera parameters ('xyz', average 'viewdir')
-- `images/<image>.json` - Complete camera solution ('xyz', 'viewdir', 'fmm', 'cmm', 'k', 'p', 'sensorsz')
-- `viewdirs/<image>.json` - Refined camera view directions ('viewdir')
+- `stations/<station>.json` - Camera position ('xyz')
+- `images/<image>.json` - Complete camera parameters for one image ('xyz', 'viewdir', 'fmm', 'cmm', 'k', 'p', 'sensorsz')
+- `viewdirs/<image>.json` - Camera view direction ('viewdir')
 
 `*_stderr.json` are standard errors for the optimized parameters, as computed by [lmfit](https://lmfit.github.io/lmfit-py/parameters.html?highlight=stderr#lmfit.parameter.Parameter.stderr).
 

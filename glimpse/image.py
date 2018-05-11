@@ -319,7 +319,7 @@ class Camera(object):
         """
         if attributes is None:
             attributes = Camera.__init__.__code__.co_varnames[2:]
-        obj = collections.OrderedDict((name, getattr(self, name)) for name in attributes if hasattr(self, name))
+        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes if hasattr(self, name))
         return helpers.write_json(obj, path=path, **kwargs)
 
     def idealize(self):
@@ -683,7 +683,9 @@ class Camera(object):
         has_one_root = ~has_three_roots
         if np.any(has_one_root):
           A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
-          B = np.where(A == 0, 0, Q / A)
+          B = np.zeros(A.shape)
+          not_zero = A != 0
+          B[not_zero] = Q / A[not_zero]
           r[has_one_root] = A + B
         return np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
 

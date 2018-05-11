@@ -1,17 +1,18 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
-    np, lmfit, sys, lxml, pandas)
+    np, lmfit, sys, lxml, pandas, re)
 from . import (helpers, Camera, optimize)
 
 class MatlabCamera(object):
     """
     Camera model used by the Camera Calibration Toolbox for Matlab.
 
-    See http://www.vision.caltech.edu/bouguetj/calib_doc/htmls/parameters.htmlself.
+    See http://www.vision.caltech.edu/bouguetj/calib_doc/htmls/parameters.html.
 
     Attributes:
-        imgsz (iterable): Image size in pixels (x, y)
+        nx (float): Image size in pixels (x)
+        ny (float): Image size in pixels (y)
         fc (iterable): Focal length in pixels (x, y)
         cc (iterable): Principal point in pixels (x, y),
             in an image coordinate system where the center of the top left pixel
@@ -21,14 +22,48 @@ class MatlabCamera(object):
             pixel axes
     """
 
-    def __init__(self, imgsz, fc, cc=None, kc=[0, 0, 0, 0, 0], alpha_c=0):
-        self.imgsz = imgsz
+    def __init__(self, nx, ny, fc, cc=None, kc=[0, 0, 0, 0, 0], alpha_c=0):
+        self.nx, self.ny = nx, ny
         self.fc = fc
         if cc is None:
-            cc = (np.asarray(imgsz) - 1) / 2
+            cc = (np.asarray((nx, ny)) - 1) / 2
         self.cc = cc
         self.kc = kc
         self.alpha_c = alpha_c
+
+    @classmethod
+    def read_report(cls, path, std=False):
+        """
+        Read from calibration report.
+
+        Arguments:
+            path (str): Path to report
+            std (bool): Whether to read parameter means (False)
+                or standard deviations (True)
+        """
+        with open(path, mode='r') as fp:
+            txt = fp.read()
+        def parse_param(param, length):
+            if length == 1:
+                pattern = '^' + param + ' = (.*)' + ';'
+            else:
+                pattern = '^' + param + ' = \[ ' + ' ; '.join(['(.*)'] * length) + ' \];'
+            values = re.findall(pattern, txt, flags=re.MULTILINE)[0]
+            # Error bounds are ~3 times standard deviations
+            scale = 1 / 3 if std else 1
+            if length == 1:
+                return float(values) * scale
+            else:
+                return [float(values) * scale for value in values]
+        if std:
+            lengths = dict(fc_error=2, cc_error=2, alpha_c_error=1, kc_error=5)
+        else:
+            lengths = dict(fc=2, cc=2, alpha_c=1, kc=5, nx=1, ny=1)
+        kwargs = {param: parse_param(param, length) for param, length in lengths.items()}
+        if std:
+            kwargs = {key.split('_error')[0]: kwargs[key] for key in kwargs}
+            kwargs = helpers.merge_dicts(kwargs, dict(nx=None, ny=None))
+        return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
@@ -60,8 +95,8 @@ class MatlabCamera(object):
         """
         # Initialize camera
         cam = Camera(
-            imgsz=self.imgsz,
-            f=self.fc, c=np.asarray(self.cc) + 0.5 - np.asarray(self.imgsz) / 2,
+            imgsz=(self.nx, self.ny), f=self.fc,
+            c=np.asarray(self.cc) + 0.5 - np.asarray((self.nx, self.ny)) / 2,
             k=(self.kc[0], self.kc[1], self.kc[4]), p=(self.kc[2], self.kc[3]))
         # Convert camera
         if self.alpha_c:
@@ -75,7 +110,8 @@ class PhotoScanCamera(object):
     See http://www.agisoft.com/pdf/photoscan-pro_1_4_en.pdf (Appendix C).
 
     Attributes:
-        imgsz (iterable): Image size in pixels (x, y)
+        width (float): Image size in pixels (x)
+        height (float): Image size in pixels (y)
         f (float): Focal length in pixels
         cx (float): Principal point offset in pixels (x)
         cy (float): Principal point offset in pixels (y)
@@ -88,8 +124,8 @@ class PhotoScanCamera(object):
         b2 (float): Non-orthogonality (skew) coefficient
     """
 
-    def __init__(self, imgsz, f, cx, cy, k1=0, k2=0, k3=0, k4=0, b1=0, b2=0, p1=0, p2=0, p3=0, p4=0):
-        self.imgsz = imgsz
+    def __init__(self, width, height, f, cx, cy, k1=0, k2=0, k3=0, k4=0, b1=0, b2=0, p1=0, p2=0, p3=0, p4=0):
+        self.width, self.height = width, height
         self.f = f
         self.cx, self.cy = cx, cy
         self.k1, self.k2, self.k3, self.k4 = k1, k2, k3, k4
@@ -132,7 +168,7 @@ class PhotoScanCamera(object):
         """
         # Initialize camera
         cam = Camera(
-            imgsz=self.imgsz,
+            imgsz=(self.width, self.height),
             f=(self.f - self.b1, self.f), c=(self.cx, self.cy),
             k=(self.k1, self.k2, self.k3), p=(self.p2, self.p1))
         # Convert camera
@@ -190,6 +226,28 @@ class PhotoModelerCamera(object):
         self.fw, self.fh = fw, fh
         self.k1, self.k2, self.k3 = k1, k2, k3
         self.p1, self.p2 = p1, p2
+
+    @classmethod
+    def read_report(cls, path, std=False):
+        """
+        Read from camera calibration project report.
+
+        Arguments:
+            path (str): Path to report
+            std (bool): Whether to read parameter means (False)
+                or standard deviations (True)
+        """
+        args = ('focal', 'xp', 'yp', 'fw', 'fh', 'k1', 'k2', 'k3', 'p1', 'p2')
+        labels = ('Focal Length', 'Xp', 'Yp', 'Fw', 'Fh', 'K1', 'K2', 'K3', 'P1', 'P2')
+        with open(path, mode='r') as fp:
+            txt = fp.read()
+        if std:
+            matches = [re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt) for label in labels]
+            kwargs = {arg: float(match[0]) if match else None for arg, match in zip(args, matches)}
+        else:
+            matches = [re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt) for label in labels]
+            kwargs = {arg: float(match[0]) for arg, match in zip(args, matches)}
+        return cls(**kwargs)
 
     def _image2camera(self, uv, imgsz):
         # Convert image coordinates to mm relative to principal point
@@ -265,6 +323,39 @@ class PhotoModelerCamera(object):
         else:
             return cam
 
+def as_camera_stderr(mean, std, n=100, return_vectors=False, **kwargs):
+    """
+    Convert to `Camera` and propagate uncertainties.
+
+    Arguments:
+        mean: `glimpse.convert` camera object with parameter means
+        std: `glimpse.convert` camera object (same type as `mean`) with
+            parameter standard deviations
+        n (int): Number of iterations to use for estimating uncertainties
+        return_vectors (bool): Whether to return results of all iterations
+        **kwargs: Arguments to `mean.as_camera()`
+
+    Returns:
+        `glimpse.Camera`: Parameter means
+        `glimpse.Camera`: Parameter standard deviations
+        array (optional): `glimpse.Camera.vector` for each iteration (n, 20).
+            Only provided if `return_vectors` is True.
+    """
+    mean_args = mean.__dict__.copy()
+    std_args = std.__dict__.copy()
+    mean_cam = mean.as_camera(**kwargs)
+    vectors = []
+    for i in range(n):
+        args = {key: mean_args[key] + (np.random.normal(scale=std_args[key]) if std_args[key] else 0) for key in mean_args}
+        new_mean = type(mean)(**args)
+        vectors.append(new_mean.as_camera(**kwargs).vector)
+    vectors = np.array(vectors)
+    std_cam = Camera(vector=np.std(vectors, axis=0))
+    if return_vectors:
+        return mean_cam, std_cam, vectors
+    else:
+        return mean_cam, std_cam
+
 def pm_points_to_ps_markers(points_path, camera_labels, imgsz, markers_path=None):
     pm = pandas.read_csv(points_path, skiprows=3).loc[:, ('Object Point ID', 'Photo #', 'X (pixels)', 'Y (pixels)')]
     pm.columns = ('point_id', 'photo_id', 'x', 'y')
@@ -286,19 +377,13 @@ def pm_points_to_ps_markers(points_path, camera_labels, imgsz, markers_path=None
             e.sensors(
                 e.sensor(
                     e.resolution(width=str(imgsz[0]), height=str(imgsz[1])),
-                    id='0'
-                )
-            ),
+                    id='0')),
             e.cameras(*cameras),
             e.markers(*markers),
             e.frames(
                 e.frame(
                     e.markers(*frame_markers),
-                    id='0'
-                )
-            )
-        )
-    )
+                    id='0'))))
     txt = lxml.etree.tostring(xml, pretty_print=True, xml_declaration=True, encoding='UTF-8').decode()
     if markers_path:
         with open(markers_path, mode='w') as fp:

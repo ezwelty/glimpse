@@ -89,7 +89,7 @@
 			"name": "Cliff",
 			"fixed": true,
 			"viewdir": [-60, -3.5, 0.5],
-			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Good agreement with aerial. Ignored breaks: AK03_20080429_231825 (small).",
+			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Breaks ignore botched AK03_20070817 sequence. Good agreement with aerial. Ignored breaks: AK03_20080429_231825 (small).",
 			"breaks": [{
 				"start": "AK03_20080112_205442",
 				"viewdir": [-60, -5, 3]

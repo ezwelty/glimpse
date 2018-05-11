@@ -547,10 +547,14 @@ def apply_geojson_coords(obj, fun, **kwargs):
     for feature in geojson_iterfeatures(obj):
         coords = _get_geojson_coords(feature)
         ndim = np.ndim(coords)
-        if ndim == 1 or ndim == 3:
-            _set_geojson_coords(feature, [fun(X, **kwargs) for X in coords])
-        elif ndim == 2:
+        # Case 1 (ndim=1): [x, y]
+        # Case 2 (ndim=2): [[x, y], [x, y]]
+        # Case 3 (ndim=3): [[[x, y], [x, y]], [[x, y], [x, y]]]
+        # Case 4 (ndim=3): [[[x, y], [x, y]]]
+        if ndim < 3:
             _set_geojson_coords(feature, fun(coords, **kwargs))
+        elif ndim == 3:
+            _set_geojson_coords(feature, [fun(X, **kwargs) for X in coords])
         else:
             raise ValueError('Unknown coordinates format')
 
@@ -1307,7 +1311,7 @@ def polygons_to_mask(polygons, size, holes=None):
         size (iterable): Array size (nx, ny)
         holes (iterable): Polygons representing holes in `polygons`
     """
-    im_mask = PIL.Image.new(mode='1', size=tuple(int(size[0]), int(size[1])))
+    im_mask = PIL.Image.new(mode='1', size=(int(size[0]), int(size[1])))
     draw = PIL.ImageDraw.ImageDraw(im_mask)
     for polygon in polygons:
         if isinstance(polygon, np.ndarray):

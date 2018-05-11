@@ -16,6 +16,7 @@ import datetime
 # https://github.com/Toblerity/Shapely/issues/260#issue-65012660
 import shapely
 import shapely.geometry
+import shapely.ops
 import gdal
 import gzip
 import json

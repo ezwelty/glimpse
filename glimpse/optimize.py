@@ -37,9 +37,12 @@ class Points(object):
         self.xyz = xyz
         self.directions = directions
         self.correction = correction
-        self.size = len(self.uv)
-        self.xyz = cam.xyz.copy()
+        self.cam_xyz = cam.xyz.copy()
         self.imgsz = cam.imgsz.copy()
+
+    @property
+    def size(self):
+        return len(self.uv)
 
     def observed(self, index=None):
         """
@@ -72,7 +75,7 @@ class Points(object):
         """
         Test whether the camera is at its original position.
         """
-        return (self.cam.xyz == self.xyz).all()
+        return (self.cam.xyz == self.cam_xyz).all()
 
     def plot(self, index=None, scale=1, width=5, selected='red', unselected=None):
         """
@@ -163,9 +166,12 @@ class Lines(object):
         self.xyzs = xyzs
         self.directions = directions
         self.correction = correction
-        self.size = len(self.uvi)
-        self.xyz = cam.xyz.copy()
+        self.cam_xyz = cam.xyz.copy()
         self.imgsz = cam.imgsz.copy()
+
+    @property
+    def size(self):
+        return len(self.uvi)
 
     def observed(self, index=None):
         """
@@ -195,6 +201,7 @@ class Lines(object):
         xy_edges = self.cam._image2camera(uv_edges)
         xy_box = np.hstack((np.min(xy_edges, axis=0), np.max(xy_edges, axis=0)))
         puvs = []
+        inlines = []
         for xyz in self.xyzs:
             # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
@@ -202,6 +209,7 @@ class Lines(object):
             # Discard nan values (behind camera)
             lines = helpers.boolean_split(xy, np.isnan(xy[:, 0]), include='false')
             for line in lines:
+                inlines.append(line)
                 # Clip lines in view
                 # Resolves coordinate wrap around with large distortion
                 for cline in helpers.clip_polyline_box(line, xy_box):
@@ -211,9 +219,8 @@ class Lines(object):
         if puvs:
             return puvs
         else:
-            # FIXME: Fails if lines slip out of camera view
-            # TODO: Return center of image instead of error?
-            raise ValueError('All line vertices are outside camera view')
+            # If no lines inframe, project line vertices infront
+            return [self.cam._camera2image(line) for line in inlines]
 
     def predicted(self, index=None):
         """
@@ -235,7 +242,7 @@ class Lines(object):
         """
         Test whether the camera is at its original position.
         """
-        return (self.cam.xyz == self.xyz).all()
+        return (self.cam.xyz == self.cam_xyz).all()
 
     def plot(self, index=None, scale=1, width=5, selected='red', unselected=None,
         observed='green', predicted='yellow'):
@@ -337,8 +344,11 @@ class Matches(object):
         self.cams = cams
         self.uvs = list(uvs)
         self._test_matches()
-        self.size = len(self.uvs[0])
         self.imgszs = [cam.imgsz.copy() for cam in cams]
+
+    @property
+    def size(self):
+        return len(self.uvs[0])
 
     def _test_matches(self):
         if self.cams[0] is self.cams[1]:
@@ -494,7 +504,6 @@ class RotationMatches(Matches):
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
-        self.size = len(self.uvs[0])
 
     def _build_uvs(self, uvs=None, xys=None):
         if uvs is None and xys is not None:
@@ -584,7 +593,10 @@ class RotationMatchesXY(RotationMatches):
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
-        self.size = len(self.xys[0])
+
+    @property
+    def size(self):
+        return len(self.xys[0])
 
     def observed(self, index=None, cam=0):
         """
@@ -650,7 +662,10 @@ class RotationMatchesXYZ(RotationMatches):
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
         self.original_internals = self.cams[0].vector.copy()[6:]
-        self.size = len(self.xys[0])
+
+    @property
+    def size(self):
+        return len(self.xys[0])
 
     def observed(self, *args, **kwargs):
         raise AttributeError('observed() not supported by RotationMatchesXYZ')
@@ -806,10 +821,15 @@ class Cameras(object):
         self.cam_params = (cam_params, ) if isinstance(cam_params, dict) else cam_params
         self.group_params = group_params
         test_cameras(self)
-        temp = [parse_params(params) for params in self.cam_params]
+        default_cam_bounds = [camera_bounds(cam) for cam in self.cams]
+        temp = [parse_params(params, default_bounds=bounds)
+            for params, bounds in zip(self.cam_params, default_cam_bounds)]
         self.cam_masks = [x[0] for x in temp]
         self.cam_bounds = [x[1] for x in temp]
-        self.group_mask, self.group_bounds = parse_params(self.group_params)
+        default_group_bounds = np.column_stack((
+            np.column_stack([bounds[:, 0] for bounds in default_cam_bounds]).max(axis=1),
+            np.column_stack([bounds[:, 1] for bounds in default_cam_bounds]).min(axis=1)))
+        self.group_mask, self.group_bounds = parse_params(self.group_params, default_bounds=default_group_bounds)
         # TODO: Avoid computing masks and bounds twice
         self.params, self.apply_params = build_lmfit_params(self.cams, self.cam_params, group_params)
         self.weights = weights
@@ -1262,6 +1282,8 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
         i += 1
     if params is None:
         raise ValueError('Best fit does not meet acceptance criteria')
+    # HACK: Recompute inlier index on best params
+    inlier_idx = np.where(model.errors(params) <= max_error)[0]
     return params, inlier_idx
 
 def ransac_sample(sample_size, data_size):
@@ -1715,7 +1737,7 @@ def parse_params(params=None, default_bounds=None):
                 if len(max_bounds) == 1:
                     max_bounds = np.repeat(max_bounds, len(positions))
                 bounds[positions] = np.column_stack((min_bounds, max_bounds))
-    if default_bounds:
+    if default_bounds is not None:
         missing_min = (bounds[:, 0] == None) | (np.isnan(bounds[:, 0]))
         missing_max = (bounds[:, 1] == None) | (np.isnan(bounds[:, 1]))
         bounds[missing_min, 0] = default_bounds[missing_min, 0]
@@ -1736,10 +1758,15 @@ def build_lmfit_params(cams, cam_params=None, group_params=None):
         group_params: Group parameter specification
     """
     # Extract parameter masks and bounds
-    temp = [parse_params(params=params) for params in cam_params]
+    default_cam_bounds = [camera_bounds(cam) for cam in cams]
+    temp = [parse_params(params, default_bounds=bounds)
+        for params, bounds in zip(cam_params, default_cam_bounds)]
     cam_masks = [x[0] for x in temp]
     cam_bounds = [x[1] for x in temp]
-    group_mask, group_bounds = parse_params(params=group_params)
+    default_group_bounds = np.column_stack((
+        np.column_stack([bounds[:, 0] for bounds in default_cam_bounds]).max(axis=1),
+        np.column_stack([bounds[:, 1] for bounds in default_cam_bounds]).min(axis=1)))
+    group_mask, group_bounds = parse_params(params=group_params, default_bounds=default_group_bounds)
     # Labels: (cam<camera_index>_)<attribute><position>
     attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
     lengths = [3, 3, 2, 2, 2, 6, 2]
@@ -1754,11 +1781,9 @@ def build_lmfit_params(cams, cam_params=None, group_params=None):
     cam_values = np.hstack((cam.vector[mask] for cam, mask in zip(cams, cam_masks)))
     values = np.hstack((group_values, cam_values))
     # Bounds
-    # NOTE: Default group bounds from first camera
-    default_bounds = camera_bounds(cams[0])
     bounds = np.vstack((
-        np.where(np.isnan(group_bounds), default_bounds, group_bounds)[group_mask],
-        np.vstack(np.where(np.isnan(bounds), default_bounds, bounds)[mask] for bounds, mask in zip(cam_bounds, cam_masks))
+        group_bounds[group_mask],
+        np.vstack(bounds[mask] for bounds, mask in zip(cam_bounds, cam_masks))
     ))
     # Build lmfit.Parameters()
     params = lmfit.Parameters()

@@ -7,7 +7,8 @@
 			"name": "Kadin",
 			"fixed": false,
 			"viewdir": [76.5, -7.5, 0.5],
-			"notes": "Position estimated from AK01b. 2011: Position allowed to wander from AK01b position. Results appear excellent."
+			"notes": "Position estimated from AK01b. 2011: Position allowed to wander from AK01b position. Results appear excellent. Breaks ignore botched AK01_20070817 and AK01_20071002 sequences.",
+			"breaks": null
 		},
 		"geometry": {
 			"type": "Point",
@@ -19,8 +20,37 @@
 			"id": "AK01b",
 			"name": "Kadin",
 			"fixed": true,
-			"viewdir": [60, -5, 0],
-			"notes": "Survey GPS"
+			"viewdir": [60.5, -5, 2],
+			"notes": "Survey GPS. Breaks ignore botched AK01b_20080619, AK01b_20090824, AK01b_20090825, and AK01b_20160908 sequences. Ignored breaks: AK01b_20110918_183743 (small, service), tumultous period after AK01b_20120825_220506, and AK01b_20140925_185846 (small, service).",
+			"breaks": [{
+				"start": "AK01b_20080921_203508",
+				"notes": "service, large",
+				"viewdir": [59.5, -11, 6]
+			}, {
+				"start": "AK01b_20090825_202949",
+				"notes": "service, small",
+				"viewdir": [59.5, -11, 6]
+			}, {
+				"start": "AK01b_20100821_020008",
+				"notes": "service, large",
+				"viewdir": [60.5, -4, 0]
+			}, {
+				"start": "AK01b_20110516_225205",
+				"notes": "service, small",
+				"viewdir": [60.5, -5, 1]
+			}, {
+				"start": "AK01b_20120418_182429",
+				"notes": "service, large",
+				"viewdir": [60.5, 1, 1]
+			}, {
+				"start": "AK01b_20120825_220506",
+				"notes": "service, large",
+				"viewdir": [61, -6, 1]
+			}, {
+				"start": "AK01b_20150619_192120",
+				"notes": "service, medium",
+				"viewdir": [59.5, -6, 1]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -59,7 +89,14 @@
 			"name": "Cliff",
 			"fixed": true,
 			"viewdir": [-60, -3.5, 0.5],
-			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Good agreement with aerial."
+			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Good agreement with aerial. Ignored breaks: AK03_20080429_231825 (small).",
+			"breaks": [{
+				"start": "AK03_20080112_205442",
+				"viewdir": [-60, -5, 3]
+			}, {
+				"start": "AK03_20080421_025609",
+				"viewdir": [-60, -3.5, 0.5]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -72,7 +109,12 @@
 			"name": "Cliff",
 			"fixed": true,
 			"viewdir": [-30.5, -11, 0],
-			"notes": "Survey GPS"
+			"notes": "Survey GPS.",
+			"breaks": [{
+				"start": "AK03b_20081117_181821",
+				"viewdir": [-30.5, -12.5, 0],
+				"notes": "unstable thereafter"
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -98,7 +140,8 @@
 			"name": "Camp",
 			"fixed": false,
 			"viewdir": [-12.3, -14, -1.5],
-			"notes": "Position estimated from AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini."
+			"notes": "Position estimated from AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini.",
+			"breaks": null
 		},
 		"geometry": {
 			"type": "Point",
@@ -111,7 +154,18 @@
 			"name": "Camp",
 			"fixed": false,
 			"viewdir": [22.5, -13, 0],
-			"notes": "Position estimated using SfM"
+			"notes": "Position estimated using SfM",
+			"breaks": [{
+				"start": "AK09b_20091024_205905",
+				"viewdir": [22, -13, 0],
+				"notes": "service, small"
+			}, {
+				"start": "AK09b_20091230_182947",
+				"viewdir": [22, -12, 1]
+			}, {
+				"start": "AK09b_20100516_203925",
+				"viewdir": [22, -11, 1]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -123,8 +177,13 @@
 			"id": "AK10",
 			"name": "Juncture",
 			"fixed": true,
-			"viewdir": [-163.5, -14, -2],
-			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle)."
+			"viewdir": [-163.5, -14.5, -2],
+			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle). Ignored breaks: AK10_20090508_201432, AK10_20090825_060706.",
+			"breaks": [{
+				"start": "AK10_20090825_060504",
+				"viewdir": [-163.5, -14, -3],
+				"notes": "service, small"
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -136,8 +195,25 @@
 			"id": "AK10b",
 			"name": "Juncture",
 			"fixed": false,
-			"viewdir": [-149.5, -10, -2.5],
-			"notes": "Handheld GPS"
+			"viewdir": [-151.5, -9, -2.5],
+			"notes": "Handheld GPS. Ignored breaks: AK10b_20140501_232148 (service, small), AK10b_20140629_225023 (service, small), AK10b_20140925_202236 (service, small), AK10b_20150324_193304 (service, small), AK10b_20150619_215752 (service, small), AK10b_20150918_195852 (service, small), AK10b_20161103_222425 (service, small).",
+			"breaks": [{
+				"start": "AK10b_20120826_002540",
+				"viewdir": [-149.5, -10, -2.5],
+				"notes": "service, camera change (same focal length)"
+			}, {
+				"start": "AK10b_20130608_173710",
+				"viewdir": [-149.5, -9, -3],
+				"notes": "service"
+			}, {
+				"start": "AK10b_20131106_190636",
+				"viewdir": [-149.5, -9.5, -3],
+				"notes": "service"
+			}, {
+				"start": "AK10b_20160909_011823",
+				"notes": "service, very large",
+				"viewdir": [-173.5, -10, 0]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -163,7 +239,32 @@
 			"name": "Tower",
 			"fixed": false,
 			"viewdir": [29, -8, 0],
-			"notes": "Position estimated with Google Earth."
+			"notes": "Position estimated with Google Earth. Breaks ignore botched AK12_20100820 sequence and unstable period from AK12_20101215_001725 to AK12_20101215_191726. Sequence AK12_20110516 very unstable due to high winds and a loose camera mount.",
+			"breaks": [{
+				"start": "AK12_20100924_221619",
+				"viewdir": [21.5, -8.5, -0.5],
+				"notes": "High winds. Shifting position from AK12_20100924_034619 to AK12_20100925_154620"
+			}, {
+				"start": "AK12_20101117_181701",
+				"viewdir": [-11.5, -9, -0.5],
+				"notes": "High winds. Shifting position from AK12_20101116_181700 to AK12_20101117_181701"
+			}, {
+				"start": "AK12_20101130_184712",
+				"viewdir": [-47, -9.5, 0],
+				"notes": "High winds. Shifting position from AK12_20101129_184711 to AK12_20101130_184712"
+			}, {
+				"start": "AK12_20110216_204830",
+				"viewdir": [-55.5, -11, -2],
+				"notes": "Unstable from AK12_20110212_011825 to AK12_20110216_204830"
+			}, {
+				"start": "AK12_20110516_212205",
+				"viewdir": [3, -9, 0],
+				"notes": "service, large"
+			}, {
+				"start": "AK12_20110614_020036",
+				"notes": "service",
+				"viewdir": [6, -9, 0]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -189,7 +290,12 @@
 			"name": "Juncture",
 			"fixed": false,
 			"viewdir": [90.5, -8, 0],
-			"notes": "Source of position unknown."
+			"notes": "Source of position unknown.",
+			"breaks": [{
+				"start": "AKJNC_20120825_234000",
+				"viewdir": [90, -7.5, -1],
+				"notes": "service, small"
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -306,7 +412,8 @@
 			"name": "Stereo 2010 A",
 			"fixed": true,
 			"viewdir": [2.5, -6.5, 1],
-			"notes": "Survey GPS"
+			"notes": "Survey GPS",
+			"breaks": null
 		},
 		"geometry": {
 			"type": "Point",
@@ -319,7 +426,8 @@
 			"name": "Stereo 2010 B",
 			"fixed": true,
 			"viewdir": [6.5, -3, -4],
-			"notes": "Survey GPS"
+			"notes": "Survey GPS",
+			"breaks": null
 		},
 		"geometry": {
 			"type": "Point",
@@ -332,7 +440,12 @@
 			"name": "Columbia 2004",
 			"fixed": true,
 			"viewdir": [-86, -4, -3],
-			"notes": "Survey GPS. 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]"
+			"notes": "Survey GPS. 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]. Ignored breaks: CG04_20041002_200016 (small).",
+			"breaks": [{
+				"start": "CG04_20041005_200016",
+				"viewdir": [-85, -5, -3],
+				"notes": "service"
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -344,8 +457,15 @@
 			"id": "CG05",
 			"name": "Columbia 2005",
 			"fixed": true,
-			"viewdir": [-86, -2, 2],
-			"notes": "Survey GPS. Position from 'coords.csv' and '2005_gps_coords.xls'."
+			"viewdir": [-86, -3, 1],
+			"notes": "Survey GPS. Position from 'coords.csv' and '2005_gps_coords.xls'. Ignored breaks: CG05_20050915_190000 (small).",
+			"breaks": [{
+				"start": "CG05_20050612_170000",
+				"viewdir": [-86, -2, 1]
+			}, {
+				"start": "CG05_20050914_190000",
+				"viewdir": [-86, -2, 1]
+			}]
 		},
 		"geometry": {
 			"type": "Point",
@@ -357,8 +477,12 @@
 			"id": "CG06",
 			"name": "Columbia 2006",
 			"fixed": false,
-			"viewdir": [-78.0, 0, 0.0],
-			"notes": "Position from file CG06.jpg, which is precisely the CG05 surveyed position in NAD27 UTM."
+			"viewdir": [-78, 0.5, 0],
+			"notes": "Position from file CG06.jpg, which is precisely the CG05 surveyed position in NAD27 UTM.",
+			"breaks": [{
+				"start": "CG06_20060714_015953",
+				"viewdir": [-78, 0, 1.5]
+			}]
 		},
 		"geometry": {
 			"type": "Point",

@@ -37,7 +37,9 @@ observer = glimpse.Observer(images)
 # ---- Build keypoint matches ----
 
 mask = np.load(MASK_PATH)
-matcher = glimpse.optimize.KeypointMatcher(images)
+matcher = glimpse.optimize.KeypointMatcher(
+    images,
+    clahe=dict(clipLimit=2.0, tileGridSize=(10, 10)))
 matcher.build_keypoints(
     masks=mask, contrastThreshold=0.02, overwrite=False, parallel=True)
 matcher.build_matches(

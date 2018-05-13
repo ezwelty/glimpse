@@ -1156,8 +1156,7 @@ class ObserverCameras(object):
                 anchors = (0, )
         self.anchors = anchors
         self.matches = matches
-        I = self.observer.images[self.anchors[0]].read()
-        self.matcher = KeypointMatcher(images=self.observer.images, template=I)
+        self.matcher = KeypointMatcher(images=self.observer.images)
         # Placeholders
         self.viewdirs = np.vstack([img.cam.viewdir.copy()
             for img in self.observer.images])
@@ -1383,22 +1382,23 @@ class KeypointMatcher(object):
         - Build (and save to file) keypoints matches between image pairs with `self.build_matches()`.
 
     Arguments:
-        template (array or tuple): Array or histogram to use for histogram matching
+        clahe: Arguments to `cv2.createCLAHE()` (dict: clipLimit, tileGridSize)
+            or whether to use CLAHE (bool).
+            See https://docs.opencv.org/master/d7/dbd/group__imgproc.html#gad689d2607b7b3889453804f414ab1018.
 
     Attributes:
         images (list): Image objects
-        template (tuple): Template histogram (values, quantiles) for histogram matching
-            (see `helpers.match_histogram()`)
+        clahe (cv2.CLAHE): CLAHE object
     """
 
-    def __init__(self, images, template=None):
+    def __init__(self, images, clahe=False):
         self.images = images
-        self.template = None
-        if isinstance(template, np.ndarray):
-            template = self._prepare_image(template)
-            template = helpers.compute_cdf(template, return_inverse=False)
-        if isinstance(template, tuple):
-            self.template = template
+        if clahe is False:
+            self.clahe = None
+        else:
+            if clahe is True:
+                clahe = dict()
+            self.clahe = cv2.createCLAHE(**clahe)
         # Placeholders
         self.matches = None
 
@@ -1408,8 +1408,8 @@ class KeypointMatcher(object):
         """
         if I.ndim > 2:
             I = helpers.rgb_to_gray(I, method='average', weights=None)
-        if self.template is not None:
-            I = helpers.match_histogram(I, template=self.template)
+        if self.clahe is not None:
+            I = self.clahe.apply(I.astype(np.uint8))
         return I.astype(np.uint8)
 
     def build_keypoints(self, masks=None, overwrite=False,

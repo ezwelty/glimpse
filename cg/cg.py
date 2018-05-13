@@ -152,12 +152,12 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
         path = img_paths[i]
         basename = glimpse.helpers.strip_path(path)
         calibrations = load_calibrations(image=basename, viewdir=basename,
-            merge=False, file_errors=False)
+            station_estimate=station, merge=False, file_errors=False)
         if calibrations['image']:
             calibration = glimpse.helpers.merge_dicts(base_calibration, calibrations['image'])
             anchor = True
         else:
-            calibration = base_calibration
+            calibration = glimpse.helpers.merge_dicts(base_calibration, dict(viewdir=calibrations['station_estimate']['viewdir']))
             anchor = False
         if calibrations['viewdir']:
             calibration = glimpse.helpers.merge_dicts(calibration, calibrations['viewdir'])
@@ -458,7 +458,7 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
             cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
-def camera_motion_matches(camera, size=1, force_size=False,
+def camera_motion_matches(camera, size=None, force_size=False,
     station_calib=False, camera_calib=False):
     """
     Returns all motion Matches objects available for a camera.
@@ -491,8 +491,8 @@ def camera_motion_matches(camera, size=1, force_size=False,
             for path, cam in zip(paths, cams)]
         matches = [load_motion_match(images[i], images[i + 1])
             for i in range(len(sequence) - 1)]
-        if size != 1:
-            for math in matches:
+        if size is not None:
+            for match in matches:
                 match.resize(size, force=force_size)
         all_images.extend(images)
         all_matches.extend(matches)
@@ -525,7 +525,7 @@ def load_motion_match(imgA, imgB):
         imgB (Image): Image object
     """
     basename = glimpse.helpers.strip_path(imgA.path) + '-' + glimpse.helpers.strip_path(imgB.path)
-    path = os.path.join('motion', basename + '.pkl')
+    path = os.path.join(CG_PATH, 'motion', basename + '.pkl')
     match = glimpse.helpers.read_pickle(path)
     match.cams = (imgA.cam, imgB.cam)
     return match
@@ -542,6 +542,8 @@ def load_calibrations(path=None, station_estimate=False, station=False,
         station_estimate: Whether to load station estimate (bool) or
             station identifier to load (str).
             If `True`, the station identifier is parsed from `path`.
+            If `path` or `image` specified, `viewdir` is based on the position
+            of the image in the motion break sequence.
         station: Whether to load station (bool) or
             station identifier to load (str).
             If `True`, the station identifier is parsed from `path`.
@@ -582,7 +584,8 @@ def load_calibrations(path=None, station_estimate=False, station=False,
             viewdir = ids['basename']
     calibrations = dict()
     if station_estimate:
-        calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate, path=path)
+        img_path = image if isinstance(image, str) else path if path else None
+        calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate, path=img_path)
     if station:
         calibrations['station'] = _try_except(_load_station, station)
         calibrations['station']['viewdir'] = _try_except(_load_station_estimate, station, path=path)['viewdir']

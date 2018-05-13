@@ -263,13 +263,15 @@ def normalize_range(array, interval=(0, 1)):
     Returns:
         array (optional): Normalized copy of array, cast to float
     """
-    if inverval is None:
+    if interval is None:
         interval = array
     if np.iterable(interval):
         interval = min(interval), max(interval)
     else:
         interval = numpy_dtype_minmax(interval)
-    return (array + (-interval[0])) * (1.0 / (interval[1] - interval[0]))
+    scale = (max(interval) - min(interval)) / (array.max() - array.min())
+    scaled = array * scale
+    return scaled - scaled.min() + min(interval)
 
 def gaussian_filter(array, mask=None, fill=False, **kwargs):
     """

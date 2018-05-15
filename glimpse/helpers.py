@@ -152,6 +152,65 @@ def as_array(a, dtype=None):
     else:
         return np.asarray(a, dtype=dtype)
 
+def diag_indices(a, k=0):
+    """
+    Return the indices of diagonals in an array.
+
+    Arguments:
+        a (array): Array
+        k: kth diagonal (int) or diagonals (iterable)
+    """
+    # https://stackoverflow.com/a/18081653
+    assert all(np.array(a.shape) == a.shape[0])
+    rows, cols = np.diag_indices_from(a)
+    if not np.iterable(k):
+        k = k,
+    def diag(ki):
+        if ki < 0:
+            return rows[-ki:], cols[:ki]
+        elif ki > 0:
+            return rows[:-ki], cols[ki:]
+        else:
+            return rows, cols
+    rowcols = [diag(ki) for ki in k]
+    return np.hstack([rc[0] for rc in rowcols]), np.hstack([rc[1] for rc in rowcols])
+
+def sorted_neighbors(x, y):
+    """
+    Return indices of neighbors.
+
+    Arguments:
+        x (iterable): Values sorted in ascending order
+        y (iterable): Values to find neighbors for
+
+    Returns:
+        array: Index (in `x`) of left and right neighbors for each value in `y` (n, 2)
+    """
+    x, y = np.asarray(x), np.asarray(y)
+    index = np.searchsorted(x, y)
+    # index = 0 snap to 0
+    # 0 < index < len(x) snap to index -1
+    index[(index > 0) & (index < len(x))] -= 1
+    # index = len(x) snap to index - 2
+    index[index == len(x)] -= 2
+    return np.column_stack((index, index + 1))
+
+def sorted_nearest(x, y):
+    """
+    Return indices of nearest neighbors.
+
+    Arguments:
+        x (iterable): Values sorted in ascending order
+        y (iterable): Values to find neighbors for
+
+    Returns:
+        array: Index (in `x`) of nearest neighbor for each value in `y` (n, )
+    """
+    x, y = np.asarray(x), np.asarray(y)
+    neighbors = sorted_neighbors(x, y)
+    nearest = np.argmin(np.abs(y.reshape(-1, 1) - x[neighbors]), axis=1)
+    return neighbors[range(len(y)), nearest]
+
 # ---- Pickles ---- #
 
 def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):
@@ -1419,28 +1478,45 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
         dx = dx.total_seconds()
     return interpolate_line(vertices, x=x, xi=xi, n=n, dx=dx, **kwargs)
 
-def select_datetimes(datetimes, start=None, end=None, step=None):
+def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
     """
     Return indices of datetimes matching the specified criteria.
 
     Arguments:
-        datetimes (iterable): Datetime objects
-        start (datetime): Start datetime
-        end (datetime): End datetime
-        step (timedelta): Target sampling frequency
+        datetimes (iterable): Datetime objects in ascending order
+        start (datetime): Start datetime, or `min(datetimes)` if `None`
+        end (datetime): End datetime, or `max(datetimes)` if `None`
+        snap (timedelta): Interval (relative to 1970-01-01 00:00:00)
+            on which to select nearest `datetimes`, or all if `None`
+        maxdt (timedelta): Maximum distance from nearest `snap` to
+            select `datetimes`. If `None`, defaults to half of `snap`.
     """
     datetimes = as_array(datetimes)
     selected = np.ones(datetimes.shape, dtype=bool)
     if start:
         selected &= datetimes >= start
+    else:
+        start = datetimes[0]
+        if snap:
+            start -= snap
     if end:
         selected &= datetimes <= end
-    if step:
-        targets = datetime_range(
-            start=datetimes[selected][0], stop=datetimes[selected][-1], step=step)
-        distances = pairwise_distance_datetimes(targets, datetimes)
-        indices = np.argmin(distances, axis=1)
-        temp = np.zeros(selected.shape, dtype=bool)
-        temp[indices] = True
+    else:
+        end = datetimes[-1]
+        if snap:
+            end += snap
+    assert end >= start
+    if snap:
+        origin = datetime.datetime(1970, 1, 1, 0, 0, 0)
+        shift = (origin - start) % snap
+        start = start + shift
+        targets = datetime_range(start=start, stop=end, step=snap)
+        nearest = sorted_nearest(datetimes, targets)
+        if maxdt is None:
+            maxdt = snap * 0.5
+        distances = np.abs(targets - datetimes[nearest])
+        nearest = np.unique(nearest[distances <= maxdt])
+        temp = np.zeros(datetimes.shape, dtype=bool)
+        temp[nearest] = True
         selected &= temp
     return np.nonzero(selected)[0]

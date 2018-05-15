@@ -762,23 +762,8 @@ class DEMInterpolant(object):
         self.fun = fun
         self.kwargs = kwargs
 
-    def __call__(self, t, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
-        """
-        Return a DEM time-interpolated from two nearby DEM.
-
-        Arguments:
-            t (datetime.datetime): Datetime of interpolated DEM
-
-        Returns:
-            DEM: An interpolated DEM for time `t`
-        """
-        d = helpers.first_not(d, self.d)
-        xlim = helpers.first_not(xlim, self.xlim)
-        ylim = helpers.first_not(ylim, self.ylim)
-        zlim = helpers.first_not(zlim, self.zlim)
+    def nearest(self, t, extrapolate=False):
         extrapolate = extrapolate or self.extrapolate
-        fun = fun or self.fun
-        kwargs = kwargs or self.kwargs
         dt = np.asarray(self.datetimes) - t
         if extrapolate:
             # Get two nearest DEMs
@@ -802,6 +787,42 @@ class DEMInterpolant(object):
             ij = j, i
         else:
             ij = i,
+        return ij
+
+    def read(self, index, d=None, xlim=None, ylim=None, zlim=None, fun=None, **kwargs):
+        d = helpers.first_not(d, self.d)
+        xlim = helpers.first_not(xlim, self.xlim)
+        ylim = helpers.first_not(ylim, self.ylim)
+        zlim = helpers.first_not(zlim, self.zlim)
+        fun = fun or self.fun
+        kwargs = kwargs or self.kwargs
+        dem = DEM.read(
+            self.paths[index], d=d, xlim=xlim, ylim=ylim,
+            datetime=self.datetimes[index])
+        if zlim is not None:
+            dem.crop(zlim=zlim)
+        if fun:
+            fun(dem, **kwargs)
+        return dem
+
+    def __call__(self, t, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
+        """
+        Return a DEM time-interpolated from two nearby DEM.
+
+        Arguments:
+            t (datetime.datetime): Datetime of interpolated DEM
+
+        Returns:
+            DEM: An interpolated DEM for time `t`
+        """
+        d = helpers.first_not(d, self.d)
+        xlim = helpers.first_not(xlim, self.xlim)
+        ylim = helpers.first_not(ylim, self.ylim)
+        zlim = helpers.first_not(zlim, self.zlim)
+        extrapolate = extrapolate or self.extrapolate
+        fun = fun or self.fun
+        kwargs = kwargs or self.kwargs
+        ij = self.nearest(t=t, extrapolate=extrapolate)
         if d is None or xlim is None or ylim is None:
             grids = [Grid.read(self.paths[k]) for k in ij]
         if d is None:
@@ -810,21 +831,14 @@ class DEMInterpolant(object):
             xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
         if ylim is None:
             ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
-        dems = [DEM.read(self.paths[k], d=d, xlim=xlim, ylim=ylim) for k in ij]
-        if zlim is not None:
-            for dem in dems:
-                dem.crop(zlim=zlim)
-        if fun:
-            for dem in dems:
-                fun(dem, **kwargs)
+        dems = [self.read(k, d=d, xlim=xlim, ylim=ylim) for k in ij]
         if len(dems) > 1:
             different_grids = (any(dems[0].d != dems[1].d) or any(dems[0].n != dems[1].n)
                 or any(dems[0].xlim != dems[1].xlim) or any(dems[0].ylim != dems[1].ylim))
             if different_grids:
                 dems[1].resample(dems[0], method='linear', bounds_error=False, fill_value=np.nan)
-            total_seconds = np.sum(abs(dt[list(ij)])).total_seconds()
-            i_ratio = abs(dt[i]).total_seconds() / total_seconds
-            j_ratio = abs(dt[j]).total_seconds() / total_seconds
-            dems[0].Z = i_ratio * dems[0].Z + j_ratio * dems[1].Z
+            scale = (t - dems[0].datetime) / (dems[1].datetime - dems[0].datetime)
+            dz = dems[1].Z - dems[0].Z
+            dems[0].Z += dz * scale
         dems[0].datetime = t
         return dems[0]

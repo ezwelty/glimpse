@@ -171,6 +171,8 @@ def load_images(station, services, use_exif=False, service_exif=False, **kwargs)
     images = []
     for i, service in enumerate(services):
         index = indices[(indices >= service_breaks[i]) & (indices < service_breaks[i + 1])]
+        if not index.size:
+            continue
         service_calibration = glimpse.helpers.merge_dicts(
             station_calibration,
             load_calibrations(path=paths[index[0]], camera=True, merge=True))
@@ -250,17 +252,14 @@ def load_masks(images):
     sizes = np.unique(image_sizes, axis=0)
     for i in nearest:
         polygons = land_markups[i]['land'].values()
-        mask = glimpse.helpers.polygons_to_mask(polygons, size=imgsz).astype(np.uint8)
-        mask = sharedmem.copy(mask)
         is_nearest = nearest_index == i
         for size in sizes:
-            if np.all(size == imgsz):
-                rmask = mask
-            else:
-                rmask = cv2.resize(mask, dsize=(int(size[0]), int(size[1])), interpolation=cv2.INTER_NEAREST)
-                rmask = sharedmem.copy(rmask)
+            scale = size / imgsz
+            rpolygons = [polygon * scale for polygon in polygons]
+            mask = glimpse.helpers.polygons_to_mask(rpolygons, size=size).astype(np.uint8)
+            mask = sharedmem.copy(mask)
             for j in np.where(is_nearest & np.all(image_sizes == size, axis=1))[0]:
-                masks[j] = rmask
+                masks[j] = mask
     return masks
 
 # ---- Calibration controls ----

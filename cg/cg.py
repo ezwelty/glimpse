@@ -76,6 +76,17 @@ def _station_break_index(path):
     else:
         return 0
 
+def paths_to_datetimes(paths):
+    """
+    Return datetime objects parsed from image paths.
+
+    Arguments:
+        paths (iterable): Image paths
+    """
+    pattern = re.compile(r'_([0-9]{8}_[0-9]{6})[^\/]*$')
+    datetimes_str = [pattern.findall(path)[0] for path in paths]
+    return pandas.to_datetime(datetimes_str, format='%Y%m%d_%H%M%S').to_pydatetime()
+
 def parse_image_path(path, sequence=False):
     """
     Return metadata parsed from image path.
@@ -120,7 +131,7 @@ def find_image(path):
             if os.path.isfile(image_path):
                 return image_path
 
-def load_images(station, service, start=None, end=None, step=None, use_exif=True):
+def load_images(station, services, use_exif=False, service_exif=False, **kwargs):
     """
     Return list of calibrated Image objects.
 
@@ -129,66 +140,94 @@ def load_images(station, service, start=None, end=None, step=None, use_exif=True
 
     Arguments:
         station (str): Station identifier
-        service (str): Service identifier
-        start (datetime): Start datetime, or `None` to start at first image
-        end (datetime): End datetime, or `None` to end with last image
-        step (timedelta): Target sampling frequency, or `None` for all images
-        use_exif (bool): Whether to use image datetimes from EXIF rather than
-            parsed from paths
+        services (iterable): Service identifiers
+        use_exif (bool): Whether to parse image datetimes from EXIF (slower)
+            rather than parsed from paths (faster)
+        service_exif (bool): Whether to extract EXIF from first image (faster)
+            or all images (slower) in service.
+            If `True`, `Image.datetime` is parsed from path.
+            Always `False` if `use_exif=True`.
+        **kwargs: Arguments to `glimpse.helpers.select_datetimes()`
     """
-    img_paths = glob.glob(os.path.join(IMAGE_PATH, station, station + '_' + service, '*.JPG'))
     if use_exif:
-        exifs = [glimpse.Exif(path) for path in img_paths]
+        service_exif = False
+    # Sort services in time
+    if not np.iterable(services):
+        services = services,
+    services = np.sort(services)
+    # Parse datetimes of all candidate images
+    paths_service = [glob.glob(os.path.join(IMAGE_PATH, station, station + '_' + service, '*.JPG'))
+        for service in services]
+    paths = np.hstack(paths_service)
+    if use_exif:
+        exifs = [glimpse.Exif(path) for path in paths]
         datetimes = np.array([exif.datetime for exif in exifs])
     else:
-        datetimes = np.array([parse_image_path(path)['datetime']
-            for path in img_paths])
-    index = glimpse.helpers.select_datetimes(datetimes, start=start, end=end, step=step)
-    base_calibration = load_calibrations(img_paths[0], station=True, camera=True, merge=True)
-    anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '*.json'))
-    anchor_basenames = [glimpse.helpers.strip_path(path) for path in anchor_paths]
+        datetimes = paths_to_datetimes(paths)
+    # Select images based on datetimes
+    indices = glimpse.helpers.select_datetimes(datetimes, **kwargs)
+    service_breaks = np.hstack((0, np.cumsum([len(x) for x in paths_service])))
+    station_calibration = load_calibrations(station=station, merge=True)
     images = []
-    for i in index:
-        path = img_paths[i]
-        basename = glimpse.helpers.strip_path(path)
-        calibrations = load_calibrations(image=basename, viewdir=basename,
-            station_estimate=station, merge=False, file_errors=False)
-        if calibrations['image']:
-            calibration = glimpse.helpers.merge_dicts(base_calibration, calibrations['image'])
-            anchor = True
-        else:
-            calibration = glimpse.helpers.merge_dicts(base_calibration, dict(viewdir=calibrations['station_estimate']['viewdir']))
-            anchor = False
-        if calibrations['viewdir']:
-            calibration = glimpse.helpers.merge_dicts(calibration, calibrations['viewdir'])
-        exif = exifs[i] if use_exif else None
-        image = glimpse.Image(path, cam=calibration, anchor=anchor, exif=exif,
-            keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
-        images.append(image)
+    for i, service in enumerate(services):
+        index = indices[(indices >= service_breaks[i]) & (indices < service_breaks[i + 1])]
+        service_calibration = glimpse.helpers.merge_dicts(
+            station_calibration,
+            load_calibrations(path=paths[index[0]], camera=True, merge=True))
+        if service_exif:
+            exif = glimpse.Exif(paths[index[0]])
+        for j in index:
+            basename = glimpse.helpers.strip_path(paths[j])
+            calibrations = load_calibrations(image=basename, viewdir=basename,
+                station_estimate=station, merge=False, file_errors=False)
+            if calibrations['image']:
+                calibration = glimpse.helpers.merge_dicts(
+                    service_calibration, calibrations['image'])
+                anchor = True
+            else:
+                calibration = glimpse.helpers.merge_dicts(
+                    service_calibration,
+                    dict(viewdir=calibrations['station_estimate']['viewdir']))
+                anchor = False
+            if calibrations['viewdir']:
+                calibration = glimpse.helpers.merge_dicts(
+                    calibration, calibrations['viewdir'])
+            if use_exif:
+                exif = exifs[j]
+            elif not service_exif:
+                exif = None
+            image = glimpse.Image(
+                path=paths[j], cam=calibration, anchor=anchor, exif=exif,
+                datetime=None if use_exif else datetimes[j],
+                keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
+            images.append(image)
     return images
 
 def load_masks(images):
     """
     Return a list of boolean land masks.
 
+    Images must all be from the same station.
+
     Arguments:
         images (iterable): Image objects
     """
-    glimpse.Observer.test_images(images)
+    # All images must be from the same station (for now)
     station = parse_image_path(images[0].path)['station']
+    pattern = re.compile(station + r'_[0-9]{8}_[0-9]{6}[^\/]*$')
+    is_station = [pattern.search(img.path) is not None for img in images[1:]]
+    assert all(is_station)
+    # Find all station svg with 'land' markup
     imgsz = images[0].cam.imgsz
-    # Find all svg files for station with 'land' markup
     svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '_*.svg'))
-    markups = [glimpse.svg.parse_svg(path, imgsz=imgsz)
-        for path in svg_paths]
+    markups = [glimpse.svg.parse_svg(path, imgsz=imgsz) for path in svg_paths]
     land_index = np.where(['land' in markup for markup in markups])[0]
     if len(land_index) == 0:
         raise ValueError('No land masks found for station')
     svg_paths = np.array(svg_paths)[land_index]
     land_markups = np.array(markups)[land_index]
     # Select svg files nearest to images, with preference within breaks
-    svg_datetimes = np.array([parse_image_path(path)['datetime']
-        for path in svg_paths])
+    svg_datetimes = paths_to_datetimes(svg_paths)
     svg_break_indices = np.array([_station_break_index(path)
         for path in svg_paths])
     img_datetimes = [img.datetime for img in images]
@@ -201,10 +240,9 @@ def load_masks(images):
         if same_break.size > 0:
             i = same_break[np.argmin(distances[i][same_break])]
         else:
-            print('No mask found within motion breaks for image', i)
+            raise ValueError('No mask found within motion breaks for image', i)
             i = np.argmin(distances[i])
         nearest_index.append(i)
-    print('Max distance to mask:', datetime.timedelta(seconds=np.max(distances[:, nearest_index])))
     nearest = np.unique(nearest_index)
     # Make masks and expand per image without copying
     masks = [None] * len(images)

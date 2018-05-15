@@ -152,7 +152,7 @@ def load_images(station, services, use_exif=False, service_exif=False, **kwargs)
     if use_exif:
         service_exif = False
     # Sort services in time
-    if not np.iterable(services):
+    if isinstance(services, str):
         services = services,
     services = np.sort(services)
     # Parse datetimes of all candidate images

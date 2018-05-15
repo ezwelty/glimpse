@@ -1462,7 +1462,7 @@ class KeypointMatcher(object):
         with sharedmem.MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def build_matches(self, maxdt, path=None, overwrite=False,
+    def build_matches(self, maxdt, min_nearest=0, path=None, overwrite=False,
         clear_keypoints=True, parallel=False, **params):
         """
         Build matches between each image and its nearest neighbors.
@@ -1474,6 +1474,8 @@ class KeypointMatcher(object):
         Arguments:
             maxdt (`datetime.timedelta`): Maximum time seperation between
                 pairs of images to match
+            min_nearest (int): Minimum nearest neighbors to match on either side
+                of image (overrides `maxdt`)
             path (str): Directory for match files.
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
@@ -1500,6 +1502,9 @@ class KeypointMatcher(object):
             matching = distances <= np.inf
         else:
             matching = distances <= abs(maxdt.total_seconds())
+        if min_nearest:
+            min_nearest = min(min_nearest, len(self.images))
+            matching[helpers.diag_indices(matching, k=range(1, min_nearest + 1))] = True
         matching_images = [np.where(row)[0] for row in np.triu(matching, k=1)]
         # Define parallel process
         def process(i, js):

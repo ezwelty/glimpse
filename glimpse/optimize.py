@@ -1356,14 +1356,17 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
         searchParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
 
     Returns:
-        array: Coordinates of matches in image A
-        array: Coordinates of matches in image B
+        array: Coordinates of matches in image A (n, 2)
+        array: Coordinates of matches in image B (n, 2)
     """
-    flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
     n_nearest = 2 if max_ratio else 1
+    empty = np.array([], dtype=float).reshape(-1, 2)
+    if len(ka[0]) < n_nearest or len(kb[0]) < n_nearest:
+        return empty, empty.copy()
+    flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
     matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
-    uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches])
-    uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches])
+    uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
+    uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
     if max_ratio:
         is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
         uvA = uvA[is_valid]

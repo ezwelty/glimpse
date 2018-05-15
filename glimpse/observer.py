@@ -364,16 +364,14 @@ class Observer(object):
         # Build animation
         return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
 
-    def subset(self, start=None, end=None, step=None):
+    def subset(self, **kwargs):
         """
         Return a new Observer with a subset of the original images.
 
         Arguments:
-            start (datetime): Start datetime, or `None` to start at first image
-            end (datetime): End datetime, or `None` to end with last image
-            step (timedelta): Target sampling frequency, or `None` for all images
+            **kwargs: Arguments to `helpers.select_datetimes()`
         """
-        index = helpers.select_datetimes(self.datetimes, start=start, end=end, step=step)
+        index = helpers.select_datetimes(self.datetimes, **kwargs)
         images = [self.images[i] for i in index]
         params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
         return Observer(images, datetimes=self.datetimes[index], **params)

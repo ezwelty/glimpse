@@ -338,13 +338,15 @@ class Matches(object):
         uvs (list): Pair of image coordinate arrays (n, 2)
         size (int): Number of point pairs
         imgszs (list): Initial image sizes (`cam.imgsz`)
+        weights (array): Relative weight of each point pair (n, )
     """
 
-    def __init__(self, cams, uvs):
+    def __init__(self, cams, uvs, weights=None):
         self.cams = cams
         self.uvs = list(uvs)
         self._test_matches()
         self.imgszs = [cam.imgsz.copy() for cam in cams]
+        self.weights = weights
 
     @property
     def size(self):
@@ -1341,7 +1343,8 @@ def detect_keypoints(array, mask=None, method='sift', root=True, **params):
     return keypoints, descriptors
 
 def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
-    indexParams=dict(algorithm=1, trees=5), searchParams=dict(checks=50)):
+    indexParams=dict(algorithm=1, trees=5), searchParams=dict(checks=50),
+    return_ratios=False):
     """
     Return the coordinates of matched keypoint pairs.
 
@@ -1354,12 +1357,15 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
         max_distance (float): Maximum coordinate-distance of matched keypoints
         indexParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
         searchParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
+        return_ratios (bool): Whether to return the ratio of each (filtered) match
 
     Returns:
         array: Coordinates of matches in image A (n, 2)
         array: Coordinates of matches in image B (n, 2)
+        array (optional): Ratio of each match (n, )
     """
-    n_nearest = 2 if max_ratio else 1
+    compute_ratios = max_ratio or return_ratios
+    n_nearest = 2 if compute_ratios else 1
     empty = np.array([], dtype=float).reshape(-1, 2)
     if len(ka[0]) < n_nearest or len(kb[0]) < n_nearest:
         return empty, empty.copy()
@@ -1367,15 +1373,24 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
     matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
     uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
     uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
+    if compute_ratios:
+        ratios = np.array([m.distance / n.distance for m, n in matches])
     if max_ratio:
         is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
         uvA = uvA[is_valid]
         uvB = uvB[is_valid]
+        if return_ratios:
+            ratios = ratios[is_valid]
     if max_distance:
         is_valid = np.linalg.norm(uvA - uvB, axis=1) < max_distance
         uvA = uvA[is_valid]
         uvB = uvB[is_valid]
-    return uvA, uvB
+        if return_ratios:
+            ratios = ratios[is_valid]
+    if return_ratios:
+        return uvA, uvB, ratios
+    else:
+        return uvA, uvB
 
 class KeypointMatcher(object):
     """
@@ -1463,7 +1478,7 @@ class KeypointMatcher(object):
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
     def build_matches(self, maxdt, min_nearest=0, path=None, overwrite=False,
-        clear_keypoints=True, parallel=False, **params):
+        clear_keypoints=True, parallel=False, weights=False, **params):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -1483,12 +1498,15 @@ class KeypointMatcher(object):
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
                 all available CPU cores are used.
+            weights (bool): Whether to include weights in `Matches` objects,
+                computed as the inverse of the maximum descriptor-distance ratio
             **params: Additional arguments to `optimize.match_keypoints()`
         """
         if parallel is True:
             parallel = sharedmem.cpu_count()
         elif parallel is False:
             parallel = 0
+        params = helpers.merge_dicts(params, dict(return_ratios=weights))
         # Compute basenames
         if path:
             basenames = [helpers.strip_path(img.path)
@@ -1521,8 +1539,10 @@ class KeypointMatcher(object):
                     match.cams = (imgA.cam, imgB.cam)
                     row_matches[j] = match
                 else:
-                    uvA, uvB = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
-                    match = Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
+                    result = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
+                    match = Matches(
+                        cams=(imgA.cam, imgB.cam), uvs=result[0:2],
+                        weights=(1 / result[2]) if weights else None)
                     row_matches[j] = match
                     if path is not None:
                         helpers.write_pickle(match, outfile)
@@ -1597,7 +1617,7 @@ def test_cameras(model):
     # Error: Not all cameras appear in controls
     control_cams_flat = [cam for cams in control_cams for cam in cams]
     if len(set(model.cams) & set(control_cams_flat)) < len(model.cams):
-        raise ValueErrors('Not all cameras appear in controls')
+        raise ValueError('Not all cameras appear in controls')
     # Error: 'xyz' cannot be in `group_params` if any `control.directions` is True
     if 'xyz' in model.group_params and any(is_directions_control):
         raise ValueError("'xyz' cannot be in `group_params` if any `control.directions` is True")

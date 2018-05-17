@@ -131,7 +131,7 @@ def find_image(path):
             if os.path.isfile(image_path):
                 return image_path
 
-def load_images(station, services, use_exif=False, service_exif=False, **kwargs):
+def load_images(station, services, use_exif=False, service_exif=False, anchors=False, **kwargs):
     """
     Return list of calibrated Image objects.
 
@@ -147,6 +147,8 @@ def load_images(station, services, use_exif=False, service_exif=False, **kwargs)
             or all images (slower) in service.
             If `True`, `Image.datetime` is parsed from path.
             Always `False` if `use_exif=True`.
+        anchors (bool): Whether to include anchor images even if
+            filtered out by `kwargs['snap']`
         **kwargs: Arguments to `glimpse.helpers.select_datetimes()`
     """
     if use_exif:
@@ -159,13 +161,27 @@ def load_images(station, services, use_exif=False, service_exif=False, **kwargs)
     paths_service = [glob.glob(os.path.join(IMAGE_PATH, station, station + '_' + service, '*.JPG'))
         for service in services]
     paths = np.hstack(paths_service)
+    basenames = [glimpse.helpers.strip_path(path) for path in paths]
     if use_exif:
         exifs = [glimpse.Exif(path) for path in paths]
         datetimes = np.array([exif.datetime for exif in exifs])
     else:
-        datetimes = paths_to_datetimes(paths)
+        datetimes = paths_to_datetimes(basenames)
     # Select images based on datetimes
     indices = glimpse.helpers.select_datetimes(datetimes, **kwargs)
+    if anchors:
+        # Add anchors
+        # HACK: Ignore any <image>-<suffix>.json files
+        anchor_paths = glob.glob(os.path.join(CG_PATH, 'images', station + '_*[0-9].json'))
+        anchor_basenames = [glimpse.helpers.strip_path(path) for path in anchor_paths]
+        if 'start' in kwargs or 'end' in kwargs:
+            # Filter by start, end
+            anchor_datetimes = np.asarray(paths_to_datetimes(anchor_basenames))
+            inrange = glimpse.helpers.select_datetimes(
+                anchor_datetimes, **glimpse.helpers.merge_dicts(kwargs, dict(snap=None)))
+            anchor_basenames = np.asarray(anchor_basenames)[inrange]
+        anchor_indices = np.where(np.isin(basenames, anchor_basenames))[0]
+        indices = np.unique(np.hstack((indices, anchor_indices)))
     service_breaks = np.hstack((0, np.cumsum([len(x) for x in paths_service])))
     station_calibration = load_calibrations(station=station, merge=True)
     images = []
@@ -179,7 +195,7 @@ def load_images(station, services, use_exif=False, service_exif=False, **kwargs)
         if service_exif:
             exif = glimpse.Exif(paths[index[0]])
         for j in index:
-            basename = glimpse.helpers.strip_path(paths[j])
+            basename = basenames[j]
             calibrations = load_calibrations(image=basename, viewdir=basename,
                 station_estimate=station, merge=False, file_errors=False)
             if calibrations['image']:
@@ -342,10 +358,16 @@ def terminus_lines(img, markup, correction=True):
             or arguments to `glimpse.helpers.elevation_corrections()`
     """
     luv = tuple(markup.values())
+    # HACK: Select terminus with matching date and preferred type
     geo = glimpse.helpers.read_geojson(
-        os.path.join(CG_PATH, 'geojson', 'termini.geojson'), key='date', crs=32606)
+        os.path.join(CG_PATH, 'geojson', 'termini.geojson'), crs=32606)
     date_str = img.datetime.strftime('%Y-%m-%d')
-    xy = geo['features'][date_str]['geometry']['coordinates']
+    features = [(feature, feature['properties']['type'])
+        for feature in glimpse.helpers.geojson_iterfeatures(geo)
+        if feature['properties']['date'] == date_str]
+    type_order = ('Aerometric', 'Worldview', 'Landsat 8', 'Landsat 7', 'TerraSAR-X', 'SfM', 'Landsat 5')
+    order = [type_order.index(f[1]) for f in features]
+    xy = features[np.argmin(order)][0]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))
     return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction)
 
@@ -452,10 +474,13 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
         calibration = load_calibrations(svg_path, camera=camera_calib,
             station=station_calib, station_estimate=not station_calib, merge=True)
         img_path = find_image(svg_path)
-        images.append(glimpse.Image(img_path, cam=calibration))
-        images[-1].cam.resize(size, force=force_size)
-        controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
-        cam_params.append(dict(viewdir=True))
+        image = glimpse.Image(img_path, cam=calibration)
+        control = svg_controls(image, keys=keys, correction=correction)
+        if control:
+            image.cam.resize(size, force=force_size)
+            images.append(image)
+            controls.extend(control)
+            cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
 def camera_svg_controls(camera, size=1, force_size=False, keys=None,
@@ -489,10 +514,13 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
             calibration = load_calibrations(svg_path, camera=camera_calib,
                 station=station_calib, station_estimate=not station_calib, merge=True)
             img_path = find_image(svg_path)
-            images.append(glimpse.Image(img_path, cam=calibration))
-            images[-1].cam.resize(size, force=force_size)
-            controls.extend(svg_controls(images[-1], svg_path, keys=keys, correction=correction))
-            cam_params.append(dict(viewdir=True))
+            image = glimpse.Image(img_path, cam=calibration)
+            control = svg_controls(image, keys=keys, correction=correction)
+            if control:
+                image.cam.resize(size, force=force_size)
+                images.append(image)
+                controls.extend(control)
+                cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
 def camera_motion_matches(camera, size=None, force_size=False,

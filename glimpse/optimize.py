@@ -1366,27 +1366,30 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
     """
     compute_ratios = max_ratio or return_ratios
     n_nearest = 2 if compute_ratios else 1
-    empty = np.array([], dtype=float).reshape(-1, 2)
-    if len(ka[0]) < n_nearest or len(kb[0]) < n_nearest:
-        return empty, empty.copy()
-    flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
-    matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
-    uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
-    uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
-    if compute_ratios:
-        ratios = np.array([m.distance / n.distance for m, n in matches])
-    if max_ratio:
-        is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
-        uvA = uvA[is_valid]
-        uvB = uvB[is_valid]
-        if return_ratios:
-            ratios = ratios[is_valid]
-    if max_distance:
-        is_valid = np.linalg.norm(uvA - uvB, axis=1) < max_distance
-        uvA = uvA[is_valid]
-        uvB = uvB[is_valid]
-        if return_ratios:
-            ratios = ratios[is_valid]
+    if len(ka[0]) >= n_nearest and len(kb[0]) >= n_nearest:
+        flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
+        matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
+        uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
+        uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
+        if compute_ratios:
+            ratios = np.array([m.distance / n.distance for m, n in matches])
+        if max_ratio:
+            is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
+            uvA = uvA[is_valid]
+            uvB = uvB[is_valid]
+            if return_ratios:
+                ratios = ratios[is_valid]
+        if max_distance:
+            is_valid = np.linalg.norm(uvA - uvB, axis=1) < max_distance
+            uvA = uvA[is_valid]
+            uvB = uvB[is_valid]
+            if return_ratios:
+                ratios = ratios[is_valid]
+    else:
+        # Not enough keypoints to match
+        empty = np.array([], dtype=float).reshape(-1, 2)
+        uvA, uvB = empty, empty.copy()
+        ratios = np.array([], dtype=float)
     if return_ratios:
         return uvA, uvB, ratios
     else:
@@ -1405,11 +1408,14 @@ class KeypointMatcher(object):
             See https://docs.opencv.org/master/d7/dbd/group__imgproc.html#gad689d2607b7b3889453804f414ab1018.
 
     Attributes:
-        images (list): Image objects
+        images (iterable): Image objects in ascending temporal order
         clahe (cv2.CLAHE): CLAHE object
     """
 
     def __init__(self, images, clahe=False):
+        dts = np.diff([img.datetime for img in images])
+        if np.any(dts < datetime.timedelta(0)):
+            raise ValueError('Images are not in ascending temporal order')
         self.images = images
         if clahe is False:
             self.clahe = None
@@ -1477,24 +1483,28 @@ class KeypointMatcher(object):
         with sharedmem.MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def build_matches(self, maxdt, min_nearest=0, path=None, overwrite=False,
-        clear_keypoints=True, parallel=False, weights=False, **params):
+    def build_matches(self, maxdt=None, min_nearest=0, path=None, overwrite=False,
+        clear_keypoints=True, clear_matches=False, parallel=False, weights=False, **params):
         """
         Build matches between each image and its nearest neighbors.
 
-        Results are stored in `self.matches` as an (n, n) upper-triangular array of `Matches`,
+        Results are stored in `self.matches` as an (n, n) upper-triangular sparse matrix of `Matches`,
         and the result for each `Image` pair (i, j) optionally written to a binary `pickle`
-        file with name `basenames[i]-basenames[j].pkl`.
+        file with name `basenames[i]-basenames[j].pkl`. If `clear_matches` is `True`,
+        missing files are written but results are not stored in memory.
 
         Arguments:
-            maxdt (`datetime.timedelta`): Maximum time seperation between
-                pairs of images to match
+            maxdt (`datetime.timedelta`): Maximum time separation between
+                pairs of images to match. If `None`, all pairs are matched.
             min_nearest (int): Minimum nearest neighbors to match on either side
                 of image (overrides `maxdt`)
             path (str): Directory for match files.
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
             clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
+            clear_matches (bool): Whether to clear matches rather than return them
+                (requires `path`). Useful for avoiding memory overruns when
+                processing very large image sets.
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
                 all available CPU cores are used.
@@ -1502,6 +1512,8 @@ class KeypointMatcher(object):
                 computed as the inverse of the maximum descriptor-distance ratio
             **params: Additional arguments to `optimize.match_keypoints()`
         """
+        if clear_matches and not path:
+            raise ValueError('path must be set when clear_matches=True')
         if parallel is True:
             parallel = sharedmem.cpu_count()
         elif parallel is False:
@@ -1514,59 +1526,68 @@ class KeypointMatcher(object):
             if len(basenames) != len(set(basenames)):
                 raise ValueError('Image basenames are not unique')
         # Match images
-        datetimes = [img.datetime for img in self.images]
-        distances = helpers.pairwise_distance_datetimes(datetimes, datetimes)
+        n = len(self.images)
         if maxdt is None:
-            matching = distances <= np.inf
+            matching_images = [tuple(range(i + 1, n)) for i in range(n)]
         else:
-            matching = distances <= abs(maxdt.total_seconds())
-        if min_nearest:
-            min_nearest = min(min_nearest, len(self.images))
-            matching[helpers.diag_indices(matching, k=range(1, min_nearest + 1))] = True
-        matching_images = [np.where(row)[0] for row in np.triu(matching, k=1)]
+            datetimes = np.array([img.datetime for img in self.images])
+            ends = np.searchsorted(datetimes, datetimes + maxdt, side='right')
+            if min_nearest:
+                shift = min(min_nearest, n) + 1
+                min_ends = [min(i + shift, n) for i in range(n)]
+                ends = np.maximum(ends, min_ends)
+            matching_images = [np.arange(i + 1, end) for i, end in enumerate(ends)]
         # Define parallel process
         def process(i, js):
-            row_matches = np.full(len(self.images), None).astype(object)
             print('Matching', i, '->', ', '.join(js.astype(str)))
+            matches = []
             imgA = self.images[i]
             for j in js:
                 imgB = self.images[j]
                 if path:
                     outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
                 if path and not overwrite and os.path.exists(outfile):
-                    match = helpers.read_pickle(outfile)
-                    # Point matches to existing Camera objects
-                    match.cams = (imgA.cam, imgB.cam)
-                    row_matches[j] = match
+                    if not clear_matches:
+                        match = helpers.read_pickle(outfile)
+                        # Point matches to existing Camera objects
+                        match.cams = (imgA.cam, imgB.cam)
+                        matches.append(match)
                 else:
                     result = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
                     match = Matches(
                         cams=(imgA.cam, imgB.cam), uvs=result[0:2],
                         weights=(1 / result[2]) if weights else None)
-                    row_matches[j] = match
+                    if not clear_matches:
+                        matches.append(match)
                     if path is not None:
                         helpers.write_pickle(match, outfile)
             if clear_keypoints:
                 imgA.keypoints = None
-            return row_matches
+            return None if clear_matches else matches
         # Run process in parallel
         with sharedmem.MapReduce(np=parallel) as pool:
-            matches = np.row_stack(pool.map(process, tuple(enumerate(matching_images)), star=True))
+            matches = pool.map(process, tuple(enumerate(matching_images)), star=True)
+            if not clear_matches:
+                # Build Compressed Sparse Row (CSR) matrix
+                matches = scipy.sparse.csr_matrix((
+                    np.concatenate(matches), # data
+                    np.concatenate(matching_images), # column indices
+                    np.cumsum([0] + [len(row) for row in matching_images]))) # row ranges
         # Assign camera objects outside process
-        if parallel:
+        if parallel and not clear_matches:
             for i, js in enumerate(matching_images):
                 imgA = self.images[i]
                 for j in js:
                     imgB = self.images[j]
                     # Point matches to existing Camera objects
                     matches[i, j].cams = (imgA.cam, imgB.cam)
-        self.matches = matches
+        self.matches = None if clear_matches else matches
 
     def matches_as_type(self, mtype, copy=False):
         if self.matches is None:
             raise ValueError('Matches have not been initialized. Run build_matches()')
         if copy:
-            new = np.full(self.matches.shape, None)
+            new = self.matches.copy()
         else:
             new = self.matches
         rows, cols = np.nonzero(self.matches)

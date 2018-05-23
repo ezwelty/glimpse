@@ -38,11 +38,13 @@ box = glimpse.helpers.intersect_boxes(boxes)
 paths = glob.glob(os.path.join(DEM_DIR, '*.tif'))
 paths.sort()
 path = paths[0]
-dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3],Z_sigma=3.0)
+dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3])
 dem.crop(zlim=(0, np.inf))
 dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
 for obs in observers:
     dem.fill_circle(obs.xyz, radius=100)
+
+dem_uncertainty = glimpse.Raster(3.0,x=dem.x,y=dem.y,datetime=dem.datetime)
 
 # ---- Prepare viewshed ----
 
@@ -58,11 +60,12 @@ xy = xy0 + np.vstack([xy for xy in
     itertools.product(range(-400, 300, 100), range(-400, 300, 100))])
 time_unit = datetime.timedelta(days=1)
 tracker = glimpse.Tracker(
-    observers=observers, dem=dem, viewshed=viewshed, time_unit=time_unit)
+    observers=observers, dem=dem, dem_uncertainty=dem_uncertainty, viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
-    xy=xy, n=5000, xy_sigma=(2, 2), vxy_sigma=(5, 5), axy_sigma=(2, 2),
-    vz_sigma=0.1, az_sigma=0.1, tile_size=(15, 15), parallel=True, return_particles=True)
+    xy=xy, n=20000, xy_sigma=(2, 2), vxy_sigma=(5, 5), axy_sigma=(2, 2),
+    vz_sigma=0.2, az_sigma=0.2, tile_size=(15, 15), parallel=True, return_particles=True)
 
 # ---- Plot tracks ----
 
 tracks.plot_xy()
+

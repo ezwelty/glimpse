@@ -321,9 +321,9 @@ class Grid(object):
         matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
         matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
 
-class DEM(Grid):
+class Raster(Grid):
     """
-    A `DEM` describes elevations on a regular 2-dimensional grid.
+    A `Raster` describes data on a regular 2-dimensional grid.
 
     Arguments:
         x (object): Either `xlim`, `x`, or `X`
@@ -342,16 +342,218 @@ class DEM(Grid):
         datetime (datetime): Capture date and time
     """
 
-    def __init__(self, Z, x=None, y=None, datetime=None, Z_sigma=0.0):
-        self.Z = Z
-        self.Z_sigma = Z_sigma
+    def __init__(self, Z, x=None, y=None, datetime=None):
+        if np.shape(Z):
+            self.xlim, self._x, self._X = self._parse_x(x)
+            self.ylim, self._y, self._Y = self._parse_y(y)
+            self.Z = Z
+        else:
+            if x is not None and y is not None:
+                self.xlim, self._x, self._X = self._parse_x(x)
+                self.ylim, self._y, self._Y = self._parse_y(y)
+                self.Z = Z*np.ones((self.y.shape[0],self.x.shape[0]))
+            else:
+                print('Raster creation failed because neither coordinates nor an array were provided!')
+
         self._Zf = None
-        self.xlim, self._x, self._X = self._parse_x(x)
-        self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
 
     @classmethod
-    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None, Z_sigma=0.0):
+    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
+        """
+        Read Raster from gdal raster file.
+
+        See `gdal.Open()` for details.
+        If raster is float and has a defined no-data value,
+        no-data values are replaced with `np.nan`.
+        Otherwise, the raster data is unchanged.
+
+        Arguments:
+            path (str): Path to file
+            band (int): Raster band to read (1 = first band)
+            d (float): Target grid cell size
+            xlim (array-like): Crop bounds in x.
+                If `None` (default), read from file.
+            ylim (array-like): Crop bounds in y.
+                If `None` (default), read from file.
+            datetime (datetime): Capture date and time
+        """
+        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        transform = raster.GetGeoTransform()
+        grid = Grid(
+            n=(raster.RasterXSize, raster.RasterYSize),
+            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+        xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
+        win_xsize = (cols[1] - cols[0]) + 1
+        win_ysize = (rows[1] - rows[0]) + 1
+        if d:
+            buf_xsize = np.ceil(abs(win_xsize * grid.d[0] / d))
+            buf_ysize = np.ceil(abs(win_ysize * grid.d[1] / d))
+        else:
+            buf_xsize = win_xsize
+            buf_ysize = win_ysize
+        band = raster.GetRasterBand(band)
+        Z = band.ReadAsArray(
+            # ReadAsArray() requires int, not numpy.int#
+            xoff=int(cols[0]), yoff=int(rows[0]),
+            win_xsize=int(win_xsize), win_ysize=int(win_ysize),
+            buf_xsize=int(buf_xsize), buf_ysize=int(buf_ysize))
+        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
+        nan_value = band.GetNoDataValue()
+        if np.issubdtype(Z.dtype, np.floating) and nan_value:
+            Z[Z == nan_value] = np.nan
+        return cls(Z, x=xlim, y=ylim, datetime=datetime)
+
+    @property
+    def Z(self):
+        return self._Z
+
+    @Z.setter
+    def Z(self, value):
+        if hasattr(self, '_Z'):
+            original_shape = self._Z.shape
+            self._Z = np.asarray(value, dtype=float)
+            self._clear_cache(['Zf'])
+            if self._Z.shape != original_shape:
+                self._clear_cache(['x', 'X', 'y', 'Y'])
+        else:
+            self._Z = np.asarray(value, dtype=float)
+
+    # ---- Properties (dependent) ----
+
+    @property
+    def zlim(self):
+        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
+        return np.array(value)
+
+    @property
+    def n(self):
+        return np.array(self.Z.shape[0:2][::-1])
+
+    # ---- Properties (cached) ----
+
+    @property
+    def Zf(self):
+        if self._Zf is None:
+            sign = np.sign(self.d).astype(int)
+            self._Zf = scipy.interpolate.RegularGridInterpolator(
+                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]])
+        return self._Zf
+
+    # ---- Methods (public) ----
+
+    def copy(self):
+        return self.__class__(self.Z.copy(), x=self.xlim.copy(), y=self.ylim.copy(), datetime=copy.copy(self.datetime))
+
+    def sample(self, xy, method='linear', bounds_error=True, fill_value=np.nan):
+        """
+        Sample `Z` at points.
+
+        Calls a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`).
+
+        Arguments:
+            xy (array): Point coordinates (n, 2)
+            method (str): Interpolation method
+            bounds_error (bool): Whether an error is thrown if `xy` are outside bounds
+            fill_value (number): Value to use for points outside bounds.
+                If `None`, values outside bounds are extrapolated.
+        """
+        Zf = self.Zf
+        Zf.bounds_error = bounds_error
+        Zf.fill_value = fill_value
+        return Zf(xy, method=method)
+
+    def resample(self, raster, method='linear', bounds_error=False, fill_value=np.nan):
+        xy = np.column_stack((raster.X.ravel(), raster.Y.ravel()))
+        Z = self.sample(xy, method=method, bounds_error=bounds_error, fill_value=fill_value)
+        self.Z = Z.reshape(raster.Z.shape)
+        self.xlim, self._x, self._X = self._parse_x(raster.X)
+        self.ylim, self._y, self._Y = self._parse_y(raster.Y)
+
+    def plot(self, array=None, cmap='gray', **kwargs):
+        """
+        Plot a `Raster'.
+
+        Arguments:
+            array (array): Values to plot. If `None`, `.Z` is used.
+            kwargs (dict): Arguments passed to `matplotlib.pyplot.imshow()`
+        """
+        if array is None:
+            array = self.Z
+        matplotlib.pyplot.imshow(array,
+            extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
+            cmap=cmap, **kwargs)
+
+    def rasterize(self, xy, values, fun=np.mean):
+        """
+        Convert points to a raster image.
+
+        Arguments:
+            xy (array): Point coordinates (Nx2)
+            values (array): Point values
+            fun (function): Aggregate function to apply to values of overlapping points
+        """
+        is_in = self.inbounds(xy)
+        rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
+        return helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1],
+            values[is_in], self.Z.shape, fun=fun)
+
+    def crop(self, xlim=None, ylim=None, zlim=None):
+        """
+        Crop a `Raster`.
+
+        Arguments:
+            xlim (array_like): Crop bounds in x
+            ylim (array_like): Crop bounds in y
+            zlim (array_like): Crop bounds in z.
+                Values outside range are set to `np.nan`.
+        """
+        if xlim is not None or ylim is not None:
+            xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
+            Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
+            self.Z = Z
+            self.xlim = xlim
+            self.ylim = ylim
+        if zlim is not None:
+            self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
+
+    def resize(self, scale):
+        """
+        Resize a `Raster`.
+
+        Arguments:
+            scale (float): Fraction of current size
+        """
+        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
+
+class DEM(Raster):
+    """
+    A `DEM` describes elevations on a regular 2-dimensional grid.
+
+    Arguments:
+        x (object): Either `xlim`, `x`, or `X`
+        y (object): Either `ylim`, `y`, or `Y`
+
+    Attributes:
+        Z (array): Grid of values on a regular xy grid
+        zlim (array): Limits of `Z` [min, max]
+        xlim,ylim (array): Outer bounds of the grid [left, right], [top, bottom]
+        x,y (array): Cell center coordinates as row vectors [left to right], [top to bottom]
+        X,Y (array): Cell center coordinates as grids equivalent to `Z`
+        min (array): Minimum bounding box coordinates [x, y, z]
+        max (array): Maximum bounding box coordinates [x, y, z]
+        n (array): Dimensions of `Z` [nx|cols, ny|rows]
+        d (array): Grid cell size [dx, dy]
+        datetime (datetime): Capture date and time
+
+    """
+
+    def __init__(self,Z, x=None,y=None,datetime=None):
+        Raster.__init__(self,Z,x=x,y=y,datetime=datetime)
+
+    @classmethod
+    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
         """
         Read DEM from raster file.
 
@@ -395,87 +597,7 @@ class DEM(Grid):
         nan_value = band.GetNoDataValue()
         if np.issubdtype(Z.dtype, np.floating) and nan_value:
             Z[Z == nan_value] = np.nan
-        return cls(Z, x=xlim, y=ylim, datetime=datetime, Z_sigma=Z_sigma)
-
-    @property
-    def Z(self):
-        return self._Z
-
-    @Z.setter
-    def Z(self, value):
-        if hasattr(self, '_Z'):
-            original_shape = self._Z.shape
-            self._Z = np.asarray(value, dtype=float)
-            self._clear_cache(['Zf'])
-            if self._Z.shape != original_shape:
-                self._clear_cache(['x', 'X', 'y', 'Y'])
-        else:
-            self._Z = np.asarray(value, dtype=float)
-
-    # ---- Properties (dependent) ----
-
-    @property
-    def zlim(self):
-        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
-        return np.array(value)
-
-    @property
-    def n(self):
-        return np.array(self.Z.shape[0:2][::-1])
-
-    # ---- Properties (cached) ----
-
-    @property
-    def Zf(self):
-        if self._Zf is None:
-            sign = np.sign(self.d).astype(int)
-            self._Zf = scipy.interpolate.RegularGridInterpolator(
-                (self.x[::sign[0]], self.y[::sign[1]]), self.Z.T[::sign[0], ::sign[1]])
-        return self._Zf
-
-    # ---- Methods (public) ----
-
-    def copy(self):
-        return DEM(self.Z.copy(), x=self.xlim.copy(), y=self.ylim.copy(), datetime=copy.copy(self.datetime))
-
-    def sample(self, xy, method='linear', bounds_error=True, fill_value=np.nan):
-        """
-        Sample `Z` at points.
-
-        Calls a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`).
-
-        Arguments:
-            xy (array): Point coordinates (n, 2)
-            method (str): Interpolation method
-            bounds_error (bool): Whether an error is thrown if `xy` are outside bounds
-            fill_value (number): Value to use for points outside bounds.
-                If `None`, values outside bounds are extrapolated.
-        """
-        Zf = self.Zf
-        Zf.bounds_error = bounds_error
-        Zf.fill_value = fill_value
-        return Zf(xy, method=method)
-
-    def resample(self, dem, method='linear', bounds_error=False, fill_value=np.nan):
-        xy = np.column_stack((dem.X.ravel(), dem.Y.ravel()))
-        Z = self.sample(xy, method=method, bounds_error=bounds_error, fill_value=fill_value)
-        self.Z = Z.reshape(dem.Z.shape)
-        self.xlim, self._x, self._X = self._parse_x(dem.X)
-        self.ylim, self._y, self._Y = self._parse_y(dem.Y)
-
-    def plot(self, array=None, cmap='gray', **kwargs):
-        """
-        Plot a DEM.
-
-        Arguments:
-            array (array): Values to plot. If `None`, `.Z` is used.
-            kwargs (dict): Arguments passed to `matplotlib.pyplot.imshow()`
-        """
-        if array is None:
-            array = self.Z
-        matplotlib.pyplot.imshow(array,
-            extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
-            cmap=cmap, **kwargs)
+        return cls(Z, x=xlim, y=ylim, datetime=datetime)
 
     def hillshade(self, azimuth=315, altitude=45, **kwargs):
         """
@@ -490,48 +612,6 @@ class DEM(Grid):
         """
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
-
-    def rasterize(self, xy, values, fun=np.mean):
-        """
-        Convert points to a raster image.
-
-        Arguments:
-            xy (array): Point coordinates (Nx2)
-            values (array): Point values
-            fun (function): Aggregate function to apply to values of overlapping points
-        """
-        is_in = self.inbounds(xy)
-        rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
-        return helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1],
-            values[is_in], self.Z.shape, fun=fun)
-
-    def crop(self, xlim=None, ylim=None, zlim=None):
-        """
-        Crop a `DEM`.
-
-        Arguments:
-            xlim (array_like): Crop bounds in x
-            ylim (array_like): Crop bounds in y
-            zlim (array_like): Crop bounds in z.
-                Values outside range are set to `np.nan`.
-        """
-        if xlim is not None or ylim is not None:
-            xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
-            Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
-            self.Z = Z
-            self.xlim = xlim
-            self.ylim = ylim
-        if zlim is not None:
-            self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
-
-    def resize(self, scale):
-        """
-        Resize a `DEM`.
-
-        Arguments:
-            scale (float): Fraction of current size
-        """
-        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
 
     def fill_crevasses(self, maximum_filter_size=5, gaussian_filter_sigma=5,
         mask=None, fill=False):
@@ -723,6 +803,9 @@ class DEM(Grid):
                 ind.extend(self.rowcol_to_idx(rowcols))
         # Apply
         self.Z.flat[ind] = value
+
+
+    
 
 class DEMInterpolant(object):
     """

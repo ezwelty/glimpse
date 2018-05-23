@@ -33,10 +33,11 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, dem, time_unit, viewshed=None, resample_method='systematic',
+    def __init__(self, observers, dem, dem_uncertainty, time_unit, viewshed=None, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
         self.dem = dem
+        self.dem_uncertainty = dem_uncertainty
         if isinstance(viewshed, np.ndarray):
             viewshed = DEM.DEM(Z=viewshed, x=self.dem.x, y=self.dem.y)
         self.viewshed = viewshed
@@ -86,7 +87,7 @@ class Tracker(object):
         if self.particles is None or len(self.particles) != n:
             self.particles = np.zeros((n, 6))
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
-        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2]) + self.dem.Z_sigma*np.random.randn(n)
+        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2]) + self.dem_uncertainty.sample(self.particles[:,0:2])*np.random.randn(n)
         self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
         self.particles[:, 5] = vz_sigma * np.random.randn(n)
         self._test_particles()
@@ -425,7 +426,7 @@ class Tracker(object):
         """
         log_likelihoods_observer = [self._compute_observer_log_likelihoods(obs, img)
             for obs, img in enumerate(imgs)]
-        log_likelihoods_dem = 1./(2*self.dem.Z_sigma**2)*(
+        log_likelihoods_dem = 1./(2*self.dem_uncertainty.sample(self.particles[:,0:2])**2)*(
             self.dem.sample(self.particles[:, 0:2]) - self.particles[:,2])**2
         return np.exp(-sum(log_likelihoods_observer) - log_likelihoods_dem)
 

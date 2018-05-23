@@ -1,5 +1,5 @@
 from .image import (Camera, Image, Exif)
 from .observer import (Observer)
 from .tracker import (Tracker)
-from .dem import (DEM, DEMInterpolant)
+from .dem import (DEM, DEMInterpolant,Raster)
 from . import (helpers, optimize, svg, convert)

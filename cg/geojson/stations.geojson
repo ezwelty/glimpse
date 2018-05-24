@@ -178,9 +178,9 @@
 			"name": "Juncture",
 			"fixed": true,
 			"viewdir": [-163.5, -14.5, -2],
-			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle). Ignored breaks: AK10_20090508_201432, AK10_20090825_060706.",
+			"notes": "Survey GPS. 2011: Position held fixed. Checked with aerial termini, excellent agreement (although most of the base of the ice cliff is not visible from this angle). Ignored breaks: AK10_20090508_201432, AK10_20090825_050706.",
 			"breaks": [{
-				"start": "AK10_20090825_060504",
+				"start": "AK10_20090825_050504",
 				"viewdir": [-163.5, -14, -3],
 				"notes": "service, small"
 			}]

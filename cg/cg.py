@@ -365,7 +365,7 @@ def terminus_lines(img, markup, correction=True):
     features = [(feature, feature['properties']['type'])
         for feature in glimpse.helpers.geojson_iterfeatures(geo)
         if feature['properties']['date'] == date_str]
-    type_order = ('Aerometric', 'Worldview', 'Landsat 8', 'Landsat 7', 'TerraSAR-X', 'SfM', 'Landsat 5')
+    type_order = ('aerometric', 'worldview', 'landsat-8', 'landsat-7', 'terrasar')
     order = [type_order.index(f[1]) for f in features]
     xy = features[np.argmin(order)][0]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))

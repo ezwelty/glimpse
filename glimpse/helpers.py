@@ -1520,3 +1520,117 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
         temp[nearest] = True
         selected &= temp
     return np.nonzero(selected)[0]
+
+# ---- Velocity analysis ----
+
+def triangle_area(xy):
+    """
+    Return the area of a triangle.
+
+    Arguments:
+        xy (array): Triangle vertices (3, 2)
+
+    Returns:
+        float: Triangle area
+    """
+    return 0.5 * np.linalg.det(np.hstack((np.ones((3, 1)), xy)))
+
+def triangle_centroid(xy):
+    """
+    Return the centroid of a triangle.
+
+    Arguments:
+        xy (array): Triangle vertices (3, 2)
+
+    Returns:
+        array: Triangle centroid (x, y)
+    """
+    return np.mean(xy, axis=0)
+
+def triangle_velocity_strain(xy, vxy):
+    """
+    Return the centroid velocity and strain of a triangle.
+
+    From Hubner et al. (2001). The Finite Element Method for Engineers.
+    4th edition. John Wiley & Sons. ISBN 0-471-37078-9
+
+    Arguments:
+        xy (array): Triangle vertices in counter-clockwise order (3, 2)
+        vxy (array): Velocity components at `xy` (3, 2)
+
+    Returns:
+        array: Centroid velocity (vx, vy)
+        array: Strain vector with components
+
+            - epsilon_xx: normal strain in x
+            - epsilon_yy: normal strain in y
+            - gamma_xy: shear strain
+    """
+    x, y = xy[:, 0], xy[:, 1]
+    idx_1 = [1, 2, 0]
+    idx_2 = [2, 0, 1]
+    # a1 = x2y3 - x3y2, a2 = x3y1 - x1y3, a3 = x1y2 - x2y1
+    a = x[idx_1] * y[idx_2] - x[idx_2] * y[idx_1]
+    # b1 = y2 - y3, b2 = y3 - y1, b3 = y1 - y2
+    b = y[idx_1] - y[idx_2]
+    # c1 = x3 - x2, c2 = x1 - x3, c3 = x2 - x1
+    c = x[idx_2] - x[idx_1]
+    # Centroid velocity
+    u, v = vxy[:, 0], vxy[:, 1]
+    centroid = triangle_centroid(xy)
+    area = triangle_area(xy)
+    velocity = (1 / (2 * area)) * np.array((
+        np.sum(a * u) + centroid[0] * np.sum(b * u) + centroid[1] * np.sum(c * u),
+        np.sum(a * v) + centroid[0] * np.sum(b * v) + centroid[1] * np.sum(c * v)))
+    # Strain
+    B = [[b[0], 0, b[1], 0, b[2], 0],
+        [0, c[0], 0, c[1], 0, c[2]],
+        [c[0], b[0], c[1], b[1], c[2], b[2]]]
+    delta = vxy.reshape(-1, 1)
+    strain = (1 / (2 * area)) * np.matmul(B, delta)
+    return velocity, strain.ravel()
+
+def strain_to_principal_strain(strain):
+    """
+    Convert strain vector to principal strain.
+
+    Arguments:
+        strain (iterable): Strain vector with components
+
+            - epsilon_xx: normal strain in x
+            - epsilon_yy: normal strain in y
+            - gamma_xy: shear strain
+
+    Returns:
+        float: Principal strain along x' (epsilon_max)
+        float: Principal strain along y' (epsilon_min)
+        float: Rotation of x' axis from x axis (theta_max)
+        float: Rotation of y' axis from x axis (theta_min)
+    """
+    # http://www.continuummechanics.org/principalstressesandstrains.html
+    theta = np.arctan2(strain[2], (strain[0] - strain[1])) * 0.5
+    cos, sin = np.cos(theta), np.sin(theta)
+    Q = np.array([(cos, sin), (-sin, cos)])
+    E = np.array([(strain[0], strain[2] * 0.5), (strain[2] * 0.5, strain[1])])
+    emax, emin = np.diag(np.matmul(Q, np.matmul(E, Q.T)))
+    return emax, emin, theta, theta + np.pi * 0.5
+
+def compute_strain(xy, vxy):
+    """
+    Return centroids, velocities, and strains of triangular elements.
+
+    Arguments:
+        xy (array): Point coordinates (n, 2)
+        vxy (array): Velocity components at `xy` (n, 2)
+
+    Returns:
+        array: Triangle centroids (m, 2)
+        array: Centroid velocities (m, 2)
+        array: Strain vectors (m, 3)
+    """
+    tri = scipy.spatial.Delaunay(xy)
+    centroids = [triangle_centroid(xy[indices]) for indices in tri.simplices]
+    temp = [triangle_velocity_strain(xy[indices], vxy[indices]) for indices in tri.simplices]
+    velocities = [x[0] for x in temp]
+    strains = [x[1] for x in temp]
+    return np.row_stack(centroids), np.row_stack(velocities), np.row_stack(strains)

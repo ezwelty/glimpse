@@ -131,7 +131,8 @@ def find_image(path):
             if os.path.isfile(image_path):
                 return image_path
 
-def load_images(station, services, use_exif=False, service_exif=False, anchors=False, **kwargs):
+def load_images(station, services, use_exif=False, service_exif=False, anchors=False,
+    viewdir=True, viewdir_as_anchor=False, **kwargs):
     """
     Return list of calibrated Image objects.
 
@@ -196,7 +197,8 @@ def load_images(station, services, use_exif=False, service_exif=False, anchors=F
             exif = glimpse.Exif(paths[index[0]])
         for j in index:
             basename = basenames[j]
-            calibrations = load_calibrations(image=basename, viewdir=basename,
+            calibrations = load_calibrations(image=basename,
+                viewdir=basename if viewdir else False,
                 station_estimate=station, merge=False, file_errors=False)
             if calibrations['image']:
                 calibration = glimpse.helpers.merge_dicts(
@@ -207,9 +209,11 @@ def load_images(station, services, use_exif=False, service_exif=False, anchors=F
                     service_calibration,
                     dict(viewdir=calibrations['station_estimate']['viewdir']))
                 anchor = False
-            if calibrations['viewdir']:
+            if viewdir and calibrations['viewdir']:
                 calibration = glimpse.helpers.merge_dicts(
                     calibration, calibrations['viewdir'])
+                if viewdir_as_anchor:
+                    anchor = True
             if use_exif:
                 exif = exifs[j]
             elif not service_exif:
@@ -280,7 +284,7 @@ def load_masks(images):
 
 # ---- Calibration controls ----
 
-def svg_controls(img, svg=None, keys=None, correction=True):
+def svg_controls(img, svg=None, keys=None, correction=True, step=None):
     """
     Return control objects for an Image.
 
@@ -305,13 +309,13 @@ def svg_controls(img, svg=None, keys=None, correction=True):
             if key == 'gcp':
                 controls.append(gcp_points(img, svg[key], correction=correction))
             elif key == 'coast':
-                controls.append(coast_lines(img, svg[key], correction=correction))
+                controls.append(coast_lines(img, svg[key], correction=correction, step=step))
             elif key == 'terminus':
-                controls.append(terminus_lines(img, svg[key], correction=correction))
+                controls.append(terminus_lines(img, svg[key], correction=correction, step=step))
             elif key == 'moraines':
-                controls.extend(moraines_mlines(img, svg[key], correction=correction))
+                controls.extend(moraines_mlines(img, svg[key], correction=correction, step=step))
             elif key == 'horizon':
-                controls.append(horizon_lines(img, svg[key], correction=correction))
+                controls.append(horizon_lines(img, svg[key], correction=correction, step=step))
     return controls
 
 def gcp_points(img, markup, correction=True):
@@ -331,7 +335,7 @@ def gcp_points(img, markup, correction=True):
         for key in markup))
     return glimpse.optimize.Points(img.cam, uv, xyz, correction=correction)
 
-def coast_lines(img, markup, correction=True):
+def coast_lines(img, markup, correction=True, step=None):
     """
     Return coast Lines object for an Image.
 
@@ -345,9 +349,9 @@ def coast_lines(img, markup, correction=True):
         os.path.join(CG_PATH, 'geojson', 'coast.geojson'), crs=32606)
     lxy = [feature['geometry']['coordinates'] for feature in geo['features']]
     lxyz = [np.hstack((xy, sea_height(xy, t=img.datetime))) for xy in lxy]
-    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
+    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction, step=step)
 
-def terminus_lines(img, markup, correction=True):
+def terminus_lines(img, markup, correction=True, step=None):
     """
     Return terminus Lines object for an Image.
 
@@ -365,13 +369,13 @@ def terminus_lines(img, markup, correction=True):
     features = [(feature, feature['properties']['type'])
         for feature in glimpse.helpers.geojson_iterfeatures(geo)
         if feature['properties']['date'] == date_str]
-    type_order = ('aerometric', 'worldview', 'landsat-8', 'landsat-7', 'terrasar')
+    type_order = ('aerometric', 'worldview', 'landsat-8', 'landsat-7', 'terrasar', 'tandem', 'arcticdem', 'landsat-5')
     order = [type_order.index(f[1]) for f in features]
     xy = features[np.argmin(order)][0]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))
-    return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction)
+    return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction, step=step)
 
-def horizon_lines(img, markup, correction=True):
+def horizon_lines(img, markup, correction=True, step=None):
     """
     Return horizon Lines object for an Image.
 
@@ -386,9 +390,9 @@ def horizon_lines(img, markup, correction=True):
     geo = glimpse.helpers.read_geojson(
         os.path.join(CG_PATH, 'geojson', 'horizons', station + '.geojson'), crs=32606)
     lxyz = [coords for coords in glimpse.helpers.geojson_itercoords(geo)]
-    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction)
+    return glimpse.optimize.Lines(img.cam, luv, lxyz, correction=correction, step=step)
 
-def moraines_mlines(img, markup, correction=True):
+def moraines_mlines(img, markup, correction=True, step=None):
     """
     Return list of moraine Lines objects for an Image.
 
@@ -405,7 +409,7 @@ def moraines_mlines(img, markup, correction=True):
     for key, moraine in markup.items():
         luv = tuple(moraine.values())
         xyz = geo['features'][key]['geometry']['coordinates']
-        mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction))
+        mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction, step=step))
     return mlines
 
 def sea_height(xy, t=None):
@@ -484,7 +488,7 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
     return images, controls, cam_params
 
 def camera_svg_controls(camera, size=1, force_size=False, keys=None,
-    correction=True, station_calib=False, camera_calib=False):
+    svgs=None, correction=True, step=None, station_calib=False, camera_calib=False):
     """
     Return all SVG control objects available for a camera.
 
@@ -494,6 +498,7 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
         force_size (bool): Whether to force `size` even if different aspect ratio
             than original size.
         keys (iterable): SVG layers to include
+        svgs (iterable): SVG basenames to include
         correction: Whether control objects should use elevation correction (bool)
             or arguments to `glimpse.helpers.elevation_corrections()`
         station_calib (bool): Whether to load station calibration. If `False`,
@@ -511,11 +516,13 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
     for svg_path in svg_paths:
         ids = parse_image_path(svg_path, sequence=True)
         if ids['camera'] == camera:
+            if svgs and ids['basename'] not in svgs:
+                continue
             calibration = load_calibrations(svg_path, camera=camera_calib,
                 station=station_calib, station_estimate=not station_calib, merge=True)
             img_path = find_image(svg_path)
             image = glimpse.Image(img_path, cam=calibration)
-            control = svg_controls(image, keys=keys, correction=correction)
+            control = svg_controls(image, keys=keys, correction=correction, step=step)
             if control:
                 image.cam.resize(size, force=force_size)
                 images.append(image)
@@ -545,11 +552,11 @@ def camera_motion_matches(camera, size=None, force_size=False,
     """
     motion = glimpse.helpers.read_json(os.path.join(CG_PATH, 'motion.json'))
     sequences = [item['paths'] for item in motion
-        if parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
+        if cg.parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
     all_images, all_matches, cam_params = [], [], []
     for sequence in sequences:
-        paths = [find_image(path) for path in sequence]
-        cams = [load_calibrations(path,  camera=camera_calib,
+        paths = [cg.find_image(path) for path in sequence]
+        cams = [cg.load_calibrations(path,  camera=camera_calib,
             station=station_calib, station_estimate=not station_calib, merge=True)
             for path in paths]
         images = [glimpse.Image(path, cam=cam)
@@ -716,7 +723,7 @@ def write_image_viewdirs(images, viewdirs=None):
     Arguments:
         images (iterable): Image objects
         viewdirs (iterable): Camera view directions to write.
-            If `None`, these are read from `images[i].cam.viewdirs`.
+            If `None`, these are read from `images[i].cam.viewdir`.
     """
     for i, img in enumerate(images):
         basename = glimpse.helpers.strip_path(img.path)

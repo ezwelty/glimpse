@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem, gdal, collections)
+    sharedmem, gdal, collections, pandas, sys)
 from . import (helpers)
 
 class Camera(object):
@@ -229,6 +229,10 @@ class Camera(object):
         OpenCV distortion coefficients.
         """
         return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
+
+    @property
+    def shape(self):
+        return int(self.imgsz[1]), int(self.imgsz[0])
 
     # ---- Methods (static) ----
 
@@ -574,6 +578,96 @@ class Camera(object):
             angles = np.column_stack((angles, r))
         return angles
 
+    def project_dem(self, dem, values=None, mask=None, tile_size=(256, 256),
+        scale=1, scale_limits=(1, 1), aggregate=np.mean,
+        parallel=False, correction=False):
+        """
+        Return an image simulated from a digital elevation model.
+
+        If `parallel` is True and inputs are large, ensure that `dem`, `values`,
+        and `mask` are in shared memory (see `sharedmem.copy()`).
+
+        Arguments:
+            dem (`Raster`): `Raster` object containing elevations.
+            values (array): Values to use in building the image.
+                Must have the same shape as `dem.Z`.
+                If `None`, distance from the camera (along the optical axis)
+                is used, yielding a depth map.
+            mask (array): Boolean mask of cells of `dem` to include.
+                Must have the same shape as `dem.Z`.
+                If `None`, only NaN cells in `dem.Z` are skipped.
+            tile_size (iterable): Target size of tiles (see `Grid.tile_indices()`)
+            scale (float): Target `dem` cells per image pixel.
+                Each tile is rescaled based on the average distance from the camera.
+            scale_limits (iterable): Min and max values of `scale`
+            aggregate (function): Function with which to aggregate values projected
+                onto the same image pixel
+            parallel: Number of tiles to project in parallel (int),
+                or whether to detect in parallel (bool). If `True`,
+                all available CPU cores are used.
+            correction: Whether or how to apply elevation corrections (see `self.project`)
+        """
+        assert values is None or values.shape == dem.shape
+        assert mask is None or mask.shape == dem.shape
+        if mask is None:
+            mask = ~np.isnan(dem.Z)
+        has_values = values is not None
+        parallel = helpers._parse_parallel(parallel)
+        # Generate DEM block indices
+        tile_indices = dem.tile_indices(size=tile_size)
+        ntiles = len(tile_indices)
+        # Initialize image
+        I = np.full(self.shape, np.nan)
+        def process(i, ij):
+            tile_mask = mask[ij]
+            if not np.count_nonzero(tile_mask):
+                return i
+            tile = dem[ij]
+            if has_values:
+                tile_values = values[ij]
+            # Scale tile based on distance from camera
+            mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
+            _, distance = self._world2camera(np.atleast_2d(mean_xyz), return_distances=True)
+            tile_scale = scale * np.abs(tile.d).mean() / (distance / self.f.mean())
+            tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
+            if tile_scale != 1:
+                tile.resize(tile_scale)
+                tile_mask = scipy.ndimage.zoom(tile_mask, zoom=float(tile_scale), order=0)
+                if has_values:
+                    tile_values = scipy.ndimage.zoom(tile_values, zoom=float(tile_scale), order=1)
+            # Project tile
+            xyz = helpers.grid_to_points((tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask]))
+            if has_values:
+                uv = self.project(xyz, correction=correction)
+            else:
+                xy, distances = self._world2camera(xyz, correction=correction, return_distances=True)
+                uv = self._camera2image(xy)
+            is_in = self.inframe(uv)
+            if not np.count_nonzero(is_in):
+                return i
+            rc = uv[is_in, ::-1].astype(int)
+            if has_values:
+                tile_values = tile_values[tile_mask][is_in]
+            else:
+                tile_values = distances[is_in]
+            df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1], value=tile_values))
+            groups = df.groupby(('row', 'col')).aggregate(aggregate).reset_index()
+            idx = np.ravel_multi_index((
+                groups.row.as_matrix().astype(int),
+                groups.col.as_matrix().astype(int)),
+                self.shape)
+            return i, idx, groups.value.as_matrix()
+        def reduce(i, idx=None, values=None):
+            helpers._print_progress(i, ntiles, close=False)
+            if idx is not None:
+                I.flat[idx] = values
+        with sharedmem.MapReduce(np=parallel) as pool:
+            pool.map(
+                func=process, reduce=reduce, star=True,
+                sequence=tuple(zip(range(ntiles), tile_indices)))
+        sys.stdout.write('\n')
+        return I
+
     # ---- Methods (private) ----
 
     def _radial_distortion(self, r2):
@@ -824,7 +918,7 @@ class Camera(object):
         continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
         return continuous_row and continuous_col
 
-    def _world2camera(self, xyz, directions=False, correction=False):
+    def _world2camera(self, xyz, directions=False, correction=False, return_distances=False):
         """
         Project world coordinates to camera coordinates.
 
@@ -852,7 +946,10 @@ class Camera(object):
         # Set points behind camera to NaN
         behind = xyz_c[:, 2] <= 0
         xy[behind, :] = np.nan
-        return xy
+        if return_distances:
+            return xy, xyz_c[:, 2]
+        else:
+            return xy
 
     def _camera2world(self, xy):
         """
@@ -888,6 +985,19 @@ class Camera(object):
         xy = (uv - (self.imgsz * 0.5 + self.c)) * (1 / self.f)
         xy = self._undistort(xy)
         return xy
+
+    def _image2camera_grid_ideal(self, uv):
+        """
+        Project image to camera coordinates.
+
+        Faster version for an ideal camera and regularly gridded image coordinates.
+
+        Arguments:
+            uv (iterable): Vectors (u, v) of regularly gridded image coordinates
+        """
+        x = (uv[0] - (self.imgsz[0] * 0.5 + self.c[0])) * (1 / self.f[0])
+        y = (uv[1] - (self.imgsz[1] * 0.5 + self.c[1])) * (1 / self.f[1])
+        return helpers.grid_to_points(np.meshgrid(x, y))
 
 class Exif(object):
     """

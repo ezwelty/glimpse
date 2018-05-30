@@ -4,22 +4,41 @@ from .imports import (np, scipy, gdal, matplotlib, datetime, copy)
 from . import (helpers)
 
 class Grid(object):
+    """
+    A `Grid` describes a regular rectangular grid in both array coordinates
+        and any arbitrary 2-dimensional cartesian coordinate system.
 
-    def __init__(self, n, xlim=None, ylim=None):
+    Arguments:
+        x (array-like): Either `xlim`, `x`, or `X`
+        y (array-like): Either `ylim`, `y`, or `Y`
+
+    Attributes:
+        xlim, ylim (array): Outer bounds of the grid (left, right), (top, bottom)
+        n (array): Grid dimensions (nx|cols, ny|rows)
+        d (array): Grid cell size (dx, dy)
+        x, y (array): Cell center coordinates as row vectors (left to right), (top to bottom)
+        X, Y (array): Cell center coordinates as matrices with dimensions `n`
+        min (array): Minimum bounding box coordinates (x, y)
+        max (array): Maximum bounding box coordinates (x, y)
+        box2d (array): 2-dimensional bounding box (minx, miny, maxx, maxy)
+    """
+
+    def __init__(self, n, x=None, y=None):
         self.n = np.atleast_1d(n).astype(int)
         if len(self.n) < 2:
             self.n = np.repeat(self.n, 2)
-        if xlim is None:
-            xlim = (0, self.n[0])
-        self.xlim = np.atleast_1d(xlim).astype(float)
-        if ylim is None:
-            ylim = (0, self.n[1])
-        self.ylim = np.atleast_1d(ylim).astype(float)
-        # Placeholders
-        self._x, self._y = None, None
-        self._X, self._Y = None, None
+        if x is None:
+            x = (0, self.n[0])
+        self.xlim, self._x, self._X = self._parse_x(x)
+        if y is None:
+            y = (0, self.n[1])
+        self.ylim, self._y, self._Y = self._parse_y(y)
 
     # ---- Properties (dependent) ---- #
+
+    @property
+    def shape(self):
+        return self.n[1], self.n[0]
 
     @property
     def d(self):
@@ -34,9 +53,16 @@ class Grid(object):
         return np.array((max(self.xlim), max(self.ylim)))
 
     @property
+    def box2d(self):
+        return np.hstack((self.min, self.max))
+
+    @property
     def x(self):
         if self._x is None:
-            value = np.linspace(self.min[0] + abs(self.d[0]) / 2, self.max[0] - abs(self.d[0]) / 2, self.n[0])
+            value = np.linspace(
+                start=self.min[0] + abs(self.d[0]) / 2,
+                stop=self.max[0] - abs(self.d[0]) / 2,
+                num=self.n[0])
             if self.d[0] < 0:
                 self._x = value[::-1]
             else:
@@ -52,7 +78,10 @@ class Grid(object):
     @property
     def y(self):
         if self._y is None:
-            value = np.linspace(self.min[1] + abs(self.d[1]) / 2, self.max[1] - abs(self.d[1]) / 2, self.n[1])
+            value = np.linspace(
+                start=self.min[1] + abs(self.d[1]) / 2,
+                stop=self.max[1] - abs(self.d[1]) / 2,
+                num=self.n[1])
             if self.d[1] < 0:
                 self._y = value[::-1]
             else:
@@ -81,8 +110,8 @@ class Grid(object):
         raster = gdal.Open(path, gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         grid = cls(n=(raster.RasterXSize, raster.RasterYSize),
-            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
-            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+            x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
@@ -177,17 +206,28 @@ class Grid(object):
         """
         self.n = np.floor(self.n * scale + 0.5).astype(int)
 
-    def inbounds(self, xy):
+    def inbounds(self, xy, grid=False):
         """
         Test whether points are in (or on) bounds.
 
         Arguments:
-            xy (array): Point coordinates (Nx2)
+            xy (array-like): Input coordinates x and y, as either:
+
+                - If `grid` is True, point coordinates (n, 2)
+                - If `grid` is False, coordinate vectors (n, ), (m, )
+
+            grid (bool): Whether `xy` defines a grid or invidual points
 
         Returns:
-            array: Whether each point is inbounds (Nx1)
+            array (`grid` is False): Whether each point is inbounds (n, 1)
+            tuple (`grid` is True): Whether each grid column or row is inbounds (n, ), (m, )
         """
-        return np.logical_and(xy >= self.min[0:2], xy <= self.max[0:2]).all(axis = 1)
+        if grid:
+            return (
+                (xy[0] >= self.min[0]) & (xy[0] <= self.max[0]),
+                (xy[1] >= self.min[1]) & (xy[1] <= self.max[1]))
+        else:
+            return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis = 1)
 
     def snap_xy(self, xy, centers=False, edges=False, inbounds=True):
         """
@@ -321,42 +361,69 @@ class Grid(object):
         matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
         matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
 
+    def tile_indices(self, size):
+        """
+        Return slice objects that chop the grid into tiles.
+
+        Arguments:
+            size (iterable): Target tile size (nx, ny)
+
+        Returns:
+            tuple: Pairs of slice objects (rows, cols) with which to subset
+                gridded values
+        """
+        n = np.round(self.n / size).astype(int)
+        xi = np.floor(np.arange(self.n[0]) / np.ceil(self.n[0] / n[0]))
+        yi = np.floor(np.arange(self.n[1]) / np.ceil(self.n[1] / n[1]))
+        xranges = np.insert(np.searchsorted(xi, np.unique(xi), side='right'), 0, 0)
+        yranges = np.insert(np.searchsorted(yi, np.unique(yi), side='right'), 0, 0)
+        return tuple((slice(*yranges[i:(i + 2)]), slice(*xranges[j:(j + 2)]))
+            for i in range(len(yranges) - 1) for j in range(len(xranges) - 1))
+
 class Raster(Grid):
     """
     A `Raster` describes data on a regular 2-dimensional grid.
 
     Arguments:
-        x (object): Either `xlim`, `x`, or `X`
-        y (object): Either `ylim`, `y`, or `Y`
+        x (array-like): Either `xlim`, `x`, or `X`
+        y (array-like): Either `ylim`, `y`, or `Y`
 
-    Attributes:
-        Z (array): Grid of values on a regular xy grid
-        zlim (array): Limits of `Z` [min, max]
-        xlim,ylim (array): Outer bounds of the grid [left, right], [top, bottom]
-        x,y (array): Cell center coordinates as row vectors [left to right], [top to bottom]
-        X,Y (array): Cell center coordinates as grids equivalent to `Z`
-        min (array): Minimum bounding box coordinates [x, y, z]
-        max (array): Maximum bounding box coordinates [x, y, z]
-        n (array): Dimensions of `Z` [nx|cols, ny|rows]
-        d (array): Grid cell size [dx, dy]
+    Attributes (in addition to those inherited from `Grid`):
+        Z (array): Grid of raster values
+        zlim (array): Limits of raster values (nanmin, nanmax)
+        box3d (array): 3-dimensional bounding box (minx, miny, minz, maxx, maxy, maxz)
         datetime (datetime): Capture date and time
     """
 
     def __init__(self, Z, x=None, y=None, datetime=None):
-        if np.shape(Z):
-            self.xlim, self._x, self._X = self._parse_x(x)
-            self.ylim, self._y, self._Y = self._parse_y(y)
-            self.Z = Z
-        else:
-            if x is not None and y is not None:
-                self.xlim, self._x, self._X = self._parse_x(x)
-                self.ylim, self._y, self._Y = self._parse_y(y)
-                self.Z = Z*np.ones((self.y.shape[0],self.x.shape[0]))
-            else:
-                print('Raster creation failed because neither coordinates nor an array were provided!')
-
-        self._Zf = None
+        self.Z = Z
+        self.xlim, self._x, self._X = self._parse_x(x)
+        self.ylim, self._y, self._Y = self._parse_y(y)
         self.datetime = datetime
+        # Placeholders
+        self._Zf = None
+
+    def __getitem__(self, indices):
+        if not isinstance(indices, tuple):
+            indices = (indices, slice(None))
+        if not all((isinstance(idx, (int, slice)) for idx in indices)):
+            raise IndexError('Only integers and slices are valid indices')
+        i, j = indices[0], indices[1]
+        if not isinstance(i, slice):
+            i = slice(i, i + 1)
+        if not isinstance(j, slice):
+            j = slice(j, j + 1)
+        d = self.d
+        if i.step and i.step > 1:
+            d[1] *= i.step
+        if j.step and j.step > 1:
+            d[0] *= j.step
+        x, y = self.x[j], self.y[i]
+        if len(x) < 3:
+            x = x[[0, -1]] + (-0.5, 0.5) * d[0:1]
+        if len(y) < 3:
+            y = y[[0, -1]] + (-0.5, 0.5) * d[1:2]
+        return type(self)(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
     def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
@@ -411,14 +478,14 @@ class Raster(Grid):
 
     @Z.setter
     def Z(self, value):
+        if not isinstance(value, np.ndarray):
+            value = np.asarray(value)
         if hasattr(self, '_Z'):
-            original_shape = self._Z.shape
-            self._Z = np.asarray(value, dtype=float)
-            self._clear_cache(['Zf'])
-            if self._Z.shape != original_shape:
+            if value.shape != self._Z.shape:
                 self._clear_cache(['x', 'X', 'y', 'Y'])
-        else:
-            self._Z = np.asarray(value, dtype=float)
+            if value is not self._Z:
+                self._clear_cache(['Zf'])
+        self._Z = value
 
     # ---- Properties (dependent) ----
 
@@ -429,7 +496,12 @@ class Raster(Grid):
 
     @property
     def n(self):
-        return np.array(self.Z.shape[0:2][::-1])
+        return np.array(self.Z.shape[0:2][::-1]).astype(int)
+
+    @property
+    def box3d(self):
+        zlim = self.zlim
+        return np.hstack((self.min, zlim.min(), self.max, zlim.max()))
 
     # ---- Properties (cached) ----
 
@@ -444,40 +516,97 @@ class Raster(Grid):
     # ---- Methods (public) ----
 
     def copy(self):
-        return self.__class__(self.Z.copy(), x=self.xlim.copy(), y=self.ylim.copy(), datetime=copy.copy(self.datetime))
+        return self.__class__(
+            self.Z.copy(), x=self.xlim.copy(), y=self.ylim.copy(),
+            datetime=copy.copy(self.datetime))
 
-    def sample(self, xy, method='linear', bounds_error=True, fill_value=np.nan):
+    def sample(self, xy, grid=False, order=1, bounds_error=True, fill_value=np.nan):
         """
-        Sample `Z` at points.
+        Sample `Raster` at points.
 
-        Calls a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`).
+        If `grid` is False:
+
+            - Uses a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`)
+            - Supports interpolation `order` 0 and 1
+            - Faster for small sets of points
+
+        If `grid` is True:
+
+            - Uses a `scipy.interpolate.RectBivariateSpline` object
+            - Supports interpolation `order` 1 to 5
+            - Much faster for large grids
 
         Arguments:
-            xy (array): Point coordinates (n, 2)
-            method (str): Interpolation method
+            xy (array-like): Input coordinates x and y, as either:
+
+                - If `grid` is True, point coordinates (n, 2)
+                - If `grid` is False, coordinate vectors (n, ), (m, )
+
+            grid (bool): Whether `xy` defines a grid or invidual points.
+            order (int): Interpolation order
+                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic)
             bounds_error (bool): Whether an error is thrown if `xy` are outside bounds
             fill_value (number): Value to use for points outside bounds.
                 If `None`, values outside bounds are extrapolated.
-        """
-        Zf = self.Zf
-        Zf.bounds_error = bounds_error
-        Zf.fill_value = fill_value
-        return Zf(xy, method=method)
 
-    def resample(self, raster, method='linear', bounds_error=False, fill_value=np.nan):
-        xy = np.column_stack((raster.X.ravel(), raster.Y.ravel()))
-        Z = self.sample(xy, method=method, bounds_error=bounds_error, fill_value=fill_value)
-        self.Z = Z.reshape(raster.Z.shape)
-        self.xlim, self._x, self._X = self._parse_x(raster.X)
-        self.ylim, self._y, self._Y = self._parse_y(raster.Y)
-
-    def plot(self, array=None, cmap='gray', **kwargs):
+        Returns:
+            array: Raster value at each point,
+                either as (n, ) if `grid` is False or (m, n) if `grid` is True
         """
-        Plot a `Raster'.
+        if grid:
+            kx, ky = order, order
+            return self._sample_grid(xy, kx=kx, ky=ky,
+                bounds_error=bounds_error, fill_value=fill_value)
+        else:
+            methods = ('nearest', 'linear', 'quadratic', 'cubic', 'quartic', 'quintic')
+            Zf = self.Zf
+            Zf.bounds_error = bounds_error
+            Zf.fill_value = fill_value
+            return Zf(xy, method=methods[order])
+
+    def _sample_grid(self, xy, kx=1, ky=1, s=0, bounds_error=True, fill_value=np.nan):
+        x, y = xy
+        if bounds_error or fill_value is not None:
+            xout = (x < self.xlim.min()) | (x > self.xlim.max())
+            yout = (y < self.ylim.min()) | (y > self.ylim.max())
+            if bounds_error:
+                if xout.any() or yout.any():
+                    raise ValueError('Some of the sampling coordinates are out of bounds')
+        signs = np.sign(self.d).astype(int)
+        fun = scipy.interpolate.RectBivariateSpline(
+            self.y[::signs[1]], self.x[::signs[0]],
+            self.Z[::signs[1], ::signs[0]],
+            bbox=(self.ylim.min(), self.ylim.max(), self.xlim.min(), self.xlim.max()),
+            kx=kx, ky=ky, s=s)
+        xdir = 1 if (len(x) < 2) or x[1] > x[0] else -1
+        ydir = 1 if (len(y) < 2) or y[1] > y[0] else -1
+        array = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
+        if fill_value is not None:
+            array[yout, :] = fill_value
+            array[:, xout] = fill_value
+        return array
+
+    def resample(self, grid, order=1, bounds_error=False, fill_value=np.nan):
+        """
+        Resample `Raster`.
 
         Arguments:
-            array (array): Values to plot. If `None`, `.Z` is used.
-            kwargs (dict): Arguments passed to `matplotlib.pyplot.imshow()`
+            grid (`Grid`): Grid cell centers at which to sample
+            ...: Additional arguments described in `self.sample()`
+        """
+        array = self.sample((grid.x, grid.y), grid=True,
+            bounds_error=bounds_error, fill_value=np.nan, order=order)
+        self.Z = array
+        self.xlim, self.ylim = grid.xlim, grid.ylim
+        self._x, self._y = grid.x, grid.y
+
+    def plot(self, array=None, **kwargs):
+        """
+        Plot `Raster`.
+
+        Arguments:
+            array (array): Values to plot. If `None`, `self.Z` is used.
+            **kwargs: Arguments passed to `matplotlib.pyplot.imshow()`
         """
         if array is None:
             array = self.Z
@@ -501,56 +630,68 @@ class Raster(Grid):
 
     def crop(self, xlim=None, ylim=None, zlim=None):
         """
-        Crop a `Raster`.
+        Crop `Raster`.
 
         Arguments:
             xlim (array_like): Crop bounds in x
             ylim (array_like): Crop bounds in y
             zlim (array_like): Crop bounds in z.
-                Values outside range are set to `np.nan`.
+                Values outside range are set to `np.nan` (requires floating type).
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
-            Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
-            self.Z = Z
+            self.Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
             self.xlim = xlim
             self.ylim = ylim
         if zlim is not None:
+            if not issubclass(self.Z.dtype.type, np.floating):
+                raise ValueError('Z must be floating to mask with NaN')
             self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
 
-    def resize(self, scale):
+    def resize(self, scale, order=1):
         """
-        Resize a `Raster`.
+        Resize `Raster`.
 
         Arguments:
             scale (float): Fraction of current size
+            order (int): Interpolation order
+                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic)
         """
-        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=1)
+        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=order)
+
+    def fill_circle(self, center, radius, value=np.nan):
+        """
+        Fill a circle with a fixed value.
+
+        Arguments:
+            center (iterable): Circle center (x, y)
+            radius (float): Circle radius
+            value (scalar): Fill value
+        """
+        # Circle indices
+        rowcol = self.xy_to_rowcol(np.atleast_2d(center[0:2]), snap=True)
+        r = np.round(radius / self.d[0])
+        xyi = helpers.bresenham_circle(rowcol[0, ::-1], r).astype(int)
+        # Filled circle indices
+        ind = []
+        y = np.unique(xyi[:, 1])
+        yin = (y > -1) & (y < self.n[1])
+        for yi in y[yin]:
+            xb = xyi[xyi[:, 1] == yi, 0]
+            xi = range(max(xb.min(), 0), min(xb.max(), self.n[0] - 1) + 1)
+            if xi:
+                rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
+                ind.extend(self.rowcol_to_idx(rowcols))
+        # Apply
+        self.Z.flat[ind] = value
 
 class DEM(Raster):
     """
     A `DEM` describes elevations on a regular 2-dimensional grid.
-
-    Arguments:
-        x (object): Either `xlim`, `x`, or `X`
-        y (object): Either `ylim`, `y`, or `Y`
-
-    Attributes:
-        Z (array): Grid of values on a regular xy grid
-        zlim (array): Limits of `Z` [min, max]
-        xlim,ylim (array): Outer bounds of the grid [left, right], [top, bottom]
-        x,y (array): Cell center coordinates as row vectors [left to right], [top to bottom]
-        X,Y (array): Cell center coordinates as grids equivalent to `Z`
-        min (array): Minimum bounding box coordinates [x, y, z]
-        max (array): Maximum bounding box coordinates [x, y, z]
-        n (array): Dimensions of `Z` [nx|cols, ny|rows]
-        d (array): Grid cell size [dx, dy]
-        datetime (datetime): Capture date and time
-
     """
 
-    def __init__(self,Z, x=None,y=None,datetime=None):
-        Raster.__init__(self,Z,x=x,y=y,datetime=datetime)
+    def __init__(self, Z, x=None, y=None, datetime=None):
+        Raster.__init__(self, Z=Z, x=x, y=y, datetime=datetime)
 
     @classmethod
     def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
@@ -576,8 +717,8 @@ class DEM(Raster):
         transform = raster.GetGeoTransform()
         grid = Grid(
             n=(raster.RasterXSize, raster.RasterYSize),
-            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
-            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+            x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
@@ -785,27 +926,6 @@ class DEM(Raster):
         else:
             # Starts with not-isnan group
             return splits[0::2]
-
-    def fill_circle(self, center, radius, value=np.nan):
-        # Circle indices
-        rowcol = self.xy_to_rowcol(np.atleast_2d(center[0:2]), snap=True)
-        r = np.round(radius / self.d[0])
-        xyi = helpers.bresenham_circle(rowcol[0, ::-1], r).astype(int)
-        # Filled circle indices
-        ind = []
-        y = np.unique(xyi[:, 1])
-        yin = (y > -1) & (y < self.n[1])
-        for yi in y[yin]:
-            xb = xyi[xyi[:, 1] == yi, 0]
-            xi = range(max(xb.min(), 0), min(xb.max(), self.n[0] - 1) + 1)
-            if xi:
-                rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
-                ind.extend(self.rowcol_to_idx(rowcols))
-        # Apply
-        self.Z.flat[ind] = value
-
-
-    
 
 class DEMInterpolant(object):
     """

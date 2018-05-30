@@ -456,7 +456,7 @@ class Matches(object):
         if mtype is type(self):
             return self
         else:
-            return mtype(cams=self.cams, uvs=self.uvs)
+            return mtype(cams=self.cams, uvs=self.uvs, weights=self.weights)
 
     def resize(self, size=None, force=False):
         """
@@ -480,6 +480,35 @@ class Matches(object):
                 self.uvs[i] = self.uvs[i] * scale
                 self.imgszs[i] = cam.imgsz.copy()
 
+    def filter(self, max_distance=None, max_error=None, min_weight=None, n_best=None, scaled=False):
+        selected = np.ones(self.size, dtype=bool)
+        if min_weight:
+            selected &= self.weights >= min_weight
+        if max_distance:
+            if any(self.cams[0].imgsz != self.cams[1].imgsz):
+                raise ValueError('Cameras have different image sizes')
+            if scaled:
+                max_distance = max_distance * self.cams[0].imgsz.max()
+            distances = np.linalg.norm(self.uvs[1][selected] - self.uvs[0][selected], axis=1)
+            selected[selected] &= distances <= max_distance
+        if max_error:
+            if scaled:
+                max_error = max_error * self.cams[0].imgsz.max()
+            errors = np.linalg.norm(self.observed(index=selected) - self.predicted(index=selected), axis=1)
+            selected[selected] &= errors <= max_error
+        if n_best:
+            weight_order = np.flip(np.argsort(self.weights[selected]), axis=0) # descending
+            indices = weight_order[:min(n_best, len(weight_order))]
+            # NOTE: Switch from boolean to integer indexing
+            selected = np.arange(len(selected))[selected][indices]
+        if self.uvs is not None:
+            self.uvs = [uv[selected] for uv in self.uvs]
+        if self.weights is not None:
+            self.weights = self.weights[selected]
+        # HACK: Support for RotationMatches
+        if getattr(self, 'xys', None) is not None:
+            self.xys = [xy[selected] for xy in self.xys]
+
 class RotationMatches(Matches):
     """
     `RotationMatches` store image-image point correspondences for cameras seperated
@@ -498,10 +527,11 @@ class RotationMatches(Matches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs=None, xys=None):
+    def __init__(self, cams, uvs=None, xys=None, weights=None):
         self.cams = cams
         self.uvs = self._build_uvs(uvs=uvs, xys=xys)
         self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self.weights = weights
         self._test_matches()
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
@@ -562,9 +592,9 @@ class RotationMatches(Matches):
             return self
         elif mtype is Matches:
             uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
-            return mtype(cams=self.cams, uvs=uvs)
+            return mtype(cams=self.cams, uvs=uvs, weights=self.weights)
         else:
-            return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys)
+            return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights)
 
 class RotationMatchesXY(RotationMatches):
     """
@@ -587,10 +617,11 @@ class RotationMatchesXY(RotationMatches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs=None, xys=None):
+    def __init__(self, cams, uvs=None, xys=None, weights=None):
         self.cams = cams
         self.uvs = uvs
         self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self.weights = weights
         self._test_matches()
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
@@ -656,10 +687,11 @@ class RotationMatchesXYZ(RotationMatches):
         size (int): Number of point pairs
     """
 
-    def __init__(self, cams, uvs=None, xys=None):
+    def __init__(self, cams, uvs=None, xys=None, weights=None):
         self.cams = cams
         self.uvs = uvs
         self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self.weights = weights
         self._test_matches()
         self._test_rotation_matches()
         # [imgsz, f, c, k, p]
@@ -1193,6 +1225,12 @@ class ObserverCameras(object):
             `scipy.optimize.OptimizeResult`: The optimization result.
                 Attributes include solution array `x`, boolean `success`, and `message`.
         """
+        # Ensure matches are in COO sparse matrix format
+        if isinstance(self.matches, scipy.sparse.coo.coo_matrix):
+            matches = self.matches
+        else:
+            matches = scipy.sparse.coo_matrix(matches)
+        # Define combined objective, jacobian function
         def fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
             self.set_cameras(viewdirs=viewdirs)
@@ -1201,26 +1239,23 @@ class ObserverCameras(object):
             for i in self.anchors:
                 objective += (anchor_weight / 2.0) * np.sum((viewdirs[i] - self.viewdirs[i])**2)
                 gradients[i] += anchor_weight * (viewdirs[i] - self.viewdirs[i])
-            n = len(self.observer.images)
-            for i in range(n - 1):
-                for j in range(i + 1, n):
-                    m = self.matches[i, j]
-                    if m:
-                        # Project matches
-                        dxyz = m.predicted(cam=0) - m.predicted(cam=1)
-                        objective += np.sum(np.abs(dxyz))
-                        # i -> j
-                        xy_hat = np.column_stack((m.xys[0], np.ones(m.size)))
-                        dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
-                        delta = np.sign(dxyz).reshape(-1, 3, 1)
-                        gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
-                        gradients[i] += gradient
-                        # j -> i
-                        gradients[j] -= gradient
+            for m, i, j in zip(matches.data, matches.row, matches.col):
+                # Project matches
+                dxyz = m.predicted(cam=0) - m.predicted(cam=1)
+                objective += np.sum(np.abs(dxyz))
+                # i -> j
+                xy_hat = np.column_stack((m.xys[0], np.ones(m.size)))
+                dD_dw = np.matmul(m.cams[0].Rprime, xy_hat.T)
+                delta = np.sign(dxyz).reshape(-1, 3, 1)
+                gradient = np.sum(np.matmul(dD_dw.T, delta).T, axis=2).squeeze()
+                gradients[i] += gradient
+                # j -> i
+                gradients[j] -= gradient
             # Update console output
             sys.stdout.write('\r' + str(objective))
             sys.stdout.flush()
             return objective, gradients.ravel()
+        # Optimize camera view directions
         viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
         result = scipy.optimize.minimize(
             fun=fun, x0=viewdirs_0, jac=True, method=method, **params)
@@ -1408,15 +1443,16 @@ class KeypointMatcher(object):
             See https://docs.opencv.org/master/d7/dbd/group__imgproc.html#gad689d2607b7b3889453804f414ab1018.
 
     Attributes:
-        images (iterable): Image objects in ascending temporal order
+        images (array): Image objects in ascending temporal order
         clahe (cv2.CLAHE): CLAHE object
+        matches (scipy.sparse.coo.coo_matrix): Sparse matrix of image-image `Matches`
     """
 
     def __init__(self, images, clahe=False):
         dts = np.diff([img.datetime for img in images])
         if np.any(dts < datetime.timedelta(0)):
             raise ValueError('Images are not in ascending temporal order')
-        self.images = images
+        self.images = np.asarray(images)
         if clahe is False:
             self.clahe = None
         else:
@@ -1460,10 +1496,7 @@ class KeypointMatcher(object):
         # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks, ) * len(self.images)
-        if parallel is True:
-            parallel = sharedmem.cpu_count()
-        elif parallel is False:
-            parallel = 0
+        parallel = helpers._parse_parallel(parallel)
         if parallel and any((img.keypoints_path is None for img in self.images)):
             raise ValueError('Image.keypoints_path must be set for parallel processing')
         # Define parallel process
@@ -1483,8 +1516,10 @@ class KeypointMatcher(object):
         with sharedmem.MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def build_matches(self, maxdt=None, min_nearest=0, path=None, overwrite=False,
-        clear_keypoints=True, clear_matches=False, parallel=False, weights=False, **params):
+    def build_matches(self, maxdt=None, min_nearest=0, seq=None, imgs=None,
+        path=None, overwrite=False, skip_missing=False, clear_keypoints=True,
+        clear_matches=False, parallel=False, weights=False,
+        as_type=None, filter=None, **params):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -1498,9 +1533,16 @@ class KeypointMatcher(object):
                 pairs of images to match. If `None`, all pairs are matched.
             min_nearest (int): Minimum nearest neighbors to match on either side
                 of image (overrides `maxdt`)
+            seq (iterable): Positive index of neighbors to match to each image
+                (relative to 0). Is in addition to `maxdt` and `min_nearest`.
+            imgs (iterable): Index of images to require at least one of
+                in each matched image pair. If `None`, all image pairs meeting
+                the criteria are matched.
             path (str): Directory for match files.
                 If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
+            skip_missing (bool): Whether to skip building and writing a match if
+                file is missing
             clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
             clear_matches (bool): Whether to clear matches rather than return them
                 (requires `path`). Useful for avoiding memory overruns when
@@ -1510,14 +1552,14 @@ class KeypointMatcher(object):
                 all available CPU cores are used.
             weights (bool): Whether to include weights in `Matches` objects,
                 computed as the inverse of the maximum descriptor-distance ratio
+            filter (dict): Arguments to `optimize.Matches.filter()`.
+                If truthy, `Matches` are filtered before being saved to `self.matches`.
+                Ignored if `clear_matches=True`.
             **params: Additional arguments to `optimize.match_keypoints()`
         """
         if clear_matches and not path:
             raise ValueError('path must be set when clear_matches=True')
-        if parallel is True:
-            parallel = sharedmem.cpu_count()
-        elif parallel is False:
-            parallel = 0
+        parallel = helpers._parse_parallel(parallel)
         params = helpers.merge_dicts(params, dict(return_ratios=weights))
         # Compute basenames
         if path:
@@ -1537,6 +1579,22 @@ class KeypointMatcher(object):
                 min_ends = [min(i + shift, n) for i in range(n)]
                 ends = np.maximum(ends, min_ends)
             matching_images = [np.arange(i + 1, end) for i, end in enumerate(ends)]
+        # Add match sequence
+        if seq is not None:
+            seq = np.asarray(seq)
+            seq = np.unique(seq[seq > 0])
+            for i, m in enumerate(matching_images):
+                iseq = seq + i
+                iseq = iseq[:np.searchsorted(iseq, n)]
+                matching_images[i] = np.unique(np.concatenate((m, iseq)))
+        # Filter matched image pairs
+        if imgs is not None:
+            empty = np.array([])
+            for i, m in enumerate(matching_images):
+                if i in imgs:
+                    matching_images[i] = empty
+                else:
+                    matching_images[i] = m[np.isin(m, imgs)]
         # Define parallel process
         def process(i, js):
             print('Matching', i, '->', ', '.join(js.astype(str)))
@@ -1551,50 +1609,146 @@ class KeypointMatcher(object):
                         match = helpers.read_pickle(outfile)
                         # Point matches to existing Camera objects
                         match.cams = (imgA.cam, imgB.cam)
+                        if as_type:
+                            match = match.as_type(as_type)
                         matches.append(match)
+                elif skip_missing:
+                    matches.append(False)
                 else:
                     result = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
                     match = Matches(
                         cams=(imgA.cam, imgB.cam), uvs=result[0:2],
                         weights=(1 / result[2]) if weights else None)
-                    if not clear_matches:
-                        matches.append(match)
                     if path is not None:
                         helpers.write_pickle(match, outfile)
+                    if not clear_matches:
+                        if as_type:
+                            match = match.as_type(as_type)
+                        matches.append(match)
             if clear_keypoints:
                 imgA.keypoints = None
             return None if clear_matches else matches
+        def reduce(matches):
+            if filter:
+                for match in matches:
+                    if match:
+                        match.filter(**filter)
+            return matches
         # Run process in parallel
         with sharedmem.MapReduce(np=parallel) as pool:
-            matches = pool.map(process, tuple(enumerate(matching_images)), star=True)
+            matches = pool.map(
+                func=process, reduce=reduce, star=True,
+                sequence=tuple(enumerate(matching_images)))
             if not clear_matches:
                 # Build Compressed Sparse Row (CSR) matrix
                 matches = scipy.sparse.csr_matrix((
                     np.concatenate(matches), # data
                     np.concatenate(matching_images), # column indices
                     np.cumsum([0] + [len(row) for row in matching_images]))) # row ranges
-        # Assign camera objects outside process
-        if parallel and not clear_matches:
-            for i, js in enumerate(matching_images):
-                imgA = self.images[i]
-                for j in js:
-                    imgB = self.images[j]
-                    # Point matches to existing Camera objects
-                    matches[i, j].cams = (imgA.cam, imgB.cam)
-        self.matches = None if clear_matches else matches
+                # Convert to Coordinate Format (COO) matrix
+                matches = matches.tocoo()
+                if skip_missing:
+                    matches.eliminate_zeros()
+        if clear_matches:
+            self.matches = None
+        else:
+            self.matches = matches
+            if parallel:
+                self._assign_cameras()
 
-    def matches_as_type(self, mtype, copy=False):
+    def _test_matches(self):
         if self.matches is None:
             raise ValueError('Matches have not been initialized. Run build_matches()')
-        if copy:
-            new = self.matches.copy()
+
+    def _assign_cameras(self):
+        for m, i, j in zip(self.matches.data, self.matches.row, self.matches.col):
+            m.cams = self.images[i].cam, self.images[j].cam
+
+    def convert_matches(self, mtype, clear_uvs=False, parallel=False):
+        self._test_matches()
+        parallel = helpers._parse_parallel(parallel)
+        def process(i, m):
+            m = m.as_type(mtype)
+            if clear_uvs and mtype in (RotationMatchesXY, RotationMatchesXYZ):
+                m.uvs = None
+            return i, m
+        def reduce(i, m):
+            self.matches.data[i] = m
+        with sharedmem.MapReduce(np=parallel) as pool:
+            _ = pool.map(
+                func=process, reduce=reduce, star=True,
+                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))
+        if parallel:
+            self._assign_cameras()
+
+    def filter_matches(self, clear_weights=False, parallel=False, **params):
+        self._test_matches()
+        parallel = helpers._parse_parallel(parallel)
+        def process(i, m):
+            if params:
+                m.filter(**params)
+            if clear_weights:
+                m.weights = None
+            return i, m
+        def reduce(i, m):
+            self.matches.data[i] = m
+        with sharedmem.MapReduce(np=parallel) as pool:
+            _ = pool.map(
+                func=process, reduce=reduce, star=True,
+                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))
+        if parallel:
+            self._assign_cameras()
+
+    def _images_mask(self, imgs):
+        if np.iterable(imgs):
+            return np.isin(self.matches.row, imgs) | np.isin(self.matches.col, imgs)
         else:
-            new = self.matches
-        rows, cols = np.nonzero(self.matches)
-        for i, j in zip(rows, cols):
-            m = self.matches[i, j]
-            new[i, j] = m.as_type(mtype)
-        return new
+            return (self.matches.row == imgs) | (self.matches.col == imgs)
+
+    def _images_matches(self, imgs):
+        mask = self._images_mask(imgs)
+        return self.matches.data[mask]
+
+    def matches_per_image(self):
+        self._test_matches()
+        image_matches = [self._images_matches(i) for i in range(len(self.images))]
+        # n_images = np.array([np.sum([mi.size > 0 for mi in m]) for m in image_matches])
+        return np.array([np.sum([mi.size for mi in m]) for m in image_matches])
+
+    def images_per_image(self):
+        self._test_matches()
+        image_matches = [self._images_matches(i) for i in range(len(self.images))]
+        return np.array([np.sum([mi.size > 0 for mi in m]) for m in image_matches])
+
+    def drop_images(self, imgs):
+        self._test_matches()
+        mask = self._images_mask(imgs)
+        self.matches.data[mask] = False
+        self.matches.eliminate_zeros()
+        # Find all images with no matches
+        all = np.arange(len(self.images))
+        keep = np.union1d(self.matches.row, self.matches.col)
+        drop = np.setdiff1d(all, keep)
+        # Remove row and column of each dropped image
+        kept_rows, new_row = np.unique(np.concatenate((self.matches.row, keep)), return_inverse=True)
+        self.matches.row = new_row[:-len(keep)]
+        kept_cols, new_col = np.unique(np.concatenate((self.matches.col, keep)), return_inverse=True)
+        self.matches.col = new_col[:-len(keep)]
+        # Resize matches matrix
+        n = len(self.images) - len(drop)
+        self.matches._shape = (n, n)
+        # Remove dropped images
+        self.images = np.delete(self.images, drop)
+
+    def match_breaks(self, min_matches=0):
+        self._test_matches()
+        all_starts = np.arange(len(self.images) - 1)
+        starts, counts = np.unique(self.matches.row, return_counts=True)
+        breaks = np.setdiff1d(all_starts, starts)
+        if min_matches:
+            min_matches = np.minimum(min_matches, len(self.images) - np.arange(len(self.images)))
+            breaks = np.sort(np.concatenate((breaks, np.where(counts < min_matches)[0])))
+        return breaks
 
 # ---- Helpers ----
 
@@ -1726,7 +1880,7 @@ def camera_bounds(cam):
         # f
         [0, np.inf], [0, np.inf],
         # c
-        [-0.5, 0.5] * cam.imgsz, [-0.5, 0.5] * cam.imgsz,
+        [-0.5, 0.5] * cam.imgsz[0:1], [-0.5, 0.5] * cam.imgsz[1:2],
         # k
         [-k, k], [-k / 2, k / 2], [-k / 2, k / 2], [-k, k], [-k, k], [-k, k],
         # p

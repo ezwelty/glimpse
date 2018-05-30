@@ -216,10 +216,7 @@ class Tracker(object):
         self.reset()
         # Enforce defaults
         errors = len(xy) <= 1
-        if parallel is True:
-            parallel = sharedmem.cpu_count()
-        elif parallel is False:
-            parallel = 0
+        parallel = helpers._parse_parallel(parallel)
         xy = np.atleast_2d(xy)
         if datetimes is None:
             datetimes = np.unique(np.concatenate([

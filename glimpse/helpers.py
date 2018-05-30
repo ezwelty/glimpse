@@ -2,7 +2,8 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely)
+    sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely, sharedmem,
+    sys)
 
 # ---- General ---- #
 
@@ -1634,3 +1635,24 @@ def compute_strain(xy, vxy):
     velocities = [x[0] for x in temp]
     strains = [x[1] for x in temp]
     return np.row_stack(centroids), np.row_stack(velocities), np.row_stack(strains)
+
+# ---- Internal ----
+
+def _parse_parallel(parallel):
+    if parallel is True:
+        return sharedmem.cpu_count()
+    elif parallel is False:
+        return 0
+    else:
+        return parallel
+
+def _print_progress(i, n, ticks=20, close=None):
+    sys.stdout.write('\r')
+    percent = round(100 * i / n)
+    nticks = int(percent / (100 / ticks))
+    sys.stdout.write(('[%-' + str(ticks) + 's] %d%%') % ('=' * nticks, percent))
+    sys.stdout.flush()
+    if close is None:
+        close = i >= (n - 1)
+    if close:
+        sys.stdout.write('\n')

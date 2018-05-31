@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, datetime, matplotlib, os)
-from . import (helpers, dem)
+from . import (helpers, raster)
 
 class Observer(object):
     """
@@ -18,7 +18,7 @@ class Observer(object):
             due to changes in illumination, deformation, or unresolved camera motion
         correction: Curvature and refraction correction (see `Camera.project()`)
         cache (bool): Whether to cache images on read
-        grid (glimpse.dem.Grid): Grid object for operations on image coordinates
+        grid (glimpse.raster.Grid): Grid object for operations on image coordinates
     """
 
     def __init__(self, images, datetimes=None, sigma=0.3, correction=True, cache=True):
@@ -39,7 +39,7 @@ class Observer(object):
         self.correction = correction
         self.cache = cache
         n = self.images[0].cam.imgsz
-        self.grid = dem.Grid(n=n, x=(0, n[0]), y=(0, n[1]))
+        self.grid = raster.Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
     def test_images(images):

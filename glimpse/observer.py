@@ -39,7 +39,7 @@ class Observer(object):
         self.correction = correction
         self.cache = cache
         n = self.images[0].cam.imgsz
-        self.grid = dem.Grid(n=n, xlim=(0, n[0]), ylim=(0, n[1]))
+        self.grid = dem.Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
     def test_images(images):

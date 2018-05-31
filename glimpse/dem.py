@@ -27,12 +27,8 @@ class Grid(object):
         self.n = np.atleast_1d(n).astype(int)
         if len(self.n) < 2:
             self.n = np.repeat(self.n, 2)
-        if x is None:
-            x = (0, self.n[0])
-        self.xlim, self._x, self._X = self._parse_x(x)
-        if y is None:
-            y = (0, self.n[1])
-        self.ylim, self._y, self._Y = self._parse_y(y)
+        self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
+        self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
 
     # ---- Properties (dependent) ---- #
 
@@ -131,22 +127,23 @@ class Grid(object):
         for attr in attributes:
             setattr(self, '_' + attr, None)
 
-    def _parse_x(self, obj):
+    def _parse_xy(self, obj, dim):
         """
         Parse object into xlim, x, and X attributes.
 
         Arguments:
             obj (object): Either xlim, x, or X
+            dim (int): Dimension (0: x, 1: y)
         """
         if obj is None:
-            obj = [0, self.n[0]]
+            obj = (0, self.n[dim])
         if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, dtype=float)
-        is_X = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
+            obj = np.atleast_1d(obj)
+        is_X = obj.shape[0:2] == self.shape[0:2]
         if is_X:
             # TODO: Check if all columns equal
             X = obj
-            obj = obj[0, :]
+            obj = obj[:, 0] if dim else obj[0]
         else:
             X = None
         is_x = any(n > 2 for n in obj.shape[0:2])
@@ -158,36 +155,9 @@ class Grid(object):
         else:
             x = None
             xlim = obj
+        if len(xlim) != 2:
+            raise ValueError('Could not parse limits from x, y inputs')
         return [xlim, x, X]
-
-    def _parse_y(self, obj):
-        """
-        Parse object into ylim, y, and Y attributes.
-
-        Arguments:
-            obj (object): Either ylim, y, or Y
-        """
-        if obj is None:
-            obj = [0, self.n[1]]
-        if not isinstance(obj, np.ndarray):
-            obj = np.asarray(obj, dtype=float)
-        is_Y = len(obj.shape) > 1 and all(n > 1 for n in obj.shape[0:2])
-        if is_Y:
-            # TODO: Check if all rows equal
-            Y = obj
-            obj = obj[:, 0]
-        else:
-            Y = None
-        is_y = any(n > 2 for n in obj.shape[0:2])
-        if is_y:
-            y = obj
-            # TODO: Check if equally spaced monotonic
-            dy = np.diff(obj[0:2])
-            ylim = np.append(obj[0] - dy / 2, obj[-1] + dy / 2)
-        else:
-            y = None
-            ylim = obj
-        return [ylim, y, Y]
 
     # ---- Methods ---- #
 
@@ -384,6 +354,11 @@ class Raster(Grid):
     """
     A `Raster` describes data on a regular 2-dimensional grid.
 
+    For rasters with dimension of length 2, `x` (`y`) is assumed to be `xlim` (`ylim`)
+    if a vector.
+    For rasters with dimensions of length 1, `x` (`y`) must be `xlim` (`ylim`)
+    since cell size cannot be determined from adjacent cell coordinates.
+
     Arguments:
         x (array-like): Either `xlim`, `x`, or `X`
         y (array-like): Either `ylim`, `y`, or `Y`
@@ -397,8 +372,8 @@ class Raster(Grid):
 
     def __init__(self, Z, x=None, y=None, datetime=None):
         self.Z = Z
-        self.xlim, self._x, self._X = self._parse_x(x)
-        self.ylim, self._y, self._Y = self._parse_y(y)
+        self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
+        self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.datetime = datetime
         # Placeholders
         self._Zf = None
@@ -478,8 +453,7 @@ class Raster(Grid):
 
     @Z.setter
     def Z(self, value):
-        if not isinstance(value, np.ndarray):
-            value = np.asarray(value)
+        value = np.atleast_2d(value)
         if hasattr(self, '_Z'):
             if value.shape != self._Z.shape:
                 self._clear_cache(['x', 'X', 'y', 'Y'])
@@ -536,6 +510,10 @@ class Raster(Grid):
             - Supports interpolation `order` 1 to 5
             - Much faster for large grids
 
+        If any dimension has length 1, the value of the singleton dimension(s)
+        is returned directly and `scipy.interpolate.interp1d()` is used for the
+        remaining dimension.
+
         Arguments:
             xy (array-like): Input coordinates x and y, as either:
 
@@ -553,38 +531,92 @@ class Raster(Grid):
             array: Raster value at each point,
                 either as (n, ) if `grid` is False or (m, n) if `grid` is True
         """
-        if grid:
-            kx, ky = order, order
-            return self._sample_grid(xy, kx=kx, ky=ky,
-                bounds_error=bounds_error, fill_value=fill_value)
-        else:
-            methods = ('nearest', 'linear', 'quadratic', 'cubic', 'quartic', 'quintic')
-            Zf = self.Zf
-            Zf.bounds_error = bounds_error
-            Zf.fill_value = fill_value
-            return Zf(xy, method=methods[order])
-
-    def _sample_grid(self, xy, kx=1, ky=1, s=0, bounds_error=True, fill_value=np.nan):
-        x, y = xy
+        error = ValueError('Some of the sampling coordinates are out of bounds')
+        methods = ('nearest', 'linear', 'quadratic', 'cubic', 'quartic', 'quintic')
         if bounds_error or fill_value is not None:
-            xout = (x < self.xlim.min()) | (x > self.xlim.max())
-            yout = (y < self.ylim.min()) | (y > self.ylim.max())
-            if bounds_error:
-                if xout.any() or yout.any():
-                    raise ValueError('Some of the sampling coordinates are out of bounds')
+            # Test whether sampling points are in bounds
+            xyin = self.inbounds(xy, grid=grid)
+            if grid:
+                xout, yout = ~xyin[0], ~xyin[1]
+                if bounds_error and (xout.any() or yout.any()):
+                    raise error
+            else:
+                xyout = ~xyin
+                if bounds_error and xyout.any():
+                    raise error
+        has_fill = not bounds_error and fill_value is not None
+        # Test which dimensions are non-singleton
+        dims = np.where(self.n > 1)[0]
+        ndims = len(dims)
+        # Take samples
+        if grid:
+            # Sample at grid points
+            if ndims == 2:
+                # 2D: Use RectBivariateSpline
+                kx, ky = order, order
+                samples = self._sample_grid(xy, kx=kx, ky=ky)
+            elif ndims == 1:
+                # 1D: Use interp1d
+                dim = dims[0]
+                z = self._sample_1d(xy[dim], dim=dim, kind=methods[order])
+                samples = np.tile(
+                    z.reshape(-1 if dim else 1, 1 if dim else -1),
+                    reps=(1 if dim else len(z), len(z) if dim else 1))
+            else:
+                # 0D: Return constant
+                samples = np.full((len(xy[0]), len(xy[1])), self.Z.flat[0])
+            if has_fill:
+                # Fill out of bounds with value
+                samples[yout, :] = fill_value
+                samples[:, xout] = fill_value
+        else:
+            # Sample at points
+            if has_fill:
+                samples = np.full(len(xy), fill_value)
+            if ndims == 2:
+                # 2D: Use RegularGridInterpolator
+                self.Zf.bounds_error = False
+                self.Zf.fill_value = None
+                if has_fill:
+                    samples[xyin] = self.Zf(xy[xyin], method=methods[order])
+                else:
+                    samples = self.Zf(xy, method=methods[order])
+            elif ndims == 1:
+                # 1D: Use interp1d
+                dim = dims[0]
+                if has_fill:
+                    samples[xyin] = self._sample_1d(xy[xyin, dim], dim=dim, kind=methods[order])
+                else:
+                    samples = self._sample_1d(xy[:, dim], dim=dim, kind=methods[order])
+            else:
+                # 0D: Return constant
+                if has_fill:
+                    samples[xyin] = self.Z.flat[0]
+                else:
+                    samples = np.full(len(xy), self.Z.flat[0])
+        return samples
+
+    def _sample_1d(self, x, dim, kind='linear'):
+        xdir = np.sign(self.d[dim]).astype(int)
+        xi = (self.y if dim else self.x)[::xdir]
+        zi = (self.Z[:, 0] if dim else self.Z[0])[::xdir]
+        zxfun = scipy.interpolate.interp1d(
+            x=xi, y=zi, kind=kind, assume_sorted=True, fill_value='extrapolate')
+        samples = zxfun(x)
+        return samples
+
+    def _sample_grid(self, xy, kx=1, ky=1, s=0):
+        x, y = xy
         signs = np.sign(self.d).astype(int)
         fun = scipy.interpolate.RectBivariateSpline(
             self.y[::signs[1]], self.x[::signs[0]],
             self.Z[::signs[1], ::signs[0]],
-            bbox=(self.ylim.min(), self.ylim.max(), self.xlim.min(), self.xlim.max()),
+            bbox=(min(self.ylim), max(self.ylim), min(self.xlim), max(self.xlim)),
             kx=kx, ky=ky, s=s)
         xdir = 1 if (len(x) < 2) or x[1] > x[0] else -1
         ydir = 1 if (len(y) < 2) or y[1] > y[0] else -1
-        array = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
-        if fill_value is not None:
-            array[yout, :] = fill_value
-            array[:, xout] = fill_value
-        return array
+        samples = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
+        return samples
 
     def resample(self, grid, order=1, bounds_error=False, fill_value=np.nan):
         """

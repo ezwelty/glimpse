@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, cv2, warnings, datetime, scipy, sharedmem, matplotlib)
-from . import (helpers, dem as raster)
+from . import (helpers, raster)
 
 class Tracker(object):
     """

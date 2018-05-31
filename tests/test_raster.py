@@ -2,9 +2,9 @@ from .context import *
 from glimpse.imports import (np)
 import pytest
 
-def test_dem_defaults():
+def test_raster_defaults():
     Z = np.zeros((3, 3))
-    dem = glimpse.DEM(Z)
+    dem = glimpse.Raster(Z)
     assert all(dem.xlim == (0, Z.shape[1]))
     assert all(dem.ylim == (0, Z.shape[0]))
     assert all(dem.zlim == (Z.min(), Z.max()))
@@ -17,7 +17,7 @@ def test_dem_defaults():
     assert (dem.X == ((dem.x, dem.x, dem.x))).all()
     assert (dem.Y.T == ((dem.y, dem.y, dem.y))).all()
 
-def test_dem_xy():
+def test_raster_xy():
     xlim = (0, 3)
     ylim = (3, 0)
     x = (0.5, 1.5, 2.5)
@@ -26,7 +26,7 @@ def test_dem_xy():
     Y = np.asarray((y, y, y)).T
     Z = np.zeros((3, 3))
     # Initialize from xlim, ylim
-    dem = glimpse.DEM(Z, x=xlim, y=ylim)
+    dem = glimpse.Raster(Z, x=xlim, y=ylim)
     assert all(dem.xlim == xlim)
     assert all(dem.ylim == ylim)
     assert all(dem.x == x)
@@ -34,27 +34,27 @@ def test_dem_xy():
     assert (dem.X == X).all()
     assert (dem.Y == Y).all()
     # Initialize from x, y
-    dem = glimpse.DEM(Z, x=x, y=y)
+    dem = glimpse.Raster(Z, x=x, y=y)
     assert all(dem.xlim == xlim)
     assert all(dem.ylim == ylim)
     # Initialize from X, Y
-    dem = glimpse.DEM(Z, x=X, y=Y)
+    dem = glimpse.Raster(Z, x=X, y=Y)
     assert all(dem.xlim == xlim)
     assert all(dem.ylim == ylim)
     assert all(dem.x == x)
     assert all(dem.y == y)
 
-def test_dem_sample(tol=1e-13):
+def test_raster_sample(tol=1e-13):
     Z = np.arange(16).reshape(4, 4)
-    dem = glimpse.DEM(Z, (-0.5, 3.5), (-0.5, 3.5))
+    dem = glimpse.Raster(Z, (-0.5, 3.5), (-0.5, 3.5))
     # Sample cells centers along diagonal
     xy_diagonal = np.column_stack((dem.x, dem.y))
     dz_points = dem.sample(xy_diagonal) - dem.Z.diagonal()
     assert all(dz_points < tol)
 
-def test_dem_crop_ascending():
+def test_raster_crop_ascending():
     Z = np.arange(9).reshape(3, 3)
-    dem = glimpse.DEM(Z, (0, 3), (0, 3))
+    dem = glimpse.Raster(Z, (0, 3), (0, 3))
     # Out of bounds
     with pytest.raises(Exception):
         dem.crop(xlim=(3, 5))
@@ -95,9 +95,9 @@ def test_dem_crop_ascending():
     assert all(cdem.ylim == (1, 2))
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
-def test_dem_crop_descending():
+def test_raster_crop_descending():
     Z = np.arange(9).reshape(3, 3)
-    dem = glimpse.DEM(Z, (3, 0), (3, 0))
+    dem = glimpse.Raster(Z, (3, 0), (3, 0))
     # Equal bounds
     cdem = dem.copy()
     cdem.crop(xlim=(0, 3), ylim=(0, 3))
@@ -110,9 +110,9 @@ def test_dem_crop_descending():
     assert all(cdem.ylim == (2, 1))
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
-def test_dem_resize():
+def test_raster_resize():
     Z = np.zeros((10, 10))
-    dem = glimpse.DEM(Z)
+    dem = glimpse.Raster(Z)
     # Downsize
     rdem = dem.copy()
     rdem.resize(0.5)

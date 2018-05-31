@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, cv2, warnings, datetime, scipy, sharedmem, matplotlib)
-from . import (helpers, dem as DEM)
+from . import (helpers, dem as raster)
 
 class Tracker(object):
     """
@@ -9,10 +9,12 @@ class Tracker(object):
 
     Attributes:
         observers (list): Observer objects
-        dem (DEM): Digital elevation model of the surface on which to track points
         time_unit (timedelta): Length of time unit for temporal arguments
-        viewshed (DEM): `DEM` object of a binary viewshed.
-            Can also be an array, in which case it must be the same shape as `dem.Z`.
+        dem: Elevation of the surface on which to track points, as either a scalar or
+             a Raster
+        dem_sigma: Elevation standard deviations, as either a scalar or
+             a Raster with the same extent as `dem`
+        viewshed (Raster): Binary viewshed with the same extent as `dem`
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
         grayscale (dict): Grayscale conversion
@@ -21,9 +23,9 @@ class Tracker(object):
             (arguments to scipy.ndimage.filters.median_filter)
         interpolation (dict): Subpixel interpolation
             (arguments to scipy.interpolate.RectBivariateSpline)
-        particles (array): Positions and velocities of particles (n, 6) [[x, y, z, vx, vy], ...]
+        particles (array): Positions and velocities of particles (n, 6) [[x, y, z, vx, vy vz], ...]
         weights (array): Particle likelihoods (n, )
-        particle_mean (array): Weighted mean of `particles` (6, ) [x, y, z, vx, vy]
+        particle_mean (array): Weighted mean of `particles` (6, ) [x, y, z, vx, vy, vz]
         particle_covariance (array): Weighted covariance matrix of `particles` (6, 6)
         templates (list): For each Observer, a template extracted from the first image
             matching a `datetimes` centered around the `particle_mean` at that time.
@@ -33,13 +35,11 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, dem, dem_uncertainty, time_unit, viewshed=None, resample_method='systematic',
+    def __init__(self, observers, time_unit, dem, dem_sigma=0, viewshed=None, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
         self.dem = dem
-        self.dem_uncertainty = dem_uncertainty
-        if isinstance(viewshed, np.ndarray):
-            viewshed = DEM.DEM(Z=viewshed, x=self.dem.x, y=self.dem.y)
+        self.dem_sigma = dem_sigma
         self.viewshed = viewshed
         self.time_unit = time_unit
         self.resample_method = resample_method
@@ -64,55 +64,61 @@ class Tracker(object):
         Particle test run after each particle initialization or evolution.
         """
         if self.viewshed is not None:
-            is_visible = self.viewshed.sample(self.particles[:, 0:2], method='nearest')
+            is_visible = self.viewshed.sample(self.particles[:, 0:2], order=0)
             if not all(is_visible):
                 raise ValueError('Some particles are on non-visible viewshed cells')
         if any(np.isnan(self.particles[:, 2])):
             raise ValueError('Some particles are on NaN dem cells')
 
-    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0), vz_sigma=0.0):
+    def _sample_dem(self, xy, sigma=False):
+        obj = self.dem_sigma if sigma else self.dem
+        if isinstance(obj, raster.Raster):
+            return obj.sample(xy)
+        else:
+            return obj
+
+    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0)):
         """
         Initialize particles given an initial normal distribution.
 
-        Temporal arguments (`vxy`, `vxy_sigma`) are assumed to be in
+        Temporal arguments (`vxyz`, `vxyz_sigma`) are assumed to be in
         `self.time_unit` time units.
 
         Arguments:
             xy (iterable): Mean position (x, y)
             n (int): Number of particles
             xy_sigma (iterable): Standard deviation of position (x, y)
-            vxy (iterable): Mean velocity (x, y)
-            vxy_sigma (iterable): Standard deviation of velocity (x, y)
+            vxyz (iterable): Mean velocity (x, y, z)
+            vxyz_sigma (iterable): Standard deviation of velocity (x, y, z)
         """
         if self.particles is None or len(self.particles) != n:
-            self.particles = np.zeros((n, 6))
+            self.particles = np.zeros((n, 6), dtype=float)
         self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
-        self.particles[:, 2] = self.dem.sample(self.particles[:, 0:2]) + self.dem_uncertainty.sample(self.particles[:,0:2])*np.random.randn(n)
-        self.particles[:, 3:5] = vxy + vxy_sigma * np.random.randn(n, 2)
-        self.particles[:, 5] = vz_sigma * np.random.randn(n)
+        z = self._sample_dem(self.particles[:, 0:2])
+        z_sigma = self._sample_dem(self.particles[:, 0:2], sigma=True)
+        self.particles[:, 2] = z + z_sigma * np.random.randn(n)
+        self.particles[:, 3:6] = vxyz + vxyz_sigma * np.random.randn(n, 3)
         self._test_particles()
-        self.weights = np.full(n, 1.0 / n)
+        self.weights = np.full(n, 1 / n)
 
-    def evolve_particles(self, dt, axy=(0, 0), axy_sigma=(0, 0), az_sigma=0.0):
+    def evolve_particles(self, dt, axyz=(0, 0, 0), axyz_sigma=(0, 0, 0)):
         """
         Evolve particles through time by stochastic differentiation.
 
-        Accelerations (`axy`, `axy_sigma`) are assumed to be with respect to
+        Accelerations (`axyz`, `axyz_sigma`) are assumed to be with respect to
         `self.time_unit`.
 
         Arguments:
             dt (timedelta): Time difference to evolve particles forward or backward
-            axy (iterable): Mean of random accelerations (x, y)
-            axy_sigma (iterable): Standard deviation of random accelerations (x, y)
+            axyz (iterable): Mean of random accelerations (x, y, z)
+            axyz_sigma (iterable): Standard deviation of random accelerations (x, y, z)
         """
+        n = len(self.particles)
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
-        daxy = axy_sigma * np.random.randn(len(self.particles), 2)
-        daz = az_sigma * np.random.randn(len(self.particles))
-        self.particles[:, 0:2] += (time_units * self.particles[:, 3:5]
-            + 0.5 * (axy + daxy) * time_units**2)
-        self.particles[:, 2] += time_units * self.particles[:,5] + 0.5 * daz * time_units**2
-        self.particles[:, 3:5] += time_units * (axy + daxy)
-        self.particles[:, 5] += time_units * daz
+        daxyz = axyz_sigma * np.random.randn(n, 3)
+        self.particles[:, 0:3] += (time_units * self.particles[:, 3:6]
+            + 0.5 * (axyz + daxyz) * time_units**2)
+        self.particles[:, 3:6] += time_units * (axyz + daxyz)
         self._test_particles()
 
     def update_weights(self, likelihoods):
@@ -175,13 +181,13 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, xy, n=1000, xy_sigma=(0, 0), vxy=(0, 0), vxy_sigma=(0, 0), vz_sigma=0.0,
-        axy=(0, 0), axy_sigma=(0, 0), az_sigma=0.0, datetimes=None, maxdt=datetime.timedelta(0),
+    def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0),
+        axyz=(0, 0, 0), axyz_sigma=(0, 0, 0), datetimes=None, maxdt=datetime.timedelta(0),
         tile_size=(15, 15), parallel=False, return_particles=False):
         """
         Track particles through time.
 
-        Velocities and accelerations (`vxy`, `vxy_sigma`, `axy`, `axy_sigma`)
+        Velocities and accelerations (`vxyz`, `vxyz_sigma`, `axyz`, `axyz_sigma`)
         are assumed to be in `self.time_unit` time units.
 
         If `len(xy) > 1`, errors and warnings are caught silently,
@@ -191,10 +197,10 @@ class Tracker(object):
             xy (iterable): Single (x, y) or multiple ((xi, yi), ...) initial positions
             n (int): Number of particles
             xy_sigma (iterable): Standard deviation of initial position (x, y)
-            vxy (iterable): Mean velocity (x, y)
-            vxy_sigma (iterable): Standard deviation of velocity (x, y)
-            axy (iterable): Mean acceleration (x, y)
-            axy_sigma (iterable) Standard deviation of acceleration (x, y)
+            vxyz (iterable): Mean velocity (x, y, z)
+            vxyz_sigma (iterable): Standard deviation of velocity (x, y, z)
+            axyz (iterable): Mean acceleration (x, y, z)
+            axyz_sigma (iterable) Standard deviation of acceleration (x, y, z)
             datetimes (iterable): Monotonic sequence of datetimes at which to
                 track particles. If `None`, defaults to all unique datetimes in
                 `self.observers`.
@@ -215,6 +221,7 @@ class Tracker(object):
         # Clear any previous tracking state
         self.reset()
         # Enforce defaults
+        xy = np.atleast_2d(xy)
         errors = len(xy) <= 1
         parallel = helpers._parse_parallel(parallel)
         xy = np.atleast_2d(xy)
@@ -233,17 +240,19 @@ class Tracker(object):
                     index = [img for img in matching_images[:, i] if img is not None]
                     observer.cache_images(index=index)
         # Define parallel process
+        ntimes = len(datetimes)
         def process(xyi):
-            means = np.full((len(datetimes), 6), np.nan)
-            covariances = np.full((len(datetimes), 6, 6), np.nan)
+            means = np.full((ntimes, 6), np.nan)
+            covariances = np.full((ntimes, 6, 6), np.nan)
             if return_particles:
-                particles = np.full((len(datetimes), n, 6), np.nan)
-                weights = np.full((len(datetimes), n), np.nan)
+                particles = np.full((ntimes, n, 6), np.nan)
+                weights = np.full((ntimes, n), np.nan)
             error = None
             all_warnings = None
             try:
                 with warnings.catch_warnings(record=True) as caught:
-                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma, vxy=vxy, vxy_sigma=vxy_sigma,vz_sigma=vz_sigma)
+                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma,
+                        vxyz=vxyz, vxyz_sigma=vxyz_sigma)
                     # Initialize templates for Observers starting at datetimes[0]
                     for obs, img in enumerate(template_images):
                         if img == 0:
@@ -255,7 +264,7 @@ class Tracker(object):
                         weights[0] = self.weights
                     dts = np.diff(datetimes)
                     for i, dt in enumerate(dts, start=1):
-                        self.evolve_particles(dt=dt, axy=axy, axy_sigma=axy_sigma, az_sigma=az_sigma)
+                        self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
                         # Initialize templates for Observers starting at datetimes[i]
                         for obs, img in enumerate(template_images):
                             if img == i:
@@ -423,8 +432,9 @@ class Tracker(object):
         """
         log_likelihoods_observer = [self._compute_observer_log_likelihoods(obs, img)
             for obs, img in enumerate(imgs)]
-        log_likelihoods_dem = 1./(2*self.dem_uncertainty.sample(self.particles[:,0:2])**2)*(
-            self.dem.sample(self.particles[:, 0:2]) - self.particles[:,2])**2
+        z = self._sample_dem(self.particles[:, 0:2])
+        z_sigma = self._sample_dem(self.particles[:, 0:2], sigma=True)
+        log_likelihoods_dem = 1 / (2 * z_sigma**2) * (z - self.particles[:, 2])**2
         return np.exp(-sum(log_likelihoods_observer) - log_likelihoods_dem)
 
     def _compute_observer_log_likelihoods(self, obs, img):
@@ -479,7 +489,7 @@ class Tracker(object):
         # Sample at projected particles
         sampled_sse = self.observers[obs].sample_tile(uv, tile=sse,
             box=sse_box, grid=False, **self.interpolation)
-        return sampled_sse * (1 / (2*self.observers[obs].sigma**2))
+        return sampled_sse * (1 / (2 * self.observers[obs].sigma**2))
 
 class Tracks(object):
     """
@@ -490,7 +500,7 @@ class Tracks(object):
 
     Attributes:
         datetimes (array): Datetimes at which particles were estimated (m, )
-        means (array): Mean particle positions and velocities (x, y, z, vx, vy) (n, m, 6)
+        means (array): Mean particle positions and velocities (x, y, z, vx, vy, vz) (n, m, 6)
         covariances (array): Covariance of particle positions and velocities (n, m, 6, 6)
         particles (array): Particle positions and velocities (n, m, p, 6)
         weights (array): Particle weights (n, m, p)
@@ -533,11 +543,11 @@ class Tracks(object):
         return self.means[:, :, 0:3]
 
     @property
-    def vxy(self):
+    def vxyz(self):
         """
-        array: Mean particle velocities (n, m, [vx, vy])
+        array: Mean particle velocities (n, m, [vx, vy, vz])
         """
-        return self.means[:, :, 3:5]
+        return self.means[:, :, 3:6]
 
     @property
     def xyz_sigma(self):
@@ -548,12 +558,12 @@ class Tracks(object):
             return np.sqrt(self.covariances[:, :, (0, 1, 2), (0, 1, 2)])
 
     @property
-    def vxy_sigma(self):
+    def vxyz_sigma(self):
         """
-        array: Standard deviation of particle velocities (n, m, [vx, vy])
+        array: Standard deviation of particle velocities (n, m, [vx, vy, vz])
         """
         if self.covariances is not None:
-            return np.sqrt(self.covariances[:, :, (3, 4), (3, 4)])
+            return np.sqrt(self.covariances[:, :, (3, 4, 5), (3, 4, 5)])
 
     @property
     def success(self):
@@ -608,7 +618,7 @@ class Tracks(object):
 
     def plot_vxy(self, tracks=None, **kwargs):
         """
-        Plot velocities as vector fields.
+        Plot velocities as vector fields on the x-y plane.
 
         Arguments:
             tracks: Slice object or iterable of indices of tracks to include.
@@ -622,11 +632,11 @@ class Tracks(object):
         for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
             matplotlib.pyplot.quiver(
                 self.xyz[i, :, 0], self.xyz[i, :, 1],
-                self.vxy[i, :, 0], self.vxy[i, :, 1], **kwargs)
+                self.vxyz[i, :, 0], self.vxyz[i, :, 1], **kwargs)
 
-    def plot_vx(self, tracks=None, mean=True, sigma=False):
+    def plot_v1d(self, dim, tracks=None, mean=True, sigma=False):
         """
-        Plot velocity in x.
+        Plot velocity for one dimension.
 
         Arguments:
             tracks: Slice object or iterable of indices of tracks to include.
@@ -643,7 +653,7 @@ class Tracks(object):
                 mean = dict()
             default = dict(color='black')
             mean = helpers.merge_dicts(default, mean)
-            matplotlib.pyplot.plot(self.datetimes, self.vxy[tracks, :, 0].T, **mean)
+            matplotlib.pyplot.plot(self.datetimes, self.vxyz[tracks, :, dim].T, **mean)
         if sigma:
             if sigma is True:
                 sigma = dict()
@@ -654,42 +664,8 @@ class Tracks(object):
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
                 matplotlib.pyplot.fill_between(
                     self.datetimes,
-                    y1=self.vxy[i, :, 0] + self.vxy_sigma[i, :, 0],
-                    y2=self.vxy[i, :, 0] - self.vxy_sigma[i, :, 0],
-                    **sigma)
-
-    def plot_vy(self, tracks=None, mean=True, sigma=False):
-        """
-        Plot velocity in y.
-
-        Arguments:
-            tracks: Slice object or iterable of indices of tracks to include.
-                If `None`, all tracks are included.
-            mean: Whether to plot mean vy (bool) or arguments to
-                `matplotlib.pyplot.plot()` (dict)
-            sigma: Whether to plot sigma vy (bool) or arguments to
-                `matplotlib.pyplot.fill_between()` (dict)
-        """
-        if tracks is None:
-            tracks = slice(None)
-        if mean:
-            if mean is True:
-                mean = dict()
-            default = dict(color='black')
-            mean = helpers.merge_dicts(default, mean)
-            matplotlib.pyplot.plot(self.datetimes, self.vxy[tracks, :, 1].T, **mean)
-        if sigma:
-            if sigma is True:
-                sigma = dict()
-            default = dict(facecolor='black', edgecolor='none', alpha=0.25)
-            if isinstance(mean, dict) and 'color' in mean:
-                default['facecolor'] = mean['color']
-            sigma = helpers.merge_dicts(default, sigma)
-            for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
-                matplotlib.pyplot.fill_between(
-                    self.datetimes,
-                    y1=self.vxy[i, :, 1] + self.vxy_sigma[i, :, 1],
-                    y2=self.vxy[i, :, 1] - self.vxy_sigma[i, :, 1],
+                    y1=self.vxyz[i, :, dim] + self.vxyz_sigma[i, :, dim],
+                    y2=self.vxyz[i, :, dim] - self.vxyz_sigma[i, :, dim],
                     **sigma)
 
     def animate(self, track, obs=0, frames=None, images=None, particles=None,
@@ -797,7 +773,7 @@ class Tracks(object):
             # Map: Mean
             axes[0].quiver(
                 self.xyz[track, i, 0], self.xyz[track, i, 1],
-                self.vxy[track, i, 0] * scales[i], self.vxy[track, i, 1] * scales[i],
+                self.vxyz[track, i, 0] * scales[i], self.vxyz[track, i, 1] * scales[i],
                 color='red', alpha=1,
                 angles='xy', scale=1, scale_units='xy', units='xy')
             if images:

@@ -552,11 +552,11 @@ def camera_motion_matches(camera, size=None, force_size=False,
     """
     motion = glimpse.helpers.read_json(os.path.join(CG_PATH, 'motion.json'))
     sequences = [item['paths'] for item in motion
-        if cg.parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
+        if parse_image_path(item['paths'][0], sequence=True)['camera'] == camera]
     all_images, all_matches, cam_params = [], [], []
     for sequence in sequences:
-        paths = [cg.find_image(path) for path in sequence]
-        cams = [cg.load_calibrations(path,  camera=camera_calib,
+        paths = [find_image(path) for path in sequence]
+        cams = [load_calibrations(path,  camera=camera_calib,
             station=station_calib, station_estimate=not station_calib, merge=True)
             for path in paths]
         images = [glimpse.Image(path, cam=cam)
@@ -659,8 +659,10 @@ def load_calibrations(path=None, station_estimate=False, station=False,
         img_path = image if isinstance(image, str) else path if path else None
         calibrations['station_estimate'] = _try_except(_load_station_estimate, station_estimate, path=img_path)
     if station:
-        calibrations['station'] = _try_except(_load_station, station)
-        calibrations['station']['viewdir'] = _try_except(_load_station_estimate, station, path=path)['viewdir']
+        calibrations['station'] = _try_except(_load_station_estimate, station, path=path)
+        station_calib = _try_except(_load_station, station)
+        if station_calib and 'xyz' in station_calib:
+            calibrations['station']['xyz'] = station_calib['xyz']
     if camera:
         calibrations['camera'] = _try_except(_load_camera, camera)
     if image:

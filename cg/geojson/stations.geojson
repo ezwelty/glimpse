@@ -61,7 +61,7 @@
 		"properties": {
 			"id": "AK02",
 			"name": "Waterline (wide)",
-			"fixed": true,
+			"fixed": false,
 			"viewdir": [-45.0, -5, 0.0],
 			"notes": "2011: Position calibrated with well educated initial guess and bundle adjustment over sequence. Excellent results."
 		},
@@ -87,9 +87,9 @@
 		"properties": {
 			"id": "AK03",
 			"name": "Cliff",
-			"fixed": false,
+			"fixed": true,
 			"viewdir": [-60, -3.5, 0.5],
-			"notes": "Position assumed same as AK03b. 2011: Well constrained, position held fixed. Breaks ignore botched AK03_20070817 sequence. Good agreement with aerial. Ignored breaks: AK03_20080429_231825 (small).",
+			"notes": "Position same as AK03b. 2011: Well constrained, position held fixed. Breaks ignore botched AK03_20070817 sequence. Good agreement with aerial. Ignored breaks: AK03_20080429_231825 (small).",
 			"breaks": [{
 				"start": "AK03_20080112_205442",
 				"viewdir": [-60, -5, 3]
@@ -194,9 +194,9 @@
 		"properties": {
 			"id": "AK10b",
 			"name": "Juncture",
-			"fixed": false,
+			"fixed": true,
 			"viewdir": [-151.5, -9, -2.5],
-			"notes": "Handheld GPS. Ignored breaks: AK10b_20140501_232148 (service, small), AK10b_20140629_225023 (service, small), AK10b_20140925_202236 (service, small), AK10b_20150324_193304 (service, small), AK10b_20150619_215752 (service, small), AK10b_20150918_195852 (service, small), AK10b_20161103_222425 (service, small).",
+			"notes": "Handheld GPS, but same position as AK10. Ignored breaks: AK10b_20140501_232148 (service, small), AK10b_20140629_225023 (service, small), AK10b_20140925_202236 (service, small), AK10b_20150324_193304 (service, small), AK10b_20150619_215752 (service, small), AK10b_20150918_195852 (service, small), AK10b_20161103_222425 (service, small).",
 			"breaks": [{
 				"start": "AK10b_20120826_002540",
 				"viewdir": [-149.5, -10, -2.5],
@@ -288,9 +288,9 @@
 		"properties": {
 			"id": "AKJNC",
 			"name": "Juncture",
-			"fixed": false,
+			"fixed": true,
 			"viewdir": [90.5, -8, 0],
-			"notes": "Source of position unknown.",
+			"notes": "Surveyed position but source or uncertainty unknown.",
 			"breaks": [{
 				"start": "AKJNC_20120825_234000",
 				"viewdir": [90, -7.5, -1],
@@ -440,7 +440,7 @@
 			"name": "Columbia 2004",
 			"fixed": true,
 			"viewdir": [-86, -4, -3],
-			"notes": "Survey GPS. 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]. Ignored breaks: CG04_20041002_200016 (small).",
+			"notes": "Survey GPS apparently too low (measured at ground?) so raised to 268 m (original 266.152 m). 2011: Position slightly revised (~+2m z) in bundle adjustment over all gcp images. Very good agreement with aerial terminus! P=[497294.5329, 6776046.634, 268.47079]. Ignored breaks: CG04_20041002_200016 (small).",
 			"breaks": [{
 				"start": "CG04_20041005_200016",
 				"viewdir": [-85, -5, -3],
@@ -449,7 +449,7 @@
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.0502013, 61.1190274, 266.152]
+			"coordinates": [-147.0502013, 61.1190274, 268]
 		}
 	}, {
 		"type": "Feature",

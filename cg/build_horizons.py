@@ -6,26 +6,8 @@ cg.IMAGE_PATH = '/volumes/science-b/data/columbia/timelapse'
 
 # ---- Constants ---- #
 
-# CG04: IfSar (ArcticDEM as one artifact)
-# CG05: IfSar (ArcticDEM not tried)
-# CG06: IfSar (ArcticDEM not tried)
-# AK01: IfSar (ArcticDEM as one artifact)
-# AK01b: IfSar (ArcticDEM better detail on far left, but couple large errors)
-# AK03(b): IfSar (ArcticDEM not tried)
-# AK04: IfSar (ArcticDEM not tried)
-# AK09(b): IfSar (ArcticDEM not tried)
-# AK10(b): IfSAR (ArcticDEM has nasty artifacts)
-# AK12: IfSar (ArcticDEM not tried)
-# AKJNC: IfSar (very similar to ArcticDEM, but without a couple small artifacts)
-# AKST03A: IfSar (ArcticDEM not tried)
-# AKST03B: IfSar (ArcticDEM not tried)
-
-STATION = 'CG04'
-
-# DEM_PATH = '/volumes/science-b/data/columbia/_new/arcticdem/v2.0/tiles/merged_projected_horizon.tif'
-# DEM_DZ = 0
-DEM_PATH = '/volumes/science-b/data/columbia/_new/ifsar/merged_projected_horizon.tif'
-DEM_DZ = 17
+STATION = 'AK10b'
+DEM_PATH = '/volumes/science-b/data/columbia/_new/ifsar/hae.tif'
 DEM_ZLIM = (1, np.inf)
 DDEG = 0.05
 
@@ -33,7 +15,6 @@ DDEG = 0.05
 
 dem = glimpse.DEM.read(DEM_PATH)
 dem.crop(zlim=DEM_ZLIM)
-dem.Z += DEM_DZ
 
 # --- Compute horizon ---- #
 
@@ -57,10 +38,10 @@ glimpse.helpers.write_geojson(geo,
 
 # --- Check result ---- #
 
-svg_path = glob.glob('svg/' + STATION + '_*.svg')[0]
+svg_path = glob.glob('svg/' + STATION + '_*.svg')[-1]
 img_path = cg.find_image(svg_path)
-eop = cg.load_calibrations(path=img_path, station_estimate=STATION, merge=True)
-img = glimpse.Image(img_path, cam=eop)
+cam_args = cg.load_calibrations(path=img_path, station_estimate=True, merge=True)
+img = glimpse.Image(img_path, cam=cam_args)
 geo = glimpse.helpers.read_geojson('geojson/horizons/' + STATION + '.geojson', crs=32606)
 lxyz = [coords for coords in glimpse.helpers.geojson_itercoords(geo)]
 luv = [img.cam.project(xyz, correction=True) for xyz in lxyz]

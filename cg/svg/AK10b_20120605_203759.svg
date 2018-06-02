@@ -3,7 +3,7 @@
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg version="1.1" id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
 	 width="3872px" height="2592px" viewBox="0 0 3872 2592" enable-background="new 0 0 3872 2592" xml:space="preserve">
-<image overflow="visible" width="3872" height="2592" xlink:href="AK10b_20120605_203759.JPG" >
+<image overflow="visible" enable-background="new    " width="3872" height="2592" xlink:href="AK10b_20120605_203759.JPG" >
 </image>
 <g id="horizon">
 	<polyline fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" points="0,566.333 23,551.333 52.333,544 
@@ -14,7 +14,7 @@
 		706,748.333 722.667,752.667 743,754.667 756.667,758 782.334,763 815.334,771.999 827,772.666 835,772.332 844.667,772.666 
 		851.334,775.666 861.334,779.332 878,785.666 900,791.999 913.334,796.999 925.334,800.999 939,799.999 945.334,799.999 
 		951.667,800.666 959.667,806.332 975.334,814.999 985.334,816.332 997.667,821.999 	"/>
-	<polyline fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" points="1047.334,825.999 1068.001,807.999 
+	<polyline fill="none" stroke="#FF0000" stroke-width="0.25" stroke-miterlimit="10" points="1048.842,824.257 1068.001,807.999 
 		1083.001,798.332 1098.001,793.665 1111.334,787.665 1130.001,780.665 1159.334,771.665 1165.667,768.665 1172.667,768.332 
 		1181.334,770.665 1192.334,772.999 1203.667,773.999 1210.334,773.665 1216.667,775.665 1222.334,778.999 1229.001,783.665 
 		1247.001,780.999 1261.667,777.999 1269.001,772.999 1280.667,772.665 1293.667,768.332 1306.334,767.999 1323.667,770.665 

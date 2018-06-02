@@ -1,6 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, lxml, re, warnings)
+from . import (helpers)
 
 # ---- Parse SVG file ----
 
@@ -277,3 +278,49 @@ def parse_circle(cx, cy):
         array: Coordinates x,y (1x2)
     """
     return np.array((cx, cy), dtype=float).reshape((1, 2))
+
+# ---- Write SVG ----
+
+E = lxml.builder.ElementMaker(
+    namespace='http://www.w3.org/2000/svg',
+    nsmap={
+        None: 'http://www.w3.org/2000/svg',
+        'xlink': 'http://www.w3.org/1999/xlink'
+    })
+
+def _svg(*args, size, **kwargs):
+    viewBox = (0, 0, size[0], size[1])
+    defaults = {
+        'x': '0px',
+        'y': '0px',
+        'width': str(size[0]) + 'px',
+        'height': str(size[1]) + 'px',
+        'viewBox': ' '.join((str(x) for x in viewBox))
+    }
+    kwargs = helpers.merge_dicts(defaults, kwargs)
+    return E.svg(*args, **kwargs)
+
+def _image(*args, size, scale, path, **kwargs):
+    transform = (scale[0], 0, 0, scale[1], 0, 0)
+    defaults = {
+        'width': str(size[0]),
+        'height': str(size[1]),
+        'transform': 'matrix(' + ' '.join((str(x) for x in transform)) + ')',
+        '{' + E._nsmap['xlink'] + '}href': path
+    }
+    kwargs = helpers.merge_dicts(defaults, kwargs)
+    return E.image(*args, **kwargs)
+
+def _write_svg(xml, path=None, pretty_print=False, xml_declaration=False, doctype=False, encoding='utf-8', **kwargs):
+    if doctype is True:
+        doctype = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">'
+    elif doctype is False:
+        doctype = None
+    txt = lxml.etree.tostring(xml,
+        pretty_print=pretty_print, xml_declaration=xml_declaration,
+        doctype=doctype, encoding=encoding, **kwargs).decode()
+    if path is None:
+        return txt
+    else:
+        with open(path, 'w') as fp:
+            fp.write(txt)

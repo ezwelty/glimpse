@@ -22,6 +22,7 @@ import gzip
 import json
 import lmfit
 import lxml.etree
+import lxml.builder
 import math
 import matplotlib
 import matplotlib.animation

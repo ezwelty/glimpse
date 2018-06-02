@@ -1,8 +1,8 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
-    warnings, datetime, sharedmem)
-from . import (helpers)
+    warnings, datetime)
+from . import (helpers, config)
 
 # ---- Controls ----
 
@@ -1513,7 +1513,7 @@ class KeypointMatcher(object):
                 if clear_images:
                     img.I = None
         # Run process in parallel
-        with sharedmem.MapReduce(np=parallel) as pool:
+        with config._MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
     def build_matches(self, maxdt=None, min_nearest=0, seq=None, imgs=None,
@@ -1635,7 +1635,7 @@ class KeypointMatcher(object):
                         match.filter(**filter)
             return matches
         # Run process in parallel
-        with sharedmem.MapReduce(np=parallel) as pool:
+        with config._MapReduce(np=parallel) as pool:
             matches = pool.map(
                 func=process, reduce=reduce, star=True,
                 sequence=tuple(enumerate(matching_images)))
@@ -1674,7 +1674,7 @@ class KeypointMatcher(object):
             return i, m
         def reduce(i, m):
             self.matches.data[i] = m
-        with sharedmem.MapReduce(np=parallel) as pool:
+        with config._MapReduce(np=parallel) as pool:
             _ = pool.map(
                 func=process, reduce=reduce, star=True,
                 sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))
@@ -1692,7 +1692,7 @@ class KeypointMatcher(object):
             return i, m
         def reduce(i, m):
             self.matches.data[i] = m
-        with sharedmem.MapReduce(np=parallel) as pool:
+        with config._MapReduce(np=parallel) as pool:
             _ = pool.map(
                 func=process, reduce=reduce, star=True,
                 sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))

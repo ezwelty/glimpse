@@ -2,8 +2,8 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    sharedmem, gdal, collections, pandas, sys)
-from . import (helpers)
+    gdal, collections, pandas, sys, sharedmem)
+from . import (helpers, config)
 
 class Camera(object):
     """
@@ -579,8 +579,8 @@ class Camera(object):
         return angles
 
     def project_dem(self, dem, values=None, mask=None, tile_size=(256, 256),
-        scale=1, scale_limits=(1, 1), aggregate=np.mean,
-        parallel=False, correction=False):
+        tile_overlap=(1, 1), scale=1, scale_limits=(1, 1), aggregate=np.mean,
+        parallel=False, correction=False, return_depth=False):
         """
         Return an image simulated from a digital elevation model.
 
@@ -590,81 +590,107 @@ class Camera(object):
         Arguments:
             dem (`Raster`): `Raster` object containing elevations.
             values (array): Values to use in building the image.
-                Must have the same shape as `dem.Z`.
-                If `None`, distance from the camera (along the optical axis)
-                is used, yielding a depth map.
+                Must have the same 2-dimensional shape as `dem.Z` but can have
+                multiple layers stacked along the 3rd dimension.
+                Cannot be `None` unless `return_depth` is True.
             mask (array): Boolean mask of cells of `dem` to include.
                 Must have the same shape as `dem.Z`.
                 If `None`, only NaN cells in `dem.Z` are skipped.
-            tile_size (iterable): Target size of tiles (see `Grid.tile_indices()`)
+            tile_size (iterable): Target size of `dem` tiles (see `Grid.tile_indices()`)
+            tile_overlap (iterable): Overlap between `dem` tiles (see `Grid.tile_indices()`)
             scale (float): Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
             scale_limits (iterable): Min and max values of `scale`
             aggregate (function): Function with which to aggregate values projected
                 onto the same image pixel
-            parallel: Number of tiles to project in parallel (int),
-                or whether to detect in parallel (bool). If `True`,
+            parallel: Number of parallel processes (int),
+                or whether to work in parallel (bool). If `True`,
                 all available CPU cores are used.
-            correction: Whether or how to apply elevation corrections (see `self.project`)
+            correction: Whether or how to apply elevation corrections (see `helpers.elevation_corrections()`)
+            return_depth: Whether to return a depth map - the distance of the
+                `dem` surface measured along the camera's optical axis
+
+        Returns:
+            array: Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
+                and 3rd dimension corresponding to each layer in `values`.
+                If `return_depth` is True, it is appended as an additional layer.
         """
-        assert values is None or values.shape == dem.shape
+        assert values is None or values.shape[0:2] == dem.shape
         assert mask is None or mask.shape == dem.shape
         if mask is None:
             mask = ~np.isnan(dem.Z)
-        has_values = values is not None
         parallel = helpers._parse_parallel(parallel)
+        has_values = values is not None
+        if not has_values and not return_depth:
+            raise ValueError('values cannot be missing if return_depth is False')
+        if has_values:
+            values = np.atleast_3d(values)
         # Generate DEM block indices
-        tile_indices = dem.tile_indices(size=tile_size)
+        tile_indices = dem.tile_indices(size=tile_size, overlap=tile_overlap)
         ntiles = len(tile_indices)
-        # Initialize image
-        I = np.full(self.shape, np.nan)
-        def process(i, ij):
+        # Initialize array
+        nbands = (values.shape[2] if has_values else 0) + return_depth
+        I = np.full(self.shape + (nbands, ), np.nan)
+        # Define parallel process
+        def process(i_tile, ij):
             tile_mask = mask[ij]
             if not np.count_nonzero(tile_mask):
-                return i
+                # No cells selected
+                return i_tile
             tile = dem[ij]
             if has_values:
                 tile_values = values[ij]
             # Scale tile based on distance from camera
             mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
+            if np.isnan(mean_xyz[2]):
+                # No cells with elevations
+                return i
             _, distance = self._world2camera(np.atleast_2d(mean_xyz), return_distances=True)
             tile_scale = scale * np.abs(tile.d).mean() / (distance / self.f.mean())
             tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
             if tile_scale != 1:
                 tile.resize(tile_scale)
                 tile_mask = scipy.ndimage.zoom(tile_mask, zoom=float(tile_scale), order=0)
-                if has_values:
-                    tile_values = scipy.ndimage.zoom(tile_values, zoom=float(tile_scale), order=1)
+                tile_values = np.dstack(
+                    scipy.ndimage.zoom(tile_values[:, :, i], zoom=float(tile_scale), order=1)
+                    for i in range(tile_values.shape[2]))
             # Project tile
             xyz = helpers.grid_to_points((tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask]))
-            if has_values:
-                uv = self.project(xyz, correction=correction)
-            else:
+            if return_depth:
                 xy, distances = self._world2camera(xyz, correction=correction, return_distances=True)
                 uv = self._camera2image(xy)
+            else:
+                uv = self.project(xyz, correction=correction)
             is_in = self.inframe(uv)
             if not np.count_nonzero(is_in):
-                return i
+                # No cells in image
+                return i_tile
             rc = uv[is_in, ::-1].astype(int)
+            # Compile values
             if has_values:
                 tile_values = tile_values[tile_mask][is_in]
-            else:
-                tile_values = distances[is_in]
-            df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1], value=tile_values))
+            if return_depth:
+                if has_values:
+                    tile_values = np.column_stack((tile_values, distances[is_in, None]))
+                else:
+                    tile_values = distances[is_in, None]
+            # Build DataFrame for fast groupby operation
+            df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1]))
+            for i in range(tile_values.shape[1]):
+                df.insert(df.shape[1], str(i), tile_values[:, i])
+            # Aggregate values
             groups = df.groupby(('row', 'col')).aggregate(aggregate).reset_index()
-            idx = np.ravel_multi_index((
-                groups.row.as_matrix().astype(int),
-                groups.col.as_matrix().astype(int)),
-                self.shape)
-            return i, idx, groups.value.as_matrix()
+            idx = (groups.row.as_matrix().astype(int),
+                groups.col.as_matrix().astype(int))
+            return (i_tile, idx, groups.iloc[:, 2:].as_matrix())
         def reduce(i, idx=None, values=None):
             helpers._print_progress(i, ntiles, close=False)
             if idx is not None:
-                I.flat[idx] = values
-        with sharedmem.MapReduce(np=parallel) as pool:
+                I[idx] = values
+        with config._MapReduce(np=parallel) as pool:
             pool.map(
                 func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(range(ntiles), tile_indices)))
+                sequence=tuple(enumerate(tile_indices)))
         sys.stdout.write('\n')
         return I
 

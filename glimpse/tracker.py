@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, cv2, warnings, datetime, scipy, sharedmem, matplotlib)
-from . import (helpers, raster)
+from .imports import (np, cv2, warnings, datetime, scipy, matplotlib)
+from . import (helpers, raster, config)
 
 class Tracker(object):
     """
@@ -288,7 +288,7 @@ class Tracker(object):
                 results += (particles, weights)
             return results
         # Run process in parallel
-        with sharedmem.MapReduce(np=parallel) as pool:
+        with config._MapReduce(np=parallel) as pool:
             results = pool.map(process, xy)
         # Return results as Tracks
         if return_particles:

@@ -310,7 +310,6 @@ def normalize(array):
     """
     return (array - array.mean()) * (1 / array.std())
 
-# NOTE: Unused
 def normalize_range(array, interval=(0, 1)):
     """
     Translate and scale a numeric array to a specified interval.
@@ -318,20 +317,17 @@ def normalize_range(array, interval=(0, 1)):
     Arguments:
         array (array): Input array
         interval: Interval as either (min, max) or a numpy data type.
-            If `None`, the min and max of `array` is used.
 
     Returns:
-        array (optional): Normalized copy of array, cast to float
+        array: Normalized array
     """
-    if interval is None:
-        interval = array
     if np.iterable(interval):
         interval = min(interval), max(interval)
     else:
         interval = numpy_dtype_minmax(interval)
-    scale = (max(interval) - min(interval)) / (array.max() - array.min())
+    scale = (interval[1] - interval[0]) / (np.nanmax(array) - np.nanmin(array))
     scaled = array * scale
-    return scaled - scaled.min() + min(interval)
+    return scaled - np.nanmin(scaled) + interval[0]
 
 def gaussian_filter(array, mask=None, fill=False, **kwargs):
     """
@@ -1650,7 +1646,7 @@ def _print_progress(i, n, ticks=20, close=None):
     sys.stdout.write('\r')
     percent = round(100 * i / n)
     nticks = int(percent / (100 / ticks))
-    sys.stdout.write(('[%-' + str(ticks) + 's] %d%%') % ('=' * nticks, percent))
+    sys.stdout.write(('[%-' + str(ticks) + 's] %d%% (%d of %d)') % ('=' * nticks, percent, i, n))
     sys.stdout.flush()
     if close is None:
         close = i >= (n - 1)

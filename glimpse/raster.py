@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, scipy, gdal, matplotlib, datetime, copy)
+from .imports import (np, scipy, gdal, matplotlib, datetime, copy, warnings)
 from . import (helpers)
 
 class Grid(object):
@@ -331,12 +331,13 @@ class Grid(object):
         matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
         matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
 
-    def tile_indices(self, size):
+    def tile_indices(self, size, overlap=(0, 0)):
         """
         Return slice objects that chop the grid into tiles.
 
         Arguments:
             size (iterable): Target tile size (nx, ny)
+            overlap (iterable): Number of overlapping pixels between tiles (nx, ny)
 
         Returns:
             tuple: Pairs of slice objects (rows, cols) with which to subset
@@ -345,10 +346,15 @@ class Grid(object):
         n = np.round(self.n / size).astype(int)
         xi = np.floor(np.arange(self.n[0]) / np.ceil(self.n[0] / n[0]))
         yi = np.floor(np.arange(self.n[1]) / np.ceil(self.n[1] / n[1]))
-        xranges = np.insert(np.searchsorted(xi, np.unique(xi), side='right'), 0, 0)
-        yranges = np.insert(np.searchsorted(yi, np.unique(yi), side='right'), 0, 0)
-        return tuple((slice(*yranges[i:(i + 2)]), slice(*xranges[j:(j + 2)]))
-            for i in range(len(yranges) - 1) for j in range(len(xranges) - 1))
+        xends = np.insert(np.searchsorted(xi, np.unique(xi), side='right'), 0, 0)
+        yends = np.insert(np.searchsorted(yi, np.unique(yi), side='right'), 0, 0)
+        # HACK: Achieves overlap by increasing tile size
+        xstarts = xends.copy()
+        xstarts[1:-1] -= overlap[0]
+        ystarts = yends.copy()
+        ystarts[1:-1] -= overlap[1]
+        return tuple((slice(ystarts[i], yends[i + 1]), slice(xstarts[j], xends[j + 1]))
+            for i in range(len(ystarts) - 1) for j in range(len(xstarts) - 1))
 
 class Raster(Grid):
     """
@@ -668,7 +674,7 @@ class Raster(Grid):
             xlim (array_like): Crop bounds in x
             ylim (array_like): Crop bounds in y
             zlim (array_like): Crop bounds in z.
-                Values outside range are set to `np.nan` (requires floating type).
+                Values outside range are set to `np.nan` (casting to float as needed).
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
@@ -676,9 +682,11 @@ class Raster(Grid):
             self.xlim = xlim
             self.ylim = ylim
         if zlim is not None:
-            if not issubclass(self.Z.dtype.type, np.floating):
-                raise ValueError('Z must be floating to mask with NaN')
-            self.Z[(self.Z < min(zlim)) | (self.Z > max(zlim))] = np.nan
+            outbounds = (self.Z < min(zlim)) | (self.Z > max(zlim))
+            if np.count_nonzero(outbounds) and not issubclass(self.Z.dtype.type, np.floating):
+                warnings.warn('Z cast to float to accommodate NaN')
+                self.Z = self.Z.astype(float)
+            self.Z[outbounds] = np.nan
 
     def resize(self, scale, order=1):
         """
@@ -818,8 +826,12 @@ class DEM(Raster):
             array: Boolean array of the same shape as `self.Z`
                 with visible cells tagged as `True`
         """
-        assert abs(self.d).all()
-        assert self.inbounds(np.atleast_2d(origin[0:2]))
+        if not all(abs(self.d[0]) == abs(self.d)):
+            warnings.warn(
+                'DEM cells not square ' + str(tuple(abs(self.d))) + ' - ' +
+                'may lead to unexpected results')
+        if not self.inbounds(np.atleast_2d(origin[0:2])):
+            warnings.warn('Origin not in DEM - may lead to unexpected results')
         # Compute distance to all cell centers
         dx = np.tile(self.x - origin[0], self.n[1])
         dy = np.repeat(self.y - origin[1], self.n[0])

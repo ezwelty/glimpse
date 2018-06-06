@@ -601,8 +601,10 @@ class Camera(object):
             scale (float): Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
             scale_limits (iterable): Min and max values of `scale`
-            aggregate (function): Function with which to aggregate values projected
-                onto the same image pixel
+            aggregate: Passed as `func` to `pandas.DataFrame.aggregate()`
+                to aggregate values projected onto the same image pixel.
+                Each layer of `values`, and depth if `return_depth` is True,
+                are named by their integer position in the stack (e.g. 0, 1, ...).
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
                 all available CPU cores are used.
@@ -629,8 +631,13 @@ class Camera(object):
         tile_indices = dem.tile_indices(size=tile_size, overlap=tile_overlap)
         ntiles = len(tile_indices)
         # Initialize array
-        nbands = (values.shape[2] if has_values else 0) + return_depth
-        I = np.full(self.shape + (nbands, ), np.nan)
+        # HACK: Use dummy DataFrame to predict output size of aggregate
+        nbands_in = (values.shape[2] if has_values else 0) + return_depth
+        df = pandas.DataFrame(
+            data=np.zeros((2, nbands_in + 2)),
+            columns=['row', 'col'] + list(range(nbands_in)))
+        nbands_out = df.groupby(['row', 'col']).aggregate(aggregate).shape[1]
+        I = np.full(self.shape + (nbands_out, ), np.nan)
         # Define parallel process
         def process(i_tile, ij):
             tile_mask = mask[ij]
@@ -644,7 +651,7 @@ class Camera(object):
             mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
-                return i
+                return i_tile
             _, distance = self._world2camera(np.atleast_2d(mean_xyz), return_distances=True)
             tile_scale = scale * np.abs(tile.d).mean() / (distance / self.f.mean())
             tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
@@ -677,7 +684,7 @@ class Camera(object):
             # Build DataFrame for fast groupby operation
             df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1]))
             for i in range(tile_values.shape[1]):
-                df.insert(df.shape[1], str(i), tile_values[:, i])
+                df.insert(df.shape[1], i, tile_values[:, i])
             # Aggregate values
             groups = df.groupby(('row', 'col')).aggregate(aggregate).reset_index()
             idx = (groups.row.as_matrix().astype(int),

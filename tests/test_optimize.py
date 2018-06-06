@@ -24,8 +24,8 @@ def test_ransac_camera_viewdir(tol=0.1):
         for img in (imgA, imgB)]
     uvA, uvB = glimpse.optimize.match_keypoints(keypoints[0], keypoints[1], max_ratio=0.8)
     matches = glimpse.optimize.Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
-    model = glimpse.optimize.Cameras(cams=imgB.cam, controls=matches,
-        cam_params=dict(viewdir=True), sparsity=False, scales=False)
+    model = glimpse.optimize.Cameras(cams=[imgB.cam], controls=[matches],
+        cam_params=[dict(viewdir=True)])
     values = model.fit()
     assert any(abs(values - viewdir) > tol)
     rvalues, rindex = glimpse.optimize.ransac(model,

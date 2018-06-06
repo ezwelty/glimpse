@@ -73,6 +73,18 @@ def parse_svg(path, imgsz=None):
     nodes = tree.xpath('//*[not(ancestor::g[@id]) and (self::g[@id] or (' + selfs + ')) and (' + descendants + ')]')
     return _parse_nodes(nodes, scale=scale)
 
+def _parse_image_size(image):
+    regex = re.compile(r'([0-9\.]+)')
+    width = regex.findall(image.get('width'))[0]
+    height = regex.findall(image.get('height'))[0]
+    return float(width), float(height)
+
+def _parse_svg_size(svg):
+    regex = re.compile(r'([0-9\.]+)')
+    width = regex.findall(svg.get('width'))[0]
+    height = regex.findall(svg.get('height'))[0]
+    return float(width), float(height)
+
 def _parse_nodes(nodes, scale=None):
     """
     Return vertices of SVG elements in ElementTree nodes.
@@ -281,6 +293,10 @@ def parse_circle(cx, cy):
 
 # ---- Write SVG ----
 
+def _read_svg(path):
+    parser = lxml.etree.XMLParser(remove_blank_text=True)
+    return lxml.etree.parse(path, parser).getroot()
+
 E = lxml.builder.ElementMaker(
     namespace='http://www.w3.org/2000/svg',
     nsmap={
@@ -300,6 +316,9 @@ def _svg(*args, size, **kwargs):
     kwargs = helpers.merge_dicts(defaults, kwargs)
     return E.svg(*args, **kwargs)
 
+def _g(*args, **kwargs):
+    return E.g(*args, **kwargs)
+
 def _image(*args, size, scale, path, **kwargs):
     transform = (scale[0], 0, 0, scale[1], 0, 0)
     defaults = {
@@ -310,6 +329,15 @@ def _image(*args, size, scale, path, **kwargs):
     }
     kwargs = helpers.merge_dicts(defaults, kwargs)
     return E.image(*args, **kwargs)
+
+def _line(*args, start, end, fill='none', stroke='#ED1F24', stroke_width=0.25, **kwargs):
+    defaults = {
+        'x1': str(start[0]), 'y1': str(start[1]),
+        'x2': str(end[0]), 'y2': str(end[1]),
+        'fill': fill, 'stroke': stroke, 'stroke-width': str(stroke_width)
+    }
+    kwargs = helpers.merge_dicts(defaults, kwargs)
+    return E.line(*args, **kwargs)
 
 def _write_svg(xml, path=None, pretty_print=False, xml_declaration=False, doctype=False, encoding='utf-8', **kwargs):
     if doctype is True:

@@ -105,9 +105,10 @@ class Grid(object):
         """
         raster = gdal.Open(path, gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
-        grid = cls(n=(raster.RasterXSize, raster.RasterYSize),
-            x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
-            y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+        n = (raster.RasterXSize, raster.RasterYSize)
+        grid = cls(n=n,
+            x=transform[0] + transform[1] * np.array([0, n[0]]),
+            y=transform[3] + transform[5] * np.array([0, n[1]]))
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
@@ -430,8 +431,8 @@ class Raster(Grid):
         transform = raster.GetGeoTransform()
         grid = Grid(
             n=(raster.RasterXSize, raster.RasterYSize),
-            xlim=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
-            ylim=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
+            x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
+            y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
@@ -732,53 +733,6 @@ class DEM(Raster):
 
     def __init__(self, Z, x=None, y=None, datetime=None):
         Raster.__init__(self, Z=Z, x=x, y=y, datetime=datetime)
-
-    @classmethod
-    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
-        """
-        Read DEM from raster file.
-
-        See `gdal.Open()` for details.
-        If raster is float and has a defined no-data value,
-        no-data values are replaced with `np.nan`.
-        Otherwise, the raster data is unchanged.
-
-        Arguments:
-            path (str): Path to file
-            band (int): Raster band to read (1 = first band)
-            d (float): Target grid cell size
-            xlim (array-like): Crop bounds in x.
-                If `None` (default), read from file.
-            ylim (array-like): Crop bounds in y.
-                If `None` (default), read from file.
-            datetime (datetime): Capture date and time
-        """
-        raster = gdal.Open(path, gdal.GA_ReadOnly)
-        transform = raster.GetGeoTransform()
-        grid = Grid(
-            n=(raster.RasterXSize, raster.RasterYSize),
-            x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
-            y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]))
-        xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
-        win_xsize = (cols[1] - cols[0]) + 1
-        win_ysize = (rows[1] - rows[0]) + 1
-        if d:
-            buf_xsize = np.ceil(abs(win_xsize * grid.d[0] / d))
-            buf_ysize = np.ceil(abs(win_ysize * grid.d[1] / d))
-        else:
-            buf_xsize = win_xsize
-            buf_ysize = win_ysize
-        band = raster.GetRasterBand(band)
-        Z = band.ReadAsArray(
-            # ReadAsArray() requires int, not numpy.int#
-            xoff=int(cols[0]), yoff=int(rows[0]),
-            win_xsize=int(win_xsize), win_ysize=int(win_ysize),
-            buf_xsize=int(buf_xsize), buf_ysize=int(buf_ysize))
-        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
-        nan_value = band.GetNoDataValue()
-        if np.issubdtype(Z.dtype, np.floating) and nan_value:
-            Z[Z == nan_value] = np.nan
-        return cls(Z, x=xlim, y=ylim, datetime=datetime)
 
     def hillshade(self, azimuth=315, altitude=45, **kwargs):
         """

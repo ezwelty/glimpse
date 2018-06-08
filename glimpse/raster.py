@@ -651,7 +651,7 @@ class Raster(Grid):
             array = self.Z
         matplotlib.pyplot.imshow(array,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
-            cmap=cmap, **kwargs)
+            **kwargs)
 
     def rasterize(self, xy, values, fun=np.mean):
         """

@@ -41,65 +41,45 @@ def load_model(camera, svgs=None, keys=None, step=None, group_params=dict(),
         group_params=group_params)
     return motion_images, svg_images, model, station
 
-def write_calibration(camera, model, fit, suffix='', station=None):
-    # Save results (camera)
-    # fmm, cmm, k, p, sensorsz
-    cam = model.cams[0].copy()
-    keys = list(fit.params)[:model.group_mask.sum()]
-    # (mean values)
-    cam.vector[model.group_mask] = [fit.params[key].value for key in keys]
-    cam.write(
+def write_calibration(camera, model, fit, group=0, suffix='', station=None):
+    # model.set_cameras(fit.params)
+    i = model.group_indices[group][0]
+    # Save means
+    means = [item.value for item in fit.params.values()]
+    model.set_cameras(means)
+    # (fmm, cmm, k, p, sensorsz)
+    model.cams[i].write(
         path=os.path.join('cameras', camera + suffix + '.json'),
         attributes=('fmm', 'cmm', 'k', 'p', 'sensorsz'),
         indent=4, flat_arrays=True)
-    # (standard errors)
-    cam.vector[model.group_mask] = [fit.params[key].stderr for key in keys]
-    cam.write(
-        path=os.path.join('cameras', camera + suffix + '_stderr.json'),
-        attributes=('fmm', 'cmm', 'k', 'p'),
-        indent=4, flat_arrays=True)
-    # Save results (station)
-    # xyz
+    # (xyz)
     if station:
-        keys = ('xyz0', 'xyz1', 'xyz2')
-        # (mean values)
-        xyz = [fit.params[key].value for key in keys]
-        print('xyz deviation:', np.array(xyz) - cg.load_calibrations(station_estimate=station, merge=True)['xyz'])
-        glimpse.helpers.write_json(
-            dict(xyz=xyz),
-            path=os.path.join('stations', station + suffix + '.json'))
-        # (standard errors)
-        xyz = [fit.params[key].stderr for key in keys]
-        glimpse.helpers.write_json(
-            dict(xyz=xyz),
-            path=os.path.join('stations', station + suffix + '_stderr.json'))
-
-def set_figure_cameras(reset=False, resize=1):
-    for control in model.controls:
-        control.resize(1)
-    if reset:
-        model.reset_cameras()
-    else:
-        model.set_cameras(fit.params)
-    for control in model.controls:
-        control.resize(resize)
-
-# ---- Preview SVG ---- #
-
-camera = 'nikon-e8700'
-motion_images, svg_images, model, _ = load_model(camera)
-for i, img in enumerate(svg_images):
-    matplotlib.pyplot.figure()
-    img.plot()
-    model.plot(cam=model.cams.index(img.cam))
-    matplotlib.pyplot.title(glimpse.helpers.strip_path(img.path))
-    img.set_plot_limits()
+        xyz0 = cg.load_calibrations(station_estimate=station, merge=True)['xyz']
+        print('xyz deviation:', model.cams[i].xyz - xyz0)
+        model.cams[i].write(
+            path=os.path.join('stations', station + suffix + '.json'),
+            attributes=['xyz'], indent=4, flat_arrays=True)
+    # Save standard errors
+    stderrs = [item.stderr for item in fit.params.values()]
+    if fit.errorbars:
+        model.set_cameras(stderrs)
+        # (fmm, cmm, k, p)
+        model.cams[i].write(
+            path=os.path.join('cameras', camera + suffix + '_stderr.json'),
+            attributes=('fmm', 'cmm', 'k', 'p'),
+            indent=4, flat_arrays=True)
+        # (xyz)
+        if station:
+            model.cams[i].write(
+                path=os.path.join('stations', station + suffix + '_stderr.json'),
+                attributes=['xyz'], indent=4, flat_arrays=True)
+    model.reset_cameras()
 
 # ---- Calibrate cameras ---- #
 
 svgs = (
 	'AK01_20070817_200132', # 2
-	'AK01_20070922_200210', # 4
+	'AK01_20070922_230210', # 4
 	'AK01b_20080811_193452', # 4
 	# 'AK01b_20080922_193508', # 2
 	# 'AK01b_20090319_213755', # 2
@@ -161,7 +141,7 @@ svgs = (
 	'AK12_20110721_200018', # 3
 	'AK12_20110812_210007', # 3
 	'AKJNC_20120605_223513', # 4
-	'AKJNC_20120813_223326', # 4
+	'AKJNC_20120813_205325', # 4
 	'AKJNC_20121001_155719', # 4
 	'AKST03A_20100525_224800', # 3
 	'AKST03A_20100602_224800', # 3
@@ -191,74 +171,76 @@ group_params = [
     dict(f=True, k=[0, 1]),
     dict(f=True, k=[0, 1], p=True),
     dict(f=True, k=[0, 1], p=True, c=True)]
+group_params_xyz = group_params[:4] + [
+    dict(f=True, k=[0, 1], xyz=True),
+    dict(f=True, k=[0, 1], xyz=True, p=True),
+    dict(f=True, k=[0, 1], xyz=True, p=True, c=True)]
 keys = ('moraines', 'gcp', 'horizon', 'terminus', 'coast')
 step = 20 # pixels
 jobs = (
     dict(camera='nikon-e8700', keys=keys, group_params=group_params), # CG04
     dict(camera='nikon-d2x', keys=('moraines', 'gcp', 'horizon', 'terminus'), group_params=group_params), # CG05
-    # NOTE: Difficulty converging. Introducing xyz earlier may have helped avoid absurd c.
-    dict(camera='canon-20d', keys=('moraines', 'gcp', 'horizon', 'coast', 'terminus'), # CG06
-        group_params=group_params[0:4] + [dict(f=True, k=[0, 1], xyz=True),
-        dict(f=True, k=[0, 1], xyz=True, p=True), dict(f=True, k=[0, 1], xyz=True, p=True, c=True)]),
-    dict(camera='nikon-d200-04-24', keys=('moraines', 'gcp', 'horizon', 'terminus'), group_params=group_params), # AK01-2
-    dict(camera='nikon-d200-08-24', keys=keys, group_params=group_params), # AK01b
-    dict(camera='nikon-d200-03-20', keys=keys, group_params=group_params), # AK03, AK03b
-    dict(camera='nikon-d200-13-20', keys=('moraines', 'gcp', 'horizon', 'terminus'), group_params=group_params), # AK09 NOTE: Large moraine errors
-    dict(camera='nikon-d200-14-20', keys=keys, group_params=group_params), # AK09b NOTE: Large moraine errors
+    dict(camera='canon-20d', keys=keys, group_params=group_params_xyz), # CG06 (not fixed)
+    dict(camera='nikon-d200-04-24', keys=('moraines', 'gcp', 'horizon', 'terminus'), group_params=group_params_xyz), # AK01-2 (not fixed)
+    dict(camera='nikon-d200-08-24', keys=keys, group_params=group_params), # AK01b NOTE: Large c
+    dict(camera='nikon-d200-03-20', keys=keys, group_params=group_params), # AK03, AK03b NOTE: Foreground control suspect
+    dict(camera='nikon-d200-13-20', keys=('gcp', 'horizon', 'terminus'), group_params=group_params_xyz), # AK09 (not fixed)
+    dict(camera='nikon-d200-14-20', keys=('gcp', 'horizon', 'terminus'), group_params=group_params_xyz), # AK09b (not fixed) NOTE: cy very large
     dict(camera='nikon-d200-10-24', keys=keys, group_params=group_params), # AK10
     dict(camera='nikon-d200-17-20', keys=keys, group_params=group_params), # AK10b-1
-    dict(camera='nikon-d200-18-20', keys=('gcp', 'horizon', 'terminus', 'coast', 'moraines'), group_params=group_params), # AK10b-2 NOTE: Poor convergence
-    dict(camera='nikon-d300s', keys=keys, group_params=group_params), # AK12 NOTE: Poor convergence
-    dict(camera='canon-40d-01', keys=('gcp', 'horizon', 'coast'), group_params=group_params), # AKJNC
+    dict(camera='nikon-d200-18-20', keys=keys, group_params=group_params), # AK10b-2
+    dict(camera='nikon-d300s', keys=keys, group_params=group_params), # AK12
+    dict(camera='canon-40d-01', keys=('gcp', 'horizon', 'coast', 'moraines'), group_params=group_params), # AKJNC
     dict(camera='nikon-d200-11-28', keys=keys, group_params=group_params), # AKST0XA
     dict(camera='nikon-d200-12-28', keys=keys, group_params=group_params) # AKST0XB
 )
 
-suffix = ''
 # sys.stdout = open(os.path.join('logs', 'calibrate-cameras' + suffix + '.log'), 'w')
 # sys.stdout = sys.__stdout__
 for job in jobs:
     print(job['camera'])
     motion_images, svg_images, model, station = load_model(
-        job['camera'], keys=job['keys'], group_params=job['group_params'][-1],
+        job['camera'], keys=job['keys'], group_params=job['group_params'][-3],
         svgs=svgs, step=step, camera_calib=False, fixed=None)
+    xyz_added = station and 'xyz' not in job['group_params'][-1]
     fit = model.fit(
         full=True, method='leastsq',
-        group_params=job['group_params'] if station else job['group_params'][:-1])
+        group_params=job['group_params']
+        if xyz_added else job['group_params'][:-3])
     suffix = datetime.datetime.now().strftime('-%Y%m%d%H%M%S')
     write_calibration(job['camera'],
         model=model, fit=fit, station=station, suffix=suffix)
 
-# ---- Check single image (svg) ---- #
+# ---- Multi-camera calibration: AK09, AK09b with equal xyz ---- #
 
-basename = 'AK10b_20120605_203759'
-img = glimpse.Image(
-    path=cg.find_image(basename),
-    cam=cg.load_calibrations(basename, station_estimate=True, merge=True))
-controls = cg.svg_controls(img)
-svg_model = glimpse.optimize.Cameras(img.cam, controls,
-    cam_params=dict(viewdir=True), group_params=group_params[-1])
-svg_fit = svg_model.fit(full=True, group_params=group_params[:-1])
-matplotlib.pyplot.figure()
-img.plot()
-svg_model.plot(svg_fit.params)
-img.set_plot_limits()
-
-# ---- Check undistorted image ---- #
-
-basename = 'AKJNC_20120508_191103C'
-img = glimpse.Image(
-    path=cg.find_image(basename),
-    cam=cg.load_calibrations(basename, camera=True, merge=True))
-ideal_cam = img.cam.copy()
-ideal_cam.idealize()
-I = img.project(ideal_cam)
-img.write(path='test.jpg', I=I)
+cameras = ('nikon-d200-13-20', 'nikon-d200-14-20')
+stations = ('AK09', 'AK09b')
+motion_images, svg_images = [], []
+cams, controls, cam_params, ncams = [], [], [], [0]
+for camera in cameras:
+    motion_imgs, svg_imgs, model, station = load_model(
+        camera, keys=('gcp', 'horizon', 'terminus'), group_params=group_params[-1],
+        svgs=svgs, step=step, camera_calib=False, fixed=True)
+    motion_images.extend(motion_imgs)
+    svg_images.extend(svg_imgs)
+    cams.extend(model.cams)
+    controls.extend(model.controls)
+    cam_params.extend(model.cam_params)
+    ncams.append(len(model.cams))
+group_indices = [range(start, start + ncams[i + 1]) for i, start in enumerate(ncams[:-1])]
+model = glimpse.optimize.Cameras(cams, controls, cam_params, group_indices + [range(len(cams))],
+    group_params=[group_params[-1], group_params[-1], dict(xyz=True)])
+fit = model.fit(method='leastsq', full=True,
+    group_params=list(zip(group_params[:-1], group_params[:-1], [dict()] * 4 + [dict(xyz=True)])))
+suffix = datetime.datetime.now().strftime('-%Y%m%d%H%M%S')
+for group, camera in enumerate(cameras):
+    write_calibration(camera, model, fit, group=group,
+        station=stations[group], suffix=suffix)
 
 # ---- Check calibration ---- #
 
-camera = 'canon-40d-01'
-keys = ('gcp', 'horizon', 'coast', 'terminus', 'moraines')
+camera = 'nikon-d200-04-24'
+keys = ('moraines', 'gcp', 'horizon', 'terminus')
 motion_images, svg_images, model, _ = load_model(camera, keys=keys, svgs=svgs,
     camera_calib=True, station_calib=True, fixed=True, step=step)
 fit = model.fit(full=True)
@@ -306,3 +288,29 @@ for m in matches:
     img.cam.resize(1)
     imgB.cam.resize(1)
     m.resize(1)
+
+# ---- Check single image (svg) ---- #
+
+basename = 'AK10b_20120605_203759'
+img = glimpse.Image(
+    path=cg.find_image(basename),
+    cam=cg.load_calibrations(basename, station_estimate=True, merge=True))
+controls = cg.svg_controls(img)
+svg_model = glimpse.optimize.Cameras(img.cam, controls,
+    cam_params=dict(viewdir=True), group_params=group_params[-1])
+svg_fit = svg_model.fit(full=True, group_params=group_params[:-1])
+matplotlib.pyplot.figure()
+img.plot()
+svg_model.plot(svg_fit.params)
+img.set_plot_limits()
+
+# ---- Check undistorted image ---- #
+
+basename = 'AKJNC_20120508_191103C'
+img = glimpse.Image(
+    path=cg.find_image(basename),
+    cam=cg.load_calibrations(basename, camera=True, merge=True))
+ideal_cam = img.cam.copy()
+ideal_cam.idealize()
+I = img.project(ideal_cam)
+img.write(path='test.jpg', I=I)

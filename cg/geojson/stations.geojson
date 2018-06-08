@@ -7,12 +7,12 @@
 			"name": "Kadin",
 			"fixed": false,
 			"viewdir": [76.5, -7.5, 0.5],
-			"notes": "Position estimated from AK01b. 2011: Position allowed to wander from AK01b position. Results appear excellent. Breaks ignore botched AK01_20070817 and AK01_20071002 sequences.",
+			"notes": "Position estimated as near the rim of the cliff band above AK01b. 2011: Position allowed to wander from AK01b position. Results appear excellent. Breaks ignore botched AK01_20070817 and AK01_20071002 sequences.",
 			"breaks": null
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.1258523, 61.1253268, 499.562]
+			"coordinates": [-147.126328, 61.1251827, 488.5]
 		}
 	}, {
 		"type": "Feature",
@@ -140,7 +140,7 @@
 			"name": "Camp",
 			"fixed": false,
 			"viewdir": [-12.3, -14, -1.5],
-			"notes": "Position estimated from AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini.",
+			"notes": "Position estimated from field photographs. Known to be right besides AK09b. 2011: Position initialized with SfM result, bundle adjusted further with GCP. Good agreement with aerial termini.",
 			"breaks": null
 		},
 		"geometry": {
@@ -154,7 +154,7 @@
 			"name": "Camp",
 			"fixed": false,
 			"viewdir": [22.5, -13, 0],
-			"notes": "Position estimated using SfM",
+			"notes": "Known to be right besides AK09.",
 			"breaks": [{
 				"start": "AK09b_20091024_205905",
 				"viewdir": [22, -13, 0],
@@ -169,7 +169,7 @@
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.0495265, 61.1218314, 235.437]
+			"coordinates": [-147.0495883, 61.1220741, 236.259]
 		}
 	}, {
 		"type": "Feature",

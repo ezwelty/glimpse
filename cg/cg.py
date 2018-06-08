@@ -447,6 +447,55 @@ def sea_height(xy, t=None):
         tide_height = 0
     return geoid_height + tide_height
 
+def synth_controls(img, step=None, directions=False):
+    image = glimpse.helpers.strip_path(img.path)
+    basename = os.path.join('svg-synth', image)
+    controls = []
+    # Load svg
+    path = basename + '.svg'
+    if os.path.isfile(path):
+        svg = glimpse.svg.parse_svg(path, imgsz=img.cam.imgsz)
+        if 'points' in svg or 'lines' in svg or 'points-auto' in svg:
+            scam = glimpse.helpers.read_json(basename + '-synth.json')
+            simg = glimpse.Image(basename + '-synth.JPG', cam=scam)
+            if not directions:
+                depth = glimpse.Raster.read(basename + '-depth.tif')
+                scale = depth.n / img.cam.imgsz
+            # NOTE: Ignoring parallax potential
+        if 'points-auto' in svg:
+            # Length-2 paths traced from image to synthetic image
+            uv = np.vstack([x[0] for x in svg['points-auto'].values()])
+            suv = np.vstack([x[1] for x in svg['points-auto'].values()])
+            xyz = simg.cam.invproject(suv)
+            if not directions:
+                xyz = simg.cam.xyz + xyz * depth.sample(suv * scale).reshape(-1, 1)
+            points = glimpse.optimize.Points(cam=img.cam, uv=uv, xyz=xyz,
+                directions=directions, correction=False)
+            controls.append(points)
+        if 'points' in svg:
+            # Length-2 paths traced from image to synthetic image
+            uv = np.vstack([x[0] for x in svg['points'].values()])
+            suv = np.vstack([x[1] for x in svg['points'].values()])
+            xyz = simg.cam.invproject(suv)
+            if not directions:
+                xyz = simg.cam.xyz + xyz * depth.sample(suv * scale).reshape(-1, 1)
+            points = glimpse.optimize.Points(cam=img.cam, uv=uv, xyz=xyz,
+                directions=directions, correction=False)
+            controls.append(points)
+        if 'lines' in svg:
+            for layer in svg['lines'].values():
+                # Group with paths named 'image*' and 'synth*'
+                uvs = [layer[key] for key in layer if key.find('image') == 0]
+                suvs = [layer[key] for key in layer if key.find('synth') == 0]
+                xyzs = [simg.cam.invproject(suv) for suv in suvs]
+                if not directions:
+                    depths = [depth.sample(suv * scale).reshape(-1, 1) for suv in suvs]
+                    xyzs = [simg.cam.xyz + xyz * depth for xyz, depth in zip(xyzs, depths)]
+                lines = glimpse.optimize.Lines(cam=img.cam, uvs=uvs, xyzs=xyzs,
+                    step=step, directions=directions, correction=False)
+                controls.append(lines)
+    return controls
+
 # ---- Control bundles ----
 
 def station_svg_controls(station, size=1, force_size=False, keys=None,
@@ -481,14 +530,16 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
         image = glimpse.Image(img_path, cam=calibration)
         control = svg_controls(image, keys=keys, correction=correction)
         if control:
-            image.cam.resize(size, force=force_size)
+            for x in control:
+                x.resize(size, force=force_size)
             images.append(image)
             controls.extend(control)
             cam_params.append(dict(viewdir=True))
     return images, controls, cam_params
 
 def camera_svg_controls(camera, size=1, force_size=False, keys=None,
-    svgs=None, correction=True, step=None, station_calib=False, camera_calib=False):
+    svgs=None, correction=True, step=None, station_calib=False,
+    camera_calib=False, synth=True):
     """
     Return all SVG control objects available for a camera.
 
@@ -511,21 +562,28 @@ def camera_svg_controls(camera, size=1, force_size=False, keys=None,
         list: Control objects (Points, Lines)
         list: Per-camera calibration parameters [{'viewdir': True}, ...]
     """
-    svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', '*.svg'))
+    paths = glob.glob(os.path.join(CG_PATH, 'svg', '*.svg'))
+    if synth:
+        paths += glob.glob(os.path.join(CG_PATH, 'svg-synth', '*.pkl'))
+        paths += glob.glob(os.path.join(CG_PATH, 'svg-synth', '*.svg'))
+    basenames = np.unique([glimpse.helpers.strip_path(path) for path in paths])
     images, controls, cam_params = [], [], []
-    for svg_path in svg_paths:
-        ids = parse_image_path(svg_path, sequence=True)
+    for basename in basenames:
+        ids = parse_image_path(basename, sequence=True)
         if ids['camera'] == camera:
-            if svgs and ids['basename'] not in svgs:
-                continue
-            calibration = load_calibrations(svg_path, camera=camera_calib,
+            calibration = load_calibrations(basename, camera=camera_calib,
                 station=station_calib, station_estimate=not station_calib, merge=True)
-            img_path = find_image(svg_path)
-            image = glimpse.Image(img_path, cam=calibration)
-            control = svg_controls(image, keys=keys, correction=correction, step=step)
+            img_path = find_image(basename)
+            img = glimpse.Image(img_path, cam=calibration)
+            control = []
+            if svgs is None or basename in svgs:
+                control += svg_controls(img, keys=keys, correction=correction, step=step)
+            if synth:
+                control += synth_controls(img, step=None, directions=False)
             if control:
-                image.cam.resize(size, force=force_size)
-                images.append(image)
+                for x in control:
+                    x.resize(size, force=force_size)
+                images.append(img)
                 controls.extend(control)
                 cam_params.append(dict(viewdir=True))
     return images, controls, cam_params

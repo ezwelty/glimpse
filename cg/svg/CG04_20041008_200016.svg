@@ -8,12 +8,14 @@
 		<image overflow="visible" enable-background="new    " width="3264" height="2448" xlink:href="CG04_20041008_200016.JPG"  transform="matrix(0.25 0 0 0.25 0 0)">
 	</image>
 </g>
+<g id="gcp-peaks">
+	<circle id="P4930" fill="#FF0000" cx="539.2" cy="161.75" r="0.25"/>
+	<circle id="P7010" fill="#FF0000" cx="703.35" cy="168.5" r="0.25"/>
+</g>
 <g id="gcp">
 	<circle id="cairin-up" fill="#FF0000" cx="687.4" cy="498.3" r="0.25"/>
 	<circle id="cairin-dwn" fill="#FF0000" cx="431.9" cy="495.7" r="0.25"/>
 	<circle id="kadin-cairin" fill="#FF0000" cx="477.5" cy="188.15" r="0.25"/>
-	<circle id="P4930" fill="#FF0000" cx="539.2" cy="161.75" r="0.25"/>
-	<circle id="P7010" fill="#FF0000" cx="703.35" cy="168.5" r="0.25"/>
 	<circle id="blotch" fill="#FF0000" cx="82.9" cy="238.75" r="0.25"/>
 	<circle id="nipple" fill="#FF0000" cx="382.2" cy="212.2" r="0.25"/>
 	<circle id="splitrock" fill="#FF0000" cx="450.3" cy="227" r="0.25"/>

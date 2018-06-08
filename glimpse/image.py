@@ -309,6 +309,15 @@ class Camera(object):
         """
         self.vector = self.original_vector.copy()
 
+    def as_dict(self, attributes=None):
+        """
+        Return attributes as a dictionary.
+        """
+        if attributes is None:
+            attributes = self.__class__.__init__.__code__.co_varnames[2:]
+        return {name: list(getattr(self, name))
+            for name in attributes if hasattr(self, name)}
+
     def write(self, path=None, attributes=None, **kwargs):
         """
         Write or return Camera as JSON.
@@ -321,10 +330,28 @@ class Camera(object):
                 other than `self` and `vector`.
             **kwargs: Additional arguments to `helpers.write_json()`
         """
-        if attributes is None:
-            attributes = Camera.__init__.__code__.co_varnames[2:]
-        obj = collections.OrderedDict((name, list(getattr(self, name))) for name in attributes if hasattr(self, name))
+        obj = self.as_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
+
+    def normal(self, std):
+        """
+        Return a new Camera sampled from a normal distribution centered on the
+        current camera.
+        """
+        if isinstance(std, self.__class__):
+            std = std.vector
+        if isinstance(std, dict):
+            mean = self.to_dict()
+            args = {key: np.add(mean[key],
+                np.random.normal(scale=std[key]) if std.get(key) else 0)
+                for key in mean}
+            if 'f' in std:
+                args.pop('fmm', None)
+            if 'c' in std:
+                args.pop('cmm', None)
+        else:
+            args = {'vector': self.vector + np.random.normal(scale=std)}
+        return self.__class__(**args)
 
     def idealize(self):
         """

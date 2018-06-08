@@ -449,7 +449,7 @@ def sea_height(xy, t=None):
 
 def synth_controls(img, step=None, directions=False):
     image = glimpse.helpers.strip_path(img.path)
-    basename = os.path.join('svg-synth', image)
+    basename = os.path.join(CG_PATH, 'svg-synth', image)
     controls = []
     # Load svg
     path = basename + '.svg'

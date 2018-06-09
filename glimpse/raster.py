@@ -330,7 +330,7 @@ class Grid(object):
 
     def set_plot_limits(self):
         matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
-        matplotlib.pyplot.ylim(self.ylim[0], self.ylim[1])
+        matplotlib.pyplot.ylim(self.ylim[1], self.ylim[0])
 
     def tile_indices(self, size, overlap=(0, 0)):
         """

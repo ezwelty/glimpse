@@ -211,6 +211,23 @@ for job in jobs:
     write_calibration(job['camera'],
         model=model, fit=fit, station=station, suffix=suffix)
 
+# ---- Build ideal cameras ----
+
+paths = [path for path in glob.glob(os.path.join('cameras', '*.json'))
+    if not re.search(r'-[a-zA-Z]+($|\.)|_', path)]
+cameras = [glimpse.helpers.strip_path(path) for path in paths]
+sequences = cg.Sequences()
+ideal = dict(k=[0] * 6, p=[0] * 2, cmm=[0] * 2)
+for path, camera in zip(paths, cameras):
+    fmm = sequences[sequences.camera == camera].focal_length.iloc[0]
+    new_args = glimpse.helpers.merge_dicts(ideal, dict(fmm=[fmm] * 2))
+    calibration = glimpse.helpers.merge_dicts(
+        glimpse.helpers.read_json(path), new_args)
+    glimpse.helpers.write_json(
+        calibration,
+        path=os.path.join('cameras', camera + '-ideal.json'),
+        indent=4, flat_arrays=True)
+
 # ---- Multi-camera calibration: AK09, AK09b with equal xyz ---- #
 
 cameras = ('nikon-d200-13-20', 'nikon-d200-14-20')

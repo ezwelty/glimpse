@@ -299,11 +299,13 @@ def svg_controls(img, svg=None, keys=None, correction=True, step=None):
     if svg is None:
         basename = parse_image_path(img.path)['basename']
         svg = os.path.join(CG_PATH, 'svg', basename + '.svg')
+    controls = []
     if isinstance(svg, (bytes, str)):
+        if not os.path.isfile(svg):
+            return controls
         svg = glimpse.svg.parse_svg(svg, imgsz=img.cam.imgsz)
     if keys is None:
         keys = svg.keys()
-    controls = []
     for key in keys:
         if key in svg:
             if key == 'gcp':
@@ -499,7 +501,8 @@ def synth_controls(img, step=None, directions=False):
 # ---- Control bundles ----
 
 def station_svg_controls(station, size=1, force_size=False, keys=None,
-    correction=True, station_calib=False, camera_calib=True):
+    svgs=None, correction=True, step=None, station_calib=False, camera_calib=True,
+    synth=True):
     """
     Return all SVG control objects for a station.
 
@@ -521,18 +524,26 @@ def station_svg_controls(station, size=1, force_size=False, keys=None,
         list: Control objects (Points, Lines)
         list: Per-camera calibration parameters [{'viewdir': True}, ...]
     """
-    svg_paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '*.svg'))
+    paths = glob.glob(os.path.join(CG_PATH, 'svg', station + '*.svg'))
+    if synth:
+        paths += glob.glob(os.path.join(CG_PATH, 'svg-synth', station + '*.pkl'))
+        paths += glob.glob(os.path.join(CG_PATH, 'svg-synth', station + '*.svg'))
+    basenames = np.unique([glimpse.helpers.strip_path(path) for path in paths])
     images, controls, cam_params = [], [], []
-    for svg_path in svg_paths:
-        calibration = load_calibrations(svg_path, camera=camera_calib,
+    for basename in basenames:
+        calibration = load_calibrations(basename, camera=camera_calib,
             station=station_calib, station_estimate=not station_calib, merge=True)
-        img_path = find_image(svg_path)
-        image = glimpse.Image(img_path, cam=calibration)
-        control = svg_controls(image, keys=keys, correction=correction)
+        img_path = find_image(basename)
+        img = glimpse.Image(img_path, cam=calibration)
+        control = []
+        if svgs is None or basename in svgs:
+            control += svg_controls(img, keys=keys, correction=correction, step=step)
+        if synth:
+            control += synth_controls(img, step=None, directions=False)
         if control:
             for x in control:
                 x.resize(size, force=force_size)
-            images.append(image)
+            images.append(img)
             controls.extend(control)
             cam_params.append(dict(viewdir=True))
     return images, controls, cam_params

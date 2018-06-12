@@ -7,11 +7,16 @@ root = '/volumes/science-b/data/columbia'
 cg.IMAGE_PATH = os.path.join(root, 'timelapse')
 glimpse.config.set_sharedmem_backend('thread')
 
+# ---- Constants ----
+
 color = False
 img_size = 1
 grid_size = 2
-circle_radius = 50
-# NOTE 'AKJNC_20120813_205325' needs circle_radius = 400
+circle_radius_default = 50
+circle_radius = {
+    'AKJNC_20120813_205325': 400,
+    'AK09b_20090827_200153': 200
+}
 viewshed_scale = 0.25
 parallel = 4
 scale = 2
@@ -55,6 +60,9 @@ images = (
     'CG06_20060712_195953',
     'CG06_20060727_195951'
 )
+clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(20, 20))
+
+# ---- Select DEMs and Orthos ----
 
 # Prepare DEMs
 dem_paths = glob.glob(os.path.join(root, 'dem-aerometric', 'data', '*.tif'))
@@ -69,7 +77,8 @@ ortho_paths += glob.glob(os.path.join(root, 'ortho-ifsar', 'data', '*.tif'))
 ortho_dates = [datetime.datetime.strptime(re.findall(r'([0-9]{8})', path)[0], '%Y%m%d')
     for path in ortho_paths]
 
-# For each image...
+# ---- Control synths (ideal camera) ----
+
 for image in images:
     print(image)
     start = timeit.default_timer()
@@ -98,7 +107,8 @@ for image in images:
     # Read dem and ortho
     dem = glimpse.DEM.read(dem_path, xlim=box[0::2], ylim=box[1::2], d=grid_size)
     dem.crop(zlim=(0.1, np.inf))
-    dem.fill_circle(center=img.cam.xyz, radius=circle_radius)
+    radius = circle_radius.get(image, circle_radius_default)
+    dem.fill_circle(center=img.cam.xyz, radius=radius)
     nbands = gdal.Open(ortho_path).RasterCount
     bands = []
     for i in range(nbands):
@@ -150,7 +160,6 @@ for image in images:
     I[I == 127] = 126
     I[nanI] = 127
     # Equalize images
-    clahe = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(20, 20))
     I = clahe.apply(I.astype(np.uint8))
     I_ori = clahe.apply(glimpse.helpers.rgb_to_gray(img.read()).astype(np.uint8))
     # Write synthetic image

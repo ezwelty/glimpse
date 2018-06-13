@@ -5,3 +5,5 @@ svg-synth/*.[pP][nN][gG]
 images/*.[jJ][pP][gG]
 motion/*.[jJ][pP][gG]
 motion/*.[pP][nN][gG]
+*-calib*
+*-ideal*

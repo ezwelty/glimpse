@@ -18,7 +18,7 @@ circle_radius = {
     'AK09b_20090827_200153': 200
 }
 viewshed_scale = 0.25
-parallel = 4
+parallel = 2
 scale = 2
 scale_limits = (0.05, 20)
 suffixes = ('', '-calib', '-ideal')

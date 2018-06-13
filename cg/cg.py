@@ -184,7 +184,8 @@ def load_images(station, services, use_exif=False, service_exif=False, anchors=F
         anchor_indices = np.where(np.isin(basenames, anchor_basenames))[0]
         indices = np.unique(np.hstack((indices, anchor_indices)))
     service_breaks = np.hstack((0, np.cumsum([len(x) for x in paths_service])))
-    station_calibration = load_calibrations(station=station, merge=True)
+    station_calibration = load_calibrations(
+        station_estimate=station, station=station, merge=True, file_errors=False)
     images = []
     for i, service in enumerate(services):
         index = indices[(indices >= service_breaks[i]) & (indices < service_breaks[i + 1])]

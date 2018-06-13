@@ -288,9 +288,9 @@
 		"properties": {
 			"id": "AKJNC",
 			"name": "Juncture",
-			"fixed": true,
+			"fixed": false,
 			"viewdir": [90.5, -8, 0],
-			"notes": "Surveyed position but source or uncertainty unknown.",
+			"notes": "Position estimated from control and parallax in synthetic images.",
 			"breaks": [{
 				"start": "AKJNC_20120825_234000",
 				"viewdir": [90, -7.5, -1],
@@ -299,7 +299,7 @@
 		},
 		"geometry": {
 			"type": "Point",
-			"coordinates": [-147.0989788, 61.162396, 502.0]
+			"coordinates": [-147.09853493, 61.16193915, 499.20454401]
 		}
 	}, {
 		"type": "Feature",

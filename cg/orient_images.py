@@ -12,7 +12,7 @@ camera_keys = {
     'nikon-d200-08-24': keys - {'coast'},
     'nikon-d200-13-20': keys - {'coast', 'moraines'},
     'nikon-d200-14-20': keys - {'coast', 'moraines'},
-    'canon-40d-01': keys - {'terminus'}
+    'canon-40d-01': keys - {'terminus', 'coast'}
 }
 step = 20 # pixels
 suffixes = ['', '-calib', '-ideal']

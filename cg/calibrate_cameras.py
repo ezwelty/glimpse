@@ -190,7 +190,7 @@ jobs = (
     dict(camera='nikon-d200-17-20', keys=keys, group_params=group_params), # AK10b-1
     dict(camera='nikon-d200-18-20', keys=keys, group_params=group_params), # AK10b-2
     dict(camera='nikon-d300s', keys=keys, group_params=group_params), # AK12
-    dict(camera='canon-40d-01', keys=('gcp', 'horizon', 'coast', 'moraines'), group_params=group_params), # AKJNC
+    dict(camera='canon-40d-01', keys=('gcp', 'horizon', 'moraines'), group_params=group_params_xyz), # AKJNC (not fixed)
     dict(camera='nikon-d200-11-28', keys=keys, group_params=group_params), # AKST0XA
     dict(camera='nikon-d200-12-28', keys=keys, group_params=group_params) # AKST0XB
 )
@@ -200,13 +200,16 @@ jobs = (
 for job in jobs:
     print(job['camera'])
     motion_images, svg_images, model, station = load_model(
-        job['camera'], keys=job['keys'], group_params=job['group_params'][-3],
+        job['camera'], keys=job['keys'], group_params=job['group_params'][-1],
         svgs=svgs, step=step, camera_calib=False, fixed=None)
     xyz_added = station and 'xyz' not in job['group_params'][-1]
+    # HACK: Use same xyz for motion images, which may be from different station
+    for img in motion_images:
+        img.cam.xyz = svg_images[0].cam.xyz
     fit = model.fit(
         full=True, method='leastsq',
         group_params=job['group_params']
-        if xyz_added else job['group_params'][:-3])
+        if xyz_added else job['group_params'][:-1])
     suffix = datetime.datetime.now().strftime('-%Y%m%d%H%M%S')
     write_calibration(job['camera'],
         model=model, fit=fit, station=station, suffix=suffix)

@@ -493,11 +493,10 @@ class Matches(object):
         if min_weight:
             selected &= self.weights >= min_weight
         if max_distance:
-            if any(self.cams[0].imgsz != self.cams[1].imgsz):
-                raise ValueError('Cameras have different image sizes')
             if scaled:
                 max_distance = max_distance * self.cams[0].imgsz.max()
-            distances = np.linalg.norm(self.uvs[1][selected] - self.uvs[0][selected], axis=1)
+            scale = self.cams[0].imgsz / self.cams[1].imgsz
+            distances = np.linalg.norm(self.uvs[1][selected] * scale - self.uvs[0][selected], axis=1)
             selected[selected] &= distances <= max_distance
         if max_error:
             if scaled:
@@ -519,8 +518,8 @@ class Matches(object):
 
 class RotationMatches(Matches):
     """
-    `RotationMatches` store image-image point correspondences for cameras seperated
-    only by a pure rotation.
+    `RotationMatches` store image-image point correspondences for cameras
+    separated by a pure rotation.
 
     Normalized camera coordinates are pre-computed for speed. Therefore,
     the cameras must always have equal `xyz` (as for `Matches`)
@@ -530,8 +529,8 @@ class RotationMatches(Matches):
         cams (list): Pair of Camera objects
         uvs (list): Pair of image coordinate arrays (Nx2)
         xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (array): Original camera internal parameters
-            (imgsz, f, c, k, p)
+        original_internals (list): Original camera internal parameters
+            (imgsz, f, c, k, p) of each camera
         size (int): Number of point pairs
     """
 
@@ -541,9 +540,8 @@ class RotationMatches(Matches):
         self.xys = self._build_xys(uvs=uvs, xys=xys)
         self.weights = weights
         self._test_matches()
-        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = self.cams[0].vector.copy()[6:]
+        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
 
     def _build_uvs(self, uvs=None, xys=None):
         if uvs is None and xys is not None:
@@ -560,10 +558,6 @@ class RotationMatches(Matches):
                 self.cams[1]._image2camera(uvs[1]))
         else:
             return xys
-
-    def _test_rotation_matches(self):
-        if (self.cams[0].vector[6:] != self.cams[1].vector[6:]).any():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) are not equal')
 
     def predicted(self, index=None, cam=0):
         """
@@ -589,8 +583,8 @@ class RotationMatches(Matches):
         Test whether camera internal parameters are unchanged.
         """
         return (
-            (self.cams[0].vector[6:] == self.original_internals) &
-            (self.cams[1].vector[6:] == self.original_internals)).all()
+            (self.cams[0].vector[6:] == self.original_internals[0]) &
+            (self.cams[1].vector[6:] == self.original_internals[1])).all()
 
     def as_type(self, mtype):
         """
@@ -606,8 +600,8 @@ class RotationMatches(Matches):
 
 class RotationMatchesXY(RotationMatches):
     """
-    `RotationMatchesXY` store image-image point correspondences for cameras seperated
-    only by a pure rotation.
+    `RotationMatchesXY` store image-image point correspondences for cameras
+    separated by a pure rotation.
 
     Normalized camera coordinates are pre-computed for speed,
     and image coordinates may be discarded to save memory (`self.uvs = None`).
@@ -620,8 +614,8 @@ class RotationMatchesXY(RotationMatches):
     Attributes:
         cams (list): Pair of Camera objects
         xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (array): Original camera internal parameters
-            (imgsz, f, c, k, p)
+        original_internals (list): Original camera internal parameters
+            (imgsz, f, c, k, p) of each camera
         size (int): Number of point pairs
     """
 
@@ -631,9 +625,8 @@ class RotationMatchesXY(RotationMatches):
         self.xys = self._build_xys(uvs=uvs, xys=xys)
         self.weights = weights
         self._test_matches()
-        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = self.cams[0].vector.copy()[6:]
+        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
 
     @property
     def size(self):
@@ -676,8 +669,8 @@ class RotationMatchesXY(RotationMatches):
 
 class RotationMatchesXYZ(RotationMatches):
     """
-    `RotationMatches3D` store image-image point correspondences for cameras seperated
-    only by a pure rotation.
+    `RotationMatches3D` store image-image point correspondences for cameras
+    separated by a pure rotation.
 
     Normalized camera coordinates are pre-computed for speed,
     and image coordinates may be discarded to save memory (`self.uvs = None`).
@@ -690,8 +683,8 @@ class RotationMatchesXYZ(RotationMatches):
     Attributes:
         cams (list): Pair of Camera objects
         xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (array): Original camera internal parameters
-            (imgsz, f, c, k, p)
+        original_internals (list): Original camera internal parameters
+            (imgsz, f, c, k, p) of each camera
         size (int): Number of point pairs
     """
 
@@ -701,9 +694,8 @@ class RotationMatchesXYZ(RotationMatches):
         self.xys = self._build_xys(uvs=uvs, xys=xys)
         self.weights = weights
         self._test_matches()
-        self._test_rotation_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = self.cams[0].vector.copy()[6:]
+        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
 
     @property
     def size(self):

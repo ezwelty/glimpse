@@ -1451,7 +1451,7 @@ class ObserverCameras(object):
         anchors (iterable): Integer indices of `observer.images` to use as anchors.
             If `None`, the first image is used.
         matches (array): Grid of `RotationMatchesXYZ` objects.
-        matcher (KeypointsMatcher): KeypointsMatcher object used by
+        matcher (KeypointMatcher): KeypointMatcher object used by
             `self.build_keypoints()` and `self.build_matches()`
         viewdirs (array): Original camera view directions
     """
@@ -1867,13 +1867,11 @@ class KeypointMatcher(object):
         if imgs is not None:
             empty = np.array([])
             for i, m in enumerate(matching_images):
-                if i in imgs:
-                    matching_images[i] = empty
-                else:
-                    matching_images[i] = m[np.isin(m, imgs)]
+                matching_images[i] = m[np.isin(m, imgs)]
         # Define parallel process
         def process(i, js):
-            print('Matching', i, '->', ', '.join(js.astype(str)))
+            if len(js) > 0:
+                print('Matching', i, '->', ', '.join(js.astype(str)))
             matches = []
             imgA = self.images[i]
             for j in js:

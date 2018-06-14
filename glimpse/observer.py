@@ -282,14 +282,29 @@ class Observer(object):
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes) for axes in ax]
         pt = [axis.plot(uv[0], uv[1], marker='.', color='red')[0] for axis in ax]
-        txt = ax[1].text(uv[0], uv[1] - (halfsize[1] - 10), '', color='white',
-            horizontalalignment='center')
+        txt = ax[0].text(0.5, 0.95, '', color='white',
+            horizontalalignment='center', transform=ax[0].transAxes)
+        ax[1].set_xlim(uv[0] - halfsize[0], uv[0] + halfsize[0])
+        ax[1].set_ylim(uv[1] + halfsize[1], uv[1] - halfsize[0])
         # Update plot
         def update_plot(i):
             puv = self.images[i].cam.project(dxyz, directions=True)[0]
-            tile = self.extract_tile(img=i, box=box)
+            box = np.vstack([puv - halfsize, puv + halfsize]).ravel()
+            inbounds = self.images[i].cam.inframe(helpers.box_to_polygon(box))
+            if np.any(inbounds):
+                if not np.all(inbounds):
+                    # Intersect box with image bounds
+                    box = helpers.intersect_boxes((box,
+                        np.concatenate(([0, 0], self.images[i].cam.imgsz))))
+                box = self.grid.snap_xy(helpers.unravel_box(box),
+                    centers=False, edges=True).ravel()
+                tile = self.extract_tile(img=i, box=box)
+            else:
+                # Use white tile
+                tile = np.zeros((size[1], size[0], 3), dtype=np.uint8) + 255
             for j in range(2):
                 im[j].set_array(tile)
+                im[j].set_extent((box[0], box[2], box[3], box[1]))
                 pt[j].set_xdata(puv[0])
                 pt[j].set_ydata(puv[1])
             ax[0].set_xlim(puv[0] - halfsize[0], puv[0] + halfsize[0])
@@ -339,10 +354,10 @@ class Observer(object):
         track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], 'y.-', alpha=0.5, zorder=2)[0]
         pt = [axis.plot(uv[0], uv[1], marker='.', color='red', zorder=3)[0] for axis in ax]
         basename = helpers.strip_path(self.images[frames[0]].path)
-        ax[0].text(uv[0], uv[1] - (halfsize[1] - 10), '0 : ' + basename, color='white',
-            horizontalalignment='center', zorder=4)
-        txt = ax[1].text(uv[0], uv[1] - (halfsize[1] - 10), '', color='white',
-            horizontalalignment='center', zorder=4)
+        ax[0].text(0.5, 0.95, '0 : ' + basename, color='white',
+            horizontalalignment='center', zorder=4, transform=ax[0].transAxes)
+        txt = ax[1].text(0.5, 0.95, '', color='white',
+            horizontalalignment='center', zorder=4, transform=ax[1].transAxes)
         # Update plot
         def update_plot(i):
             j = np.where(frames == i)[0][0]
@@ -374,7 +389,7 @@ class Observer(object):
         index = helpers.select_datetimes(self.datetimes, **kwargs)
         images = [self.images[i] for i in index]
         params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
-        return Observer(images, datetimes=self.datetimes[index], **params)
+        return self.__class__(images, datetimes=self.datetimes[index], **params)
 
     def split(self, n, overlap=1):
         """

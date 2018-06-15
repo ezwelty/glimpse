@@ -127,19 +127,23 @@ def test_raster_resize():
 
 def test_raster_interpolant():
     # Read rasters
-    paths = [
+    mean_paths = [
         os.path.join(test_dir, '000nan.tif'),
         os.path.join(test_dir, '11-1nan.tif')]
-    rasters = [glimpse.Raster.read(path) for path in paths]
-    Zs = [raster.Z for raster in rasters]
+    means = [glimpse.Raster.read(path) for path in mean_paths]
+    Zs = [mean.Z for mean in means]
+    sigma_paths = mean_paths
+    sigmas = means
     # Define tests
     xs = [
         (0, 1),
         (datetime.datetime(2000, 1, 1), datetime.datetime(2000, 1, 3)),
         (0.0, 1.0)]
     classes = [
-        (glimpse.RasterInterpolant, rasters),
-        (glimpse.RasterFileInterpolant, paths)]
+        (glimpse.RasterInterpolant, means, sigmas),
+        (glimpse.RasterInterpolant, means, None),
+        (glimpse.RasterFileInterpolant, mean_paths, sigma_paths),
+        (glimpse.RasterFileInterpolant, mean_paths, None)]
     samples = [
         (0.5, False),
         (1.5, True)]
@@ -147,15 +151,18 @@ def test_raster_interpolant():
     # Run tests
     for test in tests:
         x = test[0]
-        iclass, y = test[1]
+        iclass, means, sigmas = test[1]
         scale, extrapolate = test[2]
-        interpolant = iclass(y, x)
+        interpolant = iclass(means=means, sigmas=sigmas, x=x)
         xi = x[0] + (x[1] - x[0]) * scale
         imean, isigma = interpolant(xi, extrapolate=extrapolate,
             return_sigma=True)
         mean = Zs[0] + (Zs[1] - Zs[0]) * scale
         np.testing.assert_equal(imean.Z, mean)
         sigma = np.abs((1 / 3) * (Zs[1] - Zs[0]) * min(scale, 1 - scale))
+        if sigmas is not None:
+            xscale = ((xi - x[0]) / (x[1] - x[0]))
+            sigma += np.sqrt((xscale * Zs[1])**2 + ((1 - xscale) * Zs[0])**2)
         np.testing.assert_equal(isigma.Z, sigma)
         if isinstance(xi, datetime.datetime):
             # Test whether Raster.datetime set when appropriate

@@ -934,12 +934,24 @@ class Raster(Grid):
             return splits[0::2]
 
 class RasterInterpolant(object):
+    """
+    Attributes:
+        means (iterable): Rasters of mean values.
+            They must all have the same shape, for element-wise interpolation.
+        sigmas (iterable): Rasters of standard deviations.
+            If `None`, defaults to `Raster(0)`.
+        x (array): 1-dimensional coordinates of the Rasters,
+            as either numeric or `datetime.datetime`.
+    """
 
-    def __init__(self, rasters, x=None):
-        self.rasters = rasters
+    def __init__(self, means, x=None, sigmas=None):
+        self.means = means
         if x is None:
-            x = [raster.datetime for raster in rasters]
+            x = [raster.datetime for raster in means]
         self.x = np.asarray(x)
+        if sigmas is None:
+            sigmas = [Raster(0)] * len(self.means)
+        self.sigmas = sigmas
 
     def nearest(self, xi, extrapolate=False):
         dx = self.x - xi
@@ -959,18 +971,24 @@ class RasterInterpolant(object):
         ij.sort(key=lambda index: self.x[index])
         return ij
 
-    def _interpolate(self, rasters, x, xi, return_sigma=False):
-        dz = rasters[1].Z - rasters[0].Z
+    def _interpolate(self, means, x, xi, sigmas=None):
+        dz = means[1].Z - means[0].Z
         dx = x[1] - x[0]
-        z = rasters[0].Z + dz * ((xi - x[0]) / dx)
+        scale = ((xi - x[0]) / dx)
+        z = means[0].Z + dz * ((xi - x[0]) / dx)
         t = xi if isinstance(xi, datetime.datetime) else None
-        raster = rasters[0].__class__(z,
-            x=rasters[0].xlim, y=rasters[0].ylim, datetime=t)
-        if return_sigma:
+        raster = means[0].__class__(z,
+            x=means[0].xlim, y=means[0].ylim, datetime=t)
+        if sigmas is not None:
+            # Bounds uncertainty: error propagation of z above
+            z_sigma = np.sqrt((sigmas[0].Z * (1 - scale))**2 +
+                (sigmas[1].Z * scale)**2)
+            # Interpolation uncertainty: nearest bound at 99.7%
             nearest_dx = np.min(np.abs(np.subtract(xi, x)))
-            z_sigma = np.abs((1 / 3) * dz * (nearest_dx / dx))
-            sigma = raster.__class__(z_sigma,
-                x=rasters[0].xlim, y=rasters[0].ylim, datetime=t)
+            zi_sigma = np.abs((1 / 3) * dz * (nearest_dx / dx))
+            # HACK: Sum uncertainties. Is this the right way?
+            sigma = raster.__class__(z_sigma + zi_sigma,
+                x=means[0].xlim, y=means[0].ylim, datetime=t)
             return raster, sigma
         else:
             return raster
@@ -978,25 +996,47 @@ class RasterInterpolant(object):
     def __call__(self, xi, return_sigma=False, extrapolate=False):
         ij = self.nearest(xi, extrapolate=extrapolate)
         return self._interpolate(
-            rasters=[self.rasters[i] for i in ij],
-            x=self.x[ij], xi=xi, return_sigma=return_sigma)
+            means=[self.means[i] for i in ij],
+            sigmas=[self.sigmas[i] for i in ij] if return_sigma else None,
+            x=self.x[ij], xi=xi)
 
 class RasterFileInterpolant(RasterInterpolant):
+    """
+    Attributes:
+        means (iterable): Paths to rasters of mean values.
+            They must all have the same shape, for element-wise interpolation.
+        sigmas (iterable): Paths to rasters, or Rasters, of standard deviations.
+            If `None`, defaults to `Raster(0)`. If Rasters, must either have
+            shape (1, 1) or the shape of the `means` when read into memory.
+        x (array): 1-dimensional coordinates of the Rasters,
+            as either numeric or `datetime.datetime`.
+    """
 
-    def __init__(self, paths, x):
-        self.paths = paths
+    def __init__(self, means, x, sigmas=None):
+        self.means = means
         self.x = np.asarray(x)
+        if sigmas is None:
+            sigmas = [Raster(0)] * len(self.means)
+        self.sigmas = sigmas
 
     def read(self, index, d=None, xlim=None, ylim=None, zlim=None,
         fun=None, **kwargs):
         t = self.x[index] if isinstance(self.x[index], datetime.datetime) else None
         raster = Raster.read(
-            self.paths[index], d=d, xlim=xlim, ylim=ylim, datetime=t)
+            self.means[index], d=d, xlim=xlim, ylim=ylim, datetime=t)
         if zlim is not None:
             raster.crop(zlim=zlim)
         if fun is not None:
             fun(raster, **kwargs)
         return raster
+
+    def read_sigma(self, index, d=None, xlim=None, ylim=None):
+        t = self.x[index] if isinstance(self.x[index], datetime.datetime) else None
+        raster = self.sigmas[index]
+        if isinstance(raster, Raster):
+            return raster
+        else:
+            return Raster.read(raster, d=d, xlim=xlim, ylim=ylim, datetime=t)
 
     def __call__(self, xi, d=None, xlim=None, ylim=None, zlim=None,
         return_sigma=False, extrapolate=False, fun=None, **kwargs):
@@ -1018,16 +1058,20 @@ class RasterFileInterpolant(RasterInterpolant):
         """
         ij = self.nearest(xi, extrapolate=extrapolate)
         if d is None or xlim is None or ylim is None:
-            grids = [Grid.read(self.paths[k]) for k in ij]
+            grids = [Grid.read(self.means[k]) for k in ij]
         if d is None:
             d = np.max(np.abs(np.stack([grid.d for grid in grids])))
         if xlim is None:
             xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
         if ylim is None:
             ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
-        rasters = [self.read(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
+        means = [self.read(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
             fun=fun, **kwargs) for k in ij]
-        if rasters[0].grid != rasters[1].grid:
-            rasters[1].resample(rasters[0])
-        return self._interpolate(
-            rasters=rasters, x=self.x[ij], xi=xi, return_sigma=return_sigma)
+        if means[0].grid != means[1].grid:
+            means[1].resample(means[0])
+        if return_sigma:
+            sigmas = [self.read_sigma(k, d=d, xlim=xlim, ylim=ylim)
+                for k in ij]
+        else:
+            sigmas = None
+        return self._interpolate(means=means, sigmas=sigmas, x=self.x[ij], xi=xi)

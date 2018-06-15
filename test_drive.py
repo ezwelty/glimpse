@@ -38,7 +38,7 @@ box = glimpse.helpers.intersect_boxes(boxes)
 paths = glob.glob(os.path.join(DEM_DIR, '*.tif'))
 paths.sort()
 path = paths[0]
-dem = glimpse.DEM.read(path, xlim=box[0::3], ylim=box[1::3])
+dem = glimpse.Raster.read(path, xlim=box[0::3], ylim=box[1::3])
 dem.crop(zlim=(0, np.inf))
 dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
 

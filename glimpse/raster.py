@@ -1,6 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, scipy, gdal, matplotlib, datetime, copy, warnings)
+from .imports import (np, scipy, gdal, matplotlib, datetime, copy, warnings,
+    numbers)
 from . import (helpers)
 
 class Grid(object):
@@ -650,7 +651,7 @@ class Raster(Grid):
             ...: Additional arguments described in `self.sample()`
         """
         array = self.sample((grid.x, grid.y), grid=True,
-            bounds_error=bounds_error, fill_value=np.nan, order=order)
+            bounds_error=bounds_error, fill_value=fill_value, order=order)
         self.Z = array
         self.xlim, self.ylim = grid.xlim, grid.ylim
         self._x, self._y = grid.x, grid.y
@@ -936,12 +937,13 @@ class Raster(Grid):
 class RasterInterpolant(object):
     """
     Attributes:
-        means (iterable): Rasters of mean values.
-            They must all have the same shape, for element-wise interpolation.
-        sigmas (iterable): Rasters of standard deviations.
-            If `None`, defaults to `Raster(0)`.
-        x (array): 1-dimensional coordinates of the Rasters,
-            as either numeric or `datetime.datetime`.
+        means (iterable): Mean values as Rasters, paths to raster files,
+            or numbers (interpreted as infinite rasters)
+        sigmas (iterable): Standard deviations as Rasters, paths to raster files,
+            or numbers (interpreted as infinite rasters).
+            If `None`, defaults to zero.
+        x (array): 1-dimensional coordinates of the observations,
+            as either numbers or `datetime.datetime`
     """
 
     def __init__(self, means, x=None, sigmas=None):
@@ -949,11 +951,81 @@ class RasterInterpolant(object):
         if x is None:
             x = [raster.datetime for raster in means]
         self.x = np.asarray(x)
-        if sigmas is None:
-            sigmas = [Raster(0)] * len(self.means)
         self.sigmas = sigmas
 
+    def _parse_as_raster(self, obj, xi=None, d=None, xlim=None, ylim=None):
+        t = xi if isinstance(xi, datetime.datetime) else None
+        if isinstance(obj, numbers.Number):
+            # Scalar
+            # Infinite bounds unless specified
+            if xlim is None:
+                xlim = (-np.inf, np.inf)
+            if ylim is None:
+                ylim = (-np.inf, np.inf)
+            return Raster(obj, x=xlim, y=ylim, datetime=t)
+        elif isinstance(obj, Raster):
+            # Raster
+            # Copy and reshape to specified bounds
+            # NOTE: Adjust to match grid when read from file
+            d_change = d is not None and d != np.abs(obj.d).mean()
+            xlim_change = xlim is not None and sorted(xlim) != sorted(obj.xlim)
+            ylim_change = ylim is not None and sorted(ylim) != sorted(obj.ylim)
+            if any((d_change, xlim_change, ylim_change)):
+                obj = obj.copy()
+            if xlim_change or ylim_change:
+                obj.crop(xlim=xlim, ylim=ylim)
+            if d_change:
+                scale = d / np.abs(obj.d).mean()
+                obj.resize(scale)
+            return obj
+        elif isinstance(obj, str):
+            # Path to raster
+            # Read from file
+            return Raster.read(obj, d=d, xlim=xlim, ylim=ylim, datetime=t)
+        else:
+            raise ValueError('Cannot cast as Raster: ' + str(type(obj)))
+
+    def _read_mean(self, index, d=None, xlim=None, ylim=None, zlim=None,
+        fun=None, **kwargs):
+        xi = self.x[index]
+        obj = self.means[index]
+        raster = self._parse_as_raster(obj, xi, d=d, xlim=xlim, ylim=ylim)
+        if (zlim is not None or fun is not None) and raster is obj:
+            raster = raster.copy()
+        if zlim is not None:
+            raster.crop(zlim=zlim)
+        if fun is not None:
+            fun(raster, **kwargs)
+        return raster
+
+    def _read_sigma(self, index, d=None, xlim=None, ylim=None):
+        xi = self.x[index]
+        if self.sigmas is None:
+            obj = 0
+        else:
+            obj = self.sigmas[index]
+        return self._parse_as_raster(obj, xi, d=d, xlim=xlim, ylim=ylim)
+
+    def _read_mean_grid(self, index):
+        obj = self.means[index]
+        if isinstance(obj, Raster):
+            return obj.grid
+        elif isinstance(obj, str):
+            return Grid.read(obj)
+        elif isinstance(obj, numbers.Number):
+            return Grid(n=(1, 1), x=(-np.inf, np.inf), y=(-np.inf, np.inf))
+        else:
+            raise ValueError('Cannot cast as Grid: ' + str(type(obj)))
+
     def nearest(self, xi, extrapolate=False):
+        """
+        Return the indices of the two nearest Rasters.
+
+        Arguments:
+            xi: 1-dimensional coordinate
+            extrapolate (bool): Whether to return the two nearest Rasters (True)
+                or only if the Rasters are on either side of `xi` (False)
+        """
         dx = self.x - xi
         zero = type(dx[0])(0)
         if extrapolate:
@@ -993,85 +1065,56 @@ class RasterInterpolant(object):
         else:
             return raster
 
-    def __call__(self, xi, return_sigma=False, extrapolate=False):
-        ij = self.nearest(xi, extrapolate=extrapolate)
-        return self._interpolate(
-            means=[self.means[i] for i in ij],
-            sigmas=[self.sigmas[i] for i in ij] if return_sigma else None,
-            x=self.x[ij], xi=xi)
-
-class RasterFileInterpolant(RasterInterpolant):
-    """
-    Attributes:
-        means (iterable): Paths to rasters of mean values.
-            They must all have the same shape, for element-wise interpolation.
-        sigmas (iterable): Paths to rasters, or Rasters, of standard deviations.
-            If `None`, defaults to `Raster(0)`. If Rasters, must either have
-            shape (1, 1) or the shape of the `means` when read into memory.
-        x (array): 1-dimensional coordinates of the Rasters,
-            as either numeric or `datetime.datetime`.
-    """
-
-    def __init__(self, means, x, sigmas=None):
-        self.means = means
-        self.x = np.asarray(x)
-        if sigmas is None:
-            sigmas = [Raster(0)] * len(self.means)
-        self.sigmas = sigmas
-
-    def read(self, index, d=None, xlim=None, ylim=None, zlim=None,
-        fun=None, **kwargs):
-        t = self.x[index] if isinstance(self.x[index], datetime.datetime) else None
-        raster = Raster.read(
-            self.means[index], d=d, xlim=xlim, ylim=ylim, datetime=t)
-        if zlim is not None:
-            raster.crop(zlim=zlim)
-        if fun is not None:
-            fun(raster, **kwargs)
-        return raster
-
-    def read_sigma(self, index, d=None, xlim=None, ylim=None):
-        t = self.x[index] if isinstance(self.x[index], datetime.datetime) else None
-        raster = self.sigmas[index]
-        if isinstance(raster, Raster):
-            return raster
-        else:
-            return Raster.read(raster, d=d, xlim=xlim, ylim=ylim, datetime=t)
-
     def __call__(self, xi, d=None, xlim=None, ylim=None, zlim=None,
         return_sigma=False, extrapolate=False, fun=None, **kwargs):
         """
+        Return the interpolated Raster.
+
         Arguments:
+            xi: 1-dimensional coordinate of the interpolated Raster
             d (float): Target grid cell size.
-                If `None`, the largest DEM cell size is used.
+                If `None`, the largest Raster cell size is used.
             xlim (iterable): Crop bounds in x.
-                If `None`, the intersection of the DEMs is used.
+                If `None`, the intersection of the Rasters is used.
             ylim (iterable): Crop bounds in y.
-                If `None`, the intersection of the DEMs is used.
-            zlim (iterable): Crop bounds in z.
+                If `None`, the intersection of the Rasters is used.
+            zlim (iterable): (means only) Crop bounds in z.
                 Values outside range are set to `np.nan`.
-            extrapolate (bool): Whether to interpolate from the two nearest Rasters (True)
-                or only from Rasters on either side of `xi`
-            fun (callable): Function to apply to each Raster before interpolation,
-                with signature `fun(raster, **kwargs)`. Must modify Raster in place.
+            return_sigma (bool): Whether
+            extrapolate (bool): Whether to use the two nearest Rasters (True)
+                or only if the Rasters are on either side of `xi` (False)
+            fun (callable): (means only) Function to apply to each Raster before
+                interpolation, with signature `fun(raster, **kwargs)`.
+                Must modify Raster in place.
             **kwargs (dict): Additional arguments passed to `fun`
         """
         ij = self.nearest(xi, extrapolate=extrapolate)
+        # Determine grid for reading (lowest resolution, smallest extent)
         if d is None or xlim is None or ylim is None:
-            grids = [Grid.read(self.means[k]) for k in ij]
+            grids = [self._read_mean_grid(k) for k in ij]
         if d is None:
             d = np.max(np.abs(np.stack([grid.d for grid in grids])))
         if xlim is None:
             xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
         if ylim is None:
             ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
-        means = [self.read(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
-            fun=fun, **kwargs) for k in ij]
+        # Read mean rasters
+        means = [self._read_mean(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
+            fun=fun, **kwargs)
+            for k in ij]
         if means[0].grid != means[1].grid:
+            if means[1] is self.means[ij[1]]:
+                means[1] = means[1].copy()
             means[1].resample(means[0])
+        # Read sigma rasters
         if return_sigma:
-            sigmas = [self.read_sigma(k, d=d, xlim=xlim, ylim=ylim)
-                for k in ij]
+            sigmas = [self._read_sigma(k, d=d, xlim=xlim, ylim=ylim) for k in ij]
+            if sigmas[0].grid != sigmas[1].grid:
+                if sigmas[1] is self.sigmas[ij[1]]:
+                    sigmas[1] = sigmas[1].copy()
+                sigmas[1].resample(sigmas[0])
         else:
             sigmas = None
-        return self._interpolate(means=means, sigmas=sigmas, x=self.x[ij], xi=xi)
+        # Interpolate
+        return self._interpolate(
+            means=means, sigmas=sigmas, x=self.x[ij], xi=xi)

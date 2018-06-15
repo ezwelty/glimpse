@@ -139,28 +139,30 @@ def test_raster_interpolant():
         (0, 1),
         (datetime.datetime(2000, 1, 1), datetime.datetime(2000, 1, 3)),
         (0.0, 1.0)]
-    classes = [
-        (glimpse.RasterInterpolant, means, sigmas),
-        (glimpse.RasterInterpolant, means, None),
-        (glimpse.RasterFileInterpolant, mean_paths, sigma_paths),
-        (glimpse.RasterFileInterpolant, mean_paths, None)]
+    means_sigmas = [
+        (means, sigmas),
+        (means, None),
+        (means, [0] * len(means)),
+        (mean_paths, sigma_paths),
+        (mean_paths, None),
+        (mean_paths, [0] * len(means))]
     samples = [
         (0.5, False),
         (1.5, True)]
-    tests = tuple(itertools.product(xs, classes, samples))
+    tests = tuple(itertools.product(xs, means_sigmas, samples))
     # Run tests
     for test in tests:
         x = test[0]
-        iclass, means, sigmas = test[1]
+        means, sigmas = test[1]
         scale, extrapolate = test[2]
-        interpolant = iclass(means=means, sigmas=sigmas, x=x)
+        interpolant = glimpse.RasterInterpolant(means=means, sigmas=sigmas, x=x)
         xi = x[0] + (x[1] - x[0]) * scale
         imean, isigma = interpolant(xi, extrapolate=extrapolate,
             return_sigma=True)
         mean = Zs[0] + (Zs[1] - Zs[0]) * scale
         np.testing.assert_equal(imean.Z, mean)
         sigma = np.abs((1 / 3) * (Zs[1] - Zs[0]) * min(scale, 1 - scale))
-        if sigmas is not None:
+        if sigmas is not None and not isinstance(sigmas[0], int):
             xscale = ((xi - x[0]) / (x[1] - x[0]))
             sigma += np.sqrt((xscale * Zs[1])**2 + ((1 - xscale) * Zs[0])**2)
         np.testing.assert_equal(isigma.Z, sigma)

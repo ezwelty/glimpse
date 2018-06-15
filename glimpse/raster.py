@@ -30,6 +30,12 @@ class Grid(object):
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
 
+    def __eq__(self, other):
+        return (
+            (self.shape == other.shape) and
+            (self.xlim == other.xlim).all() and
+            (self.ylim == other.ylim).all())
+
     # ---- Properties (dependent) ---- #
 
     @property
@@ -385,6 +391,12 @@ class Raster(Grid):
         # Placeholders
         self._Zf = None
 
+    def __eq__(self, other):
+        return (
+            np.array_equiv(self.Z, other.Z) and
+            (self.xlim == other.xlim).all() and
+            (self.ylim == other.ylim).all())
+
     def __getitem__(self, indices):
         if not isinstance(indices, tuple):
             indices = (indices, slice(None))
@@ -405,7 +417,7 @@ class Raster(Grid):
             x = x[[0, -1]] + (-0.5, 0.5) * d[0:1]
         if len(y) < 3:
             y = y[[0, -1]] + (-0.5, 0.5) * d[1:2]
-        return type(self)(self.Z[i, j], x=x, y=y, datetime=self.datetime)
+        return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
     def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
@@ -483,6 +495,10 @@ class Raster(Grid):
     def box3d(self):
         zlim = self.zlim
         return np.hstack((self.min, zlim.min(), self.max, zlim.max()))
+
+    @property
+    def grid(self):
+        return Grid(n=self.n, x=self.xlim, y=self.ylim)
 
     # ---- Properties (cached) ----
 
@@ -726,14 +742,6 @@ class Raster(Grid):
         # Apply
         self.Z.flat[ind] = value
 
-class DEM(Raster):
-    """
-    A `DEM` describes elevations on a regular 2-dimensional grid.
-    """
-
-    def __init__(self, Z, x=None, y=None, datetime=None):
-        Raster.__init__(self, Z=Z, x=x, y=y, datetime=datetime)
-
     def hillshade(self, azimuth=315, altitude=45, **kwargs):
         """
         Return the illumination intensity of the surface.
@@ -925,105 +933,90 @@ class DEM(Raster):
             # Starts with not-isnan group
             return splits[0::2]
 
-class DEMInterpolant(object):
-    """
-    A `DEMInterpolant` predicts DEMs for arbitrary times by interpolating between observed DEMs.
+class RasterInterpolant(object):
 
-    Attributes:
-        paths (iterable): Paths to DEM files
-        datetimes (iterable): Capture datetimes
-        d (float): Target grid cell size.
-            If `None`, the largest DEM cell size is used.
-        xlim (iterable): Crop bounds in x.
-            If `None`, the intersection of the DEMs is used.
-        ylim (iterable): Crop bounds in y.
-            If `None`, the intersection of the DEMs is used.
-        zlim (iterable): Crop bounds in z.
-            Values outside range are set to `np.nan`.
-        extrapolate (bool): Whether to interpolate from the two nearest DEMs (True)
-            or only from DEMs on either side of `t`
-        fun (callable): Function to apply to each DEM before interpolation,
-            with signature `fun(dem, **kwargs)`. Must modify DEM in place.
-        **kwargs (dict): Additional arguments passed to `fun`
-    """
+    def __init__(self, rasters, x=None):
+        self.rasters = rasters
+        if x is None:
+            x = [raster.datetime for raster in rasters]
+        self.x = np.asarray(x)
 
-    def __init__(self, paths, datetimes, d=None, xlim=None, ylim=None, zlim=None,
-        extrapolate=False, fun=None, **kwargs):
-        assert len(paths) == len(datetimes)
-        assert len(paths) > 1
-        assert len(paths) == len(set(paths))
-        assert len(datetimes) == len(set(datetimes))
-        self.paths = paths
-        self.datetimes = datetimes
-        self.d = d
-        self.xlim = xlim
-        self.ylim = ylim
-        self.zlim = zlim
-        self.extrapolate = extrapolate
-        self.fun = fun
-        self.kwargs = kwargs
-
-    def nearest(self, t, extrapolate=False):
-        extrapolate = extrapolate or self.extrapolate
-        dt = np.asarray(self.datetimes) - t
+    def nearest(self, xi, extrapolate=False):
+        dx = self.x - xi
+        zero = type(dx[0])(0)
         if extrapolate:
             # Get two nearest DEMs
-            i, j = abs(dt).argsort()[:2]
+            i, j = abs(dx).argsort()[:2]
         else:
             # Get nearest DEM on either side of t
-            i = np.argmin(abs(dt))
-            i_sign = np.sign(dt[i].total_seconds())
-            if i_sign == 0:
-                j = i
-            else:
-                on_j_side = int(i_sign) * dt < datetime.timedelta()
-                if np.count_nonzero(on_j_side):
-                    j_side_nearest = np.argmin(abs(dt[on_j_side]))
-                    j = np.arange(len(dt))[on_j_side][j_side_nearest]
-                else:
-                    raise ValueError('Sample time not bounded on both sides by a DEM')
-        if self.datetimes[i] < self.datetimes[j]:
-            ij = i, j
-        elif self.datetimes[i] > self.datetimes[j]:
-            ij = j, i
-        else:
-            ij = i,
+            before = np.where(dx <= zero)[0]
+            after = np.where(dx >= zero)[0]
+            if not before.size or not after.size:
+                raise ValueError('Not bounded on both sides by a Raster')
+            i = before[np.argmin(abs(dx[before]))]
+            j = after[np.argmin(dx[after])]
+        ij = [i, j]
+        ij.sort(key=lambda index: self.x[index])
         return ij
 
-    def read(self, index, d=None, xlim=None, ylim=None, zlim=None, fun=None, **kwargs):
-        d = helpers.first_not(d, self.d)
-        xlim = helpers.first_not(xlim, self.xlim)
-        ylim = helpers.first_not(ylim, self.ylim)
-        zlim = helpers.first_not(zlim, self.zlim)
-        fun = fun or self.fun
-        kwargs = kwargs or self.kwargs
-        dem = DEM.read(
-            self.paths[index], d=d, xlim=xlim, ylim=ylim,
-            datetime=self.datetimes[index])
+    def _interpolate(self, rasters, x, xi, return_sigma=False):
+        dz = rasters[1].Z - rasters[0].Z
+        dx = x[1] - x[0]
+        z = rasters[0].Z + dz * ((xi - x[0]) / dx)
+        t = xi if isinstance(xi, datetime.datetime) else None
+        raster = rasters[0].__class__(z,
+            x=rasters[0].xlim, y=rasters[0].ylim, datetime=t)
+        if return_sigma:
+            nearest_dx = np.min(np.abs(np.subtract(xi, x)))
+            z_sigma = np.abs((1 / 3) * dz * (nearest_dx / dx))
+            sigma = raster.__class__(z_sigma,
+                x=rasters[0].xlim, y=rasters[0].ylim, datetime=t)
+            return raster, sigma
+        else:
+            return raster
+
+    def __call__(self, xi, return_sigma=False, extrapolate=False):
+        ij = self.nearest(xi, extrapolate=extrapolate)
+        return self._interpolate(
+            rasters=[self.rasters[i] for i in ij],
+            x=self.x[ij], xi=xi, return_sigma=return_sigma)
+
+class RasterFileInterpolant(RasterInterpolant):
+
+    def __init__(self, paths, x):
+        self.paths = paths
+        self.x = np.asarray(x)
+
+    def read(self, index, d=None, xlim=None, ylim=None, zlim=None,
+        fun=None, **kwargs):
+        t = self.x[index] if isinstance(self.x[index], datetime.datetime) else None
+        raster = Raster.read(
+            self.paths[index], d=d, xlim=xlim, ylim=ylim, datetime=t)
         if zlim is not None:
-            dem.crop(zlim=zlim)
-        if fun:
-            fun(dem, **kwargs)
-        return dem
+            raster.crop(zlim=zlim)
+        if fun is not None:
+            fun(raster, **kwargs)
+        return raster
 
-    def __call__(self, t, d=None, xlim=None, ylim=None, zlim=None, extrapolate=False, fun=None, **kwargs):
+    def __call__(self, xi, d=None, xlim=None, ylim=None, zlim=None,
+        return_sigma=False, extrapolate=False, fun=None, **kwargs):
         """
-        Return a DEM time-interpolated from two nearby DEM.
-
         Arguments:
-            t (datetime.datetime): Datetime of interpolated DEM
-
-        Returns:
-            DEM: An interpolated DEM for time `t`
+            d (float): Target grid cell size.
+                If `None`, the largest DEM cell size is used.
+            xlim (iterable): Crop bounds in x.
+                If `None`, the intersection of the DEMs is used.
+            ylim (iterable): Crop bounds in y.
+                If `None`, the intersection of the DEMs is used.
+            zlim (iterable): Crop bounds in z.
+                Values outside range are set to `np.nan`.
+            extrapolate (bool): Whether to interpolate from the two nearest Rasters (True)
+                or only from Rasters on either side of `xi`
+            fun (callable): Function to apply to each Raster before interpolation,
+                with signature `fun(raster, **kwargs)`. Must modify Raster in place.
+            **kwargs (dict): Additional arguments passed to `fun`
         """
-        d = helpers.first_not(d, self.d)
-        xlim = helpers.first_not(xlim, self.xlim)
-        ylim = helpers.first_not(ylim, self.ylim)
-        zlim = helpers.first_not(zlim, self.zlim)
-        extrapolate = extrapolate or self.extrapolate
-        fun = fun or self.fun
-        kwargs = kwargs or self.kwargs
-        ij = self.nearest(t=t, extrapolate=extrapolate)
+        ij = self.nearest(xi, extrapolate=extrapolate)
         if d is None or xlim is None or ylim is None:
             grids = [Grid.read(self.paths[k]) for k in ij]
         if d is None:
@@ -1032,14 +1025,9 @@ class DEMInterpolant(object):
             xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
         if ylim is None:
             ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
-        dems = [self.read(k, d=d, xlim=xlim, ylim=ylim) for k in ij]
-        if len(dems) > 1:
-            different_grids = (any(dems[0].d != dems[1].d) or any(dems[0].n != dems[1].n)
-                or any(dems[0].xlim != dems[1].xlim) or any(dems[0].ylim != dems[1].ylim))
-            if different_grids:
-                dems[1].resample(dems[0], method='linear', bounds_error=False, fill_value=np.nan)
-            scale = (t - dems[0].datetime) / (dems[1].datetime - dems[0].datetime)
-            dz = dems[1].Z - dems[0].Z
-            dems[0].Z += dz * scale
-        dems[0].datetime = t
-        return dems[0]
+        rasters = [self.read(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
+            fun=fun, **kwargs) for k in ij]
+        if rasters[0].grid != rasters[1].grid:
+            rasters[1].resample(rasters[0])
+        return self._interpolate(
+            rasters=rasters, x=self.x[ij], xi=xi, return_sigma=return_sigma)

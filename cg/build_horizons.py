@@ -13,7 +13,7 @@ DDEG = 0.05
 
 # --- Load DEM ---- #
 
-dem = glimpse.DEM.read(DEM_PATH)
+dem = glimpse.Raster.read(DEM_PATH)
 dem.crop(zlim=DEM_ZLIM)
 
 # --- Compute horizon ---- #

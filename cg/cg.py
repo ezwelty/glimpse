@@ -426,7 +426,7 @@ def sea_height(xy, t=None):
         t (datetime): Datetime at which to estimate tidal height.
             If `None`, tide is ignored in result.
     """
-    egm2008 = glimpse.DEM.read(os.path.join(CG_PATH, 'egm2008.tif'))
+    egm2008 = glimpse.Raster.read(os.path.join(CG_PATH, 'egm2008.tif'))
     geoid_height = egm2008.sample(xy).reshape(-1, 1)
     if t:
         t_begin = t.replace(minute=0, second=0, microsecond=0)
@@ -808,22 +808,19 @@ def write_image_viewdirs(images, viewdirs=None):
 
 # ---- Helpers ----
 
-def load_dem_interpolant(**kwargs):
+def load_dem_interpolant():
     """
-    Return a canonical DEMInterpolant object.
+    Return a canonical RasterFileInterpolant object.
 
     Loads all '*.tif' files found in `DEM_PATHS`, parsing dates from the first
     sequence of 8 numeric digits in each basename.
-
-    Arguments:
-        **kwargs (dict): Additional arguments to `glimpse.DEMInterpolant()`
     """
     paths = [path for directory in DEM_PATHS
         for path in glob.glob(os.path.join(directory, '*.tif'))]
     dates = [re.findall(r'([0-9]{8})', glimpse.helpers.strip_path(path))[0] for path in paths]
     # DEMs are produced from imagery taken near local noon, about 22:00 UTC
     datetimes = [datetime.datetime.strptime(date + '22', '%Y%m%d%H') for date in dates]
-    return glimpse.DEMInterpolant(paths, datetimes, **kwargs)
+    return glimpse.RasterFileInterpolant(paths, datetimes)
 
 def project_dem(cam, dem, array=None, mask=None, correction=True):
     """

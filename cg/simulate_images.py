@@ -111,14 +111,14 @@ for image in images:
     box = glimpse.helpers.intersect_boxes(np.row_stack((
         cam_box, dem_grid.box2d, ortho_grid.box2d)))
     # Read dem and ortho
-    dem = glimpse.DEM.read(dem_path, xlim=box[0::2], ylim=box[1::2], d=grid_size)
+    dem = glimpse.Raster.read(dem_path, xlim=box[0::2], ylim=box[1::2], d=grid_size)
     dem.crop(zlim=(0.1, np.inf))
     radius = circle_radius.get(image, circle_radius_default)
     dem.fill_circle(center=img.cam.xyz, radius=radius)
     nbands = gdal.Open(ortho_path).RasterCount
     bands = []
     for i in range(nbands):
-        bands.append(glimpse.DEM.read(ortho_path, band=i + 1, d=grid_size,
+        bands.append(glimpse.Raster.read(ortho_path, band=i + 1, d=grid_size,
             xlim=box[0::2], ylim=box[1::2]).Z)
     orthoZ = np.dstack(bands).astype(float)
     if not color:
@@ -134,7 +134,7 @@ for image in images:
         smdem.resize(viewshed_scale)
     else:
         smdem = dem
-    mask = glimpse.DEM(Z=smdem.viewshed(img.cam.xyz), x=dem.xlim, y=dem.ylim)
+    mask = glimpse.Raster(Z=smdem.viewshed(img.cam.xyz), x=dem.xlim, y=dem.ylim)
     if viewshed_scale != 1:
         mask.resample(dem)
     mask.Z = mask.Z.astype(bool)

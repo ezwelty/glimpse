@@ -8,7 +8,7 @@ DATE_STR = '20070922'
 # ---- Read DEM ----
 
 dem_path = glob.glob(os.path.join(DEM_DIR, DATE_STR + '*.tif'))[-1]
-dem = glimpse.DEM.read(dem_path)
+dem = glimpse.Raster.read(dem_path)
 
 # ---- Moraine lines ----
 
@@ -27,7 +27,7 @@ for path in paths:
 # ---- Ground control points ----
 
 GCP_DEM_PATH = '/volumes/science-b/data/columbia/_new/ArcticDEM/v2.0/tiles/merged_projected_clipped.tif'
-dem_ref = glimpse.DEM.read(GCP_DEM_PATH)
+dem_ref = glimpse.Raster.read(GCP_DEM_PATH)
 
 geo = glimpse.helpers.read_geojson('geojson/gcp.geojson', crs=32606, key='id')
 keys = [key for key in geo['features'] if re.findall('T' + DATE_STR, key)]

@@ -26,6 +26,7 @@ import lxml.builder
 import math
 import matplotlib
 import matplotlib.animation
+import numbers
 import numpy as np
 import os
 import pandas

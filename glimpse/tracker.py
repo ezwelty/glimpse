@@ -240,6 +240,7 @@ class Tracker(object):
                     index = [img for img in matching_images[:, i] if img is not None]
                     observer.cache_images(index=index)
         # Define parallel process
+        bar = helpers._progress_bar(max=len(xy))
         ntimes = len(datetimes)
         def process(xyi):
             means = np.full((ntimes, 6), np.nan)
@@ -289,13 +290,17 @@ class Tracker(object):
                         traceback.format_exception(*sys.exc_info())))
                 else:
                     error = e
-            results = (means, covariances, error, all_warnings)
+            results = [means, covariances, error, all_warnings]
             if return_particles:
-                results += (particles, weights)
+                results += [particles, weights]
+            return results
+        def reduce(results):
+            bar.next()
             return results
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
-            results = pool.map(process, xy)
+            results = pool.map(func=process, reduce=reduce, sequence=xy)
+        bar.finish()
         # Return results as Tracks
         if return_particles:
             means, covariances, errors, all_warnings, particles, weights = zip(*results)

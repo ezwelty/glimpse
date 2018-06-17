@@ -666,11 +666,12 @@ class Camera(object):
         nbands_out = df.groupby(['row', 'col']).aggregate(aggregate).shape[1]
         I = np.full(self.shape + (nbands_out, ), np.nan)
         # Define parallel process
-        def process(i_tile, ij):
+        bar = helpers._progress_bar(max=ntiles)
+        def process(ij):
             tile_mask = mask[ij]
             if not np.count_nonzero(tile_mask):
                 # No cells selected
-                return i_tile
+                return None
             tile = dem[ij]
             if has_values:
                 tile_values = values[ij]
@@ -678,7 +679,7 @@ class Camera(object):
             mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
-                return i_tile
+                return None
             _, distance = self._world2camera(np.atleast_2d(mean_xyz), return_distances=True)
             tile_scale = scale * np.abs(tile.d).mean() / (distance / self.f.mean())
             tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
@@ -698,7 +699,7 @@ class Camera(object):
             is_in = self.inframe(uv)
             if not np.count_nonzero(is_in):
                 # No cells in image
-                return i_tile
+                return None
             rc = uv[is_in, ::-1].astype(int)
             # Compile values
             if has_values:
@@ -716,16 +717,14 @@ class Camera(object):
             groups = df.groupby(('row', 'col')).aggregate(aggregate).reset_index()
             idx = (groups.row.as_matrix().astype(int),
                 groups.col.as_matrix().astype(int))
-            return (i_tile, idx, groups.iloc[:, 2:].as_matrix())
-        def reduce(i, idx=None, values=None):
-            helpers._print_progress(i, ntiles, close=False)
+            return idx, groups.iloc[:, 2:].as_matrix()
+        def reduce(idx, values=None):
+            bar.next()
             if idx is not None:
                 I[idx] = values
         with config._MapReduce(np=parallel) as pool:
-            pool.map(
-                func=process, reduce=reduce, star=True,
-                sequence=tuple(enumerate(tile_indices)))
-        sys.stdout.write('\n')
+            pool.map(func=process, reduce=reduce, sequence=tile_indices)
+        bar.finish()
         return I
 
     # ---- Methods (private) ----

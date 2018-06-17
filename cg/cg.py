@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.join(CG_PATH, '..'))
 import glimpse
 from glimpse.backports import *
-from glimpse.imports import (np, pandas, re, datetime, sharedmem, cv2)
+from glimpse.imports import (np, pandas, re, datetime, sharedmem, cv2, shapely)
 import glob
 import requests
 try:
@@ -26,6 +26,7 @@ IMAGE_PATH = None
 KEYPOINT_PATH = None
 MATCH_PATH = None
 DEM_PATHS = []
+DEM_SIGMAS = []
 
 # ---- Images ----
 
@@ -47,8 +48,8 @@ def Stations():
     """
     Return stations metadata.
     """
-    stations_path = os.path.join(CG_PATH, 'geojson', 'stations.geojson')
-    return glimpse.helpers.read_geojson(stations_path, crs=32606, key='id')['features']
+    path = os.path.join(CG_PATH, 'geojson', 'stations.geojson')
+    return glimpse.helpers.read_geojson(path, crs=32606, key='id')['features']
 
 def _station_break_index(path):
     """
@@ -219,10 +220,14 @@ def load_images(station, services, use_exif=False, service_exif=False, anchors=F
                 exif = exifs[j]
             elif not service_exif:
                 exif = None
+            if KEYPOINT_PATH:
+                keypoint_path = os.path.join(KEYPOINT_PATH, basename + '.pkl')
+            else:
+                keypoint_path = None
             image = glimpse.Image(
                 path=paths[j], cam=calibration, anchor=anchor, exif=exif,
                 datetime=None if use_exif else datetimes[j],
-                keypoints_path=os.path.join(KEYPOINT_PATH, basename + '.pkl'))
+                keypoints_path=keypoint_path)
             images.append(image)
     return images
 
@@ -366,15 +371,14 @@ def terminus_lines(img, markup, correction=True, step=None):
     """
     luv = tuple(markup.values())
     # HACK: Select terminus with matching date and preferred type
-    geo = glimpse.helpers.read_geojson(
-        os.path.join(CG_PATH, 'geojson', 'termini.geojson'), crs=32606)
+    termini = Termini()
     date_str = img.datetime.strftime('%Y-%m-%d')
     features = [(feature, feature['properties']['type'])
-        for feature in glimpse.helpers.geojson_iterfeatures(geo)
+        for feature in termini
         if feature['properties']['date'] == date_str]
     type_order = ('aerometric', 'worldview', 'landsat-8', 'landsat-7', 'terrasar', 'tandem', 'arcticdem', 'landsat-5')
     order = [type_order.index(f[1]) for f in features]
-    xy = features[np.argmin(order)][0]['geometry']['coordinates']
+    xy = features[np.argmin(order)[0]]['geometry']['coordinates']
     xyz = np.hstack((xy, sea_height(xy, t=img.datetime)))
     return glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction, step=step)
 
@@ -806,40 +810,152 @@ def write_image_viewdirs(images, viewdirs=None):
             d = dict(viewdir=tuple(viewdirs[i]))
         glimpse.helpers.write_json(d, path=path)
 
-# ---- Helpers ----
+# ---- Tracking ----
 
-def load_dem_interpolant():
+@lru_cache(maxsize=1)
+def Termini():
     """
-    Return a canonical RasterFileInterpolant object.
+    Return terminus traces.
+    """
+    path = os.path.join(CG_PATH, 'geojson', 'termini.geojson')
+    geo = glimpse.helpers.read_geojson(path, crs=32606)['features']
+    # Check that all termini run west to east
+    bad = []
+    for f in geo:
+        x_start = f['geometry']['coordinates'][0, 0]
+        x_end = f['geometry']['coordinates'][-1, 0]
+        if x_start > x_end:
+            bad.append((f['properties']['date'], f['properties']['type']))
+    if bad:
+        raise ValueError('Some termini traced east to west:' + str(bad))
+    # Sort by date, then type
+    geo.sort(key=lambda x: (x['properties']['date'], x['properties']['type']))
+    return geo
 
-    Loads all '*.tif' files found in `DEM_PATHS`, parsing dates from the first
-    sequence of 8 numeric digits in each basename.
+@lru_cache(maxsize=1)
+def Glacier():
     """
-    paths = [path for directory in DEM_PATHS
-        for path in glob.glob(os.path.join(directory, '*.tif'))]
-    dates = [re.findall(r'([0-9]{8})', glimpse.helpers.strip_path(path))[0] for path in paths]
-    # DEMs are produced from imagery taken near local noon, about 22:00 UTC
-    datetimes = [datetime.datetime.strptime(date + '22', '%Y%m%d%H') for date in dates]
-    return glimpse.RasterFileInterpolant(paths, datetimes)
+    Return the maximal glacier extent.
+    """
+    path = os.path.join(CG_PATH, 'geojson', 'glacier.geojson')
+    geo = glimpse.helpers.read_geojson(path, crs=32606)
+    return geo['features'][0]['geometry']['coordinates'][0]
 
-def project_dem(cam, dem, array=None, mask=None, correction=True):
+@lru_cache(maxsize=1)
+def Coast():
     """
-    Return a grayscale image formed by projecting a DEM into a Camera.
+    Return the forebay coastlines.
+    """
+    path = os.path.join(CG_PATH, 'geojson', 'coast.geojson')
+    geo = glimpse.helpers.read_geojson(path, crs=32606, key='id')
+    return {key: geo['features'][key]['geometry']['coordinates'] for key in geo['features']}
 
-    Arguments:
-        cam (Camera): Camera object
-        dem (DEM): DEM object
-        array (array): Array (with shape `dem.Z`) of pixel values to project.
-            If `None`, `dem.Z` is used.
-        mask (array): Boolean array (with shape `dem.Z`) indicating which values
-            to project
-        correction: Whether to apply elevation corrections (bool) or arguments
-            to `glimpse.helpers.elevation_corrections()`
+def parse_dem_path(path):
     """
-    if mask is None:
-        mask = ~np.isnan(dem.Z)
-    xyz = np.column_stack((dem.X[mask], dem.Y[mask], dem.Z[mask]))
-    uv = cam.project(xyz, correction=correction)
-    if array is None:
-        array = dem.Z
-    return cam.rasterize(uv, array[mask])
+    Return datetime and type from DEM path.
+    """
+    datestr = re.findall(r'([0-9]{8})', glimpse.helpers.strip_path(path))[0]
+    # HACK: Aerial and satellite imagery taken around local noon (~ 22:00 UTC)
+    t = datetime.datetime.strptime(datestr + 22, '%Y%m%d%H')
+    typestr = re.findall(r'dem-([^\/]+)', path)[0]
+    return dict(datetime=t, type=typestr)
+
+@lru_cache(maxsize=1)
+def DEMInterpolant():
+    """
+    Return a canonical RasterInterpolant object.
+    """
+    datetimes = [parse_dem_path(path)['datetime'] for path in DEM_PATHS]
+    return glimpse.RasterInterpolant(
+        means=DEM_PATHS, sigmas=DEM_SIGMAS, x=datetimes)
+
+def get_dem_terminus(path):
+    """
+    Return the terminus corresponding to a DEM path.
+    """
+    termini = Termini()
+    termini_keys = [(f['properties']['date'], f['properties']['type'])
+        for f in termini]
+    meta = parse_dem_path(path)
+    i = termini_keys.index((meta['datetime'].strftime('%Y-%m-%d'), meta['type']))
+    return termini[i]['geometry']['coordinates']
+
+def get_nearest_dem_termini(t, extrapolate=False):
+    """
+    Return the termini corresponding to the nearest DEMs.
+    """
+    interpolant = DEMInterpolant()
+    ij = interpolant.nearest(t, extrapolate=extrapolate)
+    return [get_dem_terminus(interpolant.means[i]) for i in ij]
+
+def get_nearest_terminus(t):
+    """
+    Return the terminus nearest a datetime.
+    """
+    types = ('aerometric', 'arcticdem', 'ifsar', 'tandem',
+        'landsat-8', 'landsat-7', 'terrasar')
+    termini = [f for f in Termini() if
+        len(f['properties']['date']) == 10 and
+        f['properties']['type'] in types]
+    termini.sort(key=lambda x: (x['properties']['date'],
+        types.index(x['properties']['type'])))
+    datetimes = [datetime.datetime.strptime(
+        f['properties']['date'] + '22', '%Y-%m-%d%H') for f in termini]
+    dt = np.abs(np.array(datetimes) - t)
+    i = np.where(np.min(dt) == dt)[0][0]
+    return termini[i]['geometry']['coordinates']
+
+def clip_terminus_with_coast(line):
+    """
+    Clip a terminus with the west and east coastlines.
+    """
+    # Convert to shapely format
+    coast = Coast()
+    cline_west = shapely.geometry.LineString(coast['west'])
+    cline_east = shapely.geometry.LineString(coast['east'])
+    tline = shapely.geometry.LineString(line)
+    # Cut terminus at west coastline
+    tline = shapely.ops.split(tline, cline_west.buffer(distance=100))[-1]
+    # Cut terminus at east coastline
+    tline = shapely.ops.split(tline, cline_east.buffer(distance=100))[0]
+    return np.asarray(tline.coords)
+
+def clip_glacier_with_terminus(line):
+    """
+    Clip glacier extent with a terminus.
+    """
+    gpoly = shapely.geometry.Polygon(shell=Glacier())
+    # Extend western edge past polygon boundary
+    wpoint = shapely.geometry.Point(line[0])
+    west_snaps = shapely.ops.nearest_points(wpoint, gpoly.exterior)
+    if west_snaps[0] != west_snaps[1]:
+        new_west = west_snaps[1].coords
+        d = new_west - line[0]
+        d /= np.linalg.norm(d)
+        line = np.row_stack((new_west + d, line))
+    # Extend eastern edge past polygon boundary
+    epoint = shapely.geometry.Point(line[-1])
+    east_snaps = shapely.ops.nearest_points(epoint, gpoly.exterior)
+    if east_snaps[0] != east_snaps[1]:
+        new_east = east_snaps[1].coords
+        d = new_east - line[-1]
+        d /= np.linalg.norm(d)
+        line = np.row_stack((line, new_east + d))
+    tline = shapely.geometry.LineString(line)
+    # Split glacier at terminus
+    splits = shapely.ops.split(gpoly, tline)
+    if len(splits) < 2:
+        raise ValueError('Glacier polygon not split by terminus')
+    else:
+        areas = [split.area for split in splits]
+        return np.asarray(splits[np.argmax(areas)].exterior.coords)
+
+def intersect_glaciers(polygons):
+    """
+    Return intersection of glacier extents.
+    """
+    shapes = [shapely.geometry.Polygon(shell=xy) for xy in polygons]
+    shape = shapes[0]
+    for i in range(1, len(shapes)):
+        shape = shape.intersection(shapes[i])
+    return np.asarray(shape.exterior.coords)

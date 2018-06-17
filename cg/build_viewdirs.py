@@ -91,7 +91,7 @@ for station in station_services:
 
 # ---- Compute view directions ----
 
-tile_size = 200
+tile_size = 1500
 tile_overlap = 12
 
 for station in station_services:
@@ -149,11 +149,11 @@ for station in station_services:
         fit = model.fit(ftol=1, full=True, loss='soft_l1')
         model.set_cameras(fit.params)
         # Orient cameras (alternate)
-        matcher.convert_matches(glimpse.optimize.RotationMatchesXYZ)
-        observer = glimpse.Observer(matcher.images, cache=False)
-        model = glimpse.optimize.ObserverCameras(observer, matcher.matches)
-        fit = model.fit(tol=1)
-        model.set_cameras(fit.x.reshape(-1, 3))
+        # matcher.convert_matches(glimpse.optimize.RotationMatchesXYZ)
+        # observer = glimpse.Observer(matcher.images, cache=False)
+        # model = glimpse.optimize.ObserverCameras(observer, matcher.matches)
+        # fit = model.fit(tol=1)
+        # model.set_cameras(fit.x.reshape(-1, 3))
         # Write results for non-anchors
         # NOTE: Assumes anchor viewdirs are fixed
         cg.write_image_viewdirs(matcher.images[np.where(~is_anchor)[0]])

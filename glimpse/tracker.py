@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, cv2, warnings, datetime, scipy, matplotlib)
+from .imports import (np, cv2, warnings, datetime, scipy, matplotlib, sys, traceback)
 from . import (helpers, raster, config)
 
 class Tracker(object):
@@ -280,9 +280,15 @@ class Tracker(object):
                 if caught:
                     warns = tuple(caught)
             except Exception as e:
-                error = e
+                # traceback object cannot be pickled, so include in message
+                # TODO: Use tblib instead (https://stackoverflow.com/a/26096355)
                 if errors:
                     raise e
+                elif parallel:
+                    error = e.__class__(''.join(
+                        traceback.format_exception(*sys.exc_info())))
+                else:
+                    error = e
             results = (means, covariances, error, all_warnings)
             if return_particles:
                 results += (particles, weights)

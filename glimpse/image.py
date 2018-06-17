@@ -519,7 +519,7 @@ class Camera(object):
         """
         uv = self.edges(step=1)
         dxyz = self.invproject(uv)
-        dxyz *= radius / np.linalg.norm(dxyz, axis=1)[:, None]
+        dxyz *= radius / np.sqrt((dxyz**2).sum(axis=1))[:, None]
         vertices = np.vstack(([[0, 0, 0]], dxyz))
         vertices += self.xyz
         return helpers.bounding_box(vertices)
@@ -542,7 +542,7 @@ class Camera(object):
             np.linspace(0, self.imgsz[0], n),
             np.repeat(self.imgsz[1] / 2 + self.c[1], n)))
         dxyz = self.invproject(uv)
-        dxyz *= radius / np.linalg.norm(dxyz, axis=1)[:, None]
+        dxyz *= radius / np.sqrt((dxyz**2).sum(axis=1))[:, None]
         vertices = np.row_stack(((0, 0, 0), dxyz, (0, 0, 0)))
         vertices += self.xyz
         if plane is None:
@@ -1000,7 +1000,10 @@ class Camera(object):
                 dxyz[:, 2] += helpers.elevation_corrections(
                     squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1), **correction)
         # Convert coordinates to ray directions
-        xyz_c = np.matmul(self.R, dxyz.T).T
+        if config._UseMatMul:
+            xyz_c = np.matmul(self.R, dxyz.T).T
+        else:
+            xyz_c = np.dot(dxyz, self.R.T)
         # Normalize by perspective division
         xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
         # Set points behind camera to NaN
@@ -1019,7 +1022,10 @@ class Camera(object):
             xy (array): Camera coordinates (Nx2)
         """
         # Multiply 2-d coordinates
-        xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
+        if config._UseMatMul:
+            xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
+        else:
+            xyz = np.dot(xy, self.R[0:2, :])
         # Simulate z = 1 by adding 3rd column of rotation matrix
         xyz += self.R.T[:, 2]
         return xyz

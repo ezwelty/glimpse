@@ -13,7 +13,8 @@ class Tracker(object):
         dem: Elevation of the surface on which to track points, as either a scalar or
              a Raster
         dem_sigma: Elevation standard deviations, as either a scalar or
-             a Raster with the same extent as `dem`
+             a Raster with the same extent as `dem`. `0` means particles stay glued to
+             `dem` and weighing particles by their distance from the `dem` is disabled.
         viewshed (Raster): Binary viewshed with the same extent as `dem`
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
@@ -75,7 +76,7 @@ class Tracker(object):
         if isinstance(obj, raster.Raster):
             return obj.sample(xy)
         else:
-            return obj
+            return np.full(len(self.particles), obj)
 
     def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0)):
         """
@@ -224,7 +225,6 @@ class Tracker(object):
         xy = np.atleast_2d(xy)
         errors = len(xy) <= 1
         parallel = helpers._parse_parallel(parallel)
-        xy = np.atleast_2d(xy)
         if datetimes is None:
             datetimes = np.unique(np.concatenate([
                 obs.datetimes for obs in self.observers]))
@@ -445,7 +445,11 @@ class Tracker(object):
             for obs, img in enumerate(imgs)]
         z = self._sample_dem(self.particles[:, 0:2])
         z_sigma = self._sample_dem(self.particles[:, 0:2], sigma=True)
-        log_likelihoods_dem = 1 / (2 * z_sigma**2) * (z - self.particles[:, 2])**2
+        # Avoid division by zero
+        nonzero = np.nonzero(z_sigma)[0]
+        log_likelihoods_dem = np.zeros(len(self.particles), dtype=float)
+        log_likelihoods_dem[nonzero] = (1 / (2 * z_sigma[nonzero]**2) *
+            (z[nonzero] - self.particles[nonzero, 2])**2)
         return np.exp(-sum(log_likelihoods_observer) - log_likelihoods_dem)
 
     def _compute_observer_log_likelihoods(self, obs, img):

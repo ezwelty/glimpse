@@ -856,7 +856,7 @@ def parse_dem_path(path):
     """
     datestr = re.findall(r'([0-9]{8})', glimpse.helpers.strip_path(path))[0]
     # HACK: Aerial and satellite imagery taken around local noon (~ 22:00 UTC)
-    t = datetime.datetime.strptime(datestr + 22, '%Y%m%d%H')
+    t = datetime.datetime.strptime(datestr + str(22), '%Y%m%d%H')
     typestr = re.findall(r'dem-([^\/]+)', path)[0]
     return dict(datetime=t, type=typestr)
 

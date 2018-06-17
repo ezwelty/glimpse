@@ -33,6 +33,7 @@ import pandas
 import piexif
 import PIL.Image
 import PIL.ImageDraw
+import progress.bar
 import pyproj
 import re
 import scipy.interpolate

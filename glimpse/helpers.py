@@ -3,7 +3,7 @@ from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
     sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely, sharedmem,
-    sys)
+    sys, progress)
 
 # ---- General ---- #
 
@@ -1642,13 +1642,6 @@ def _parse_parallel(parallel):
     else:
         return parallel
 
-def _print_progress(i, n, ticks=20, close=None):
-    sys.stdout.write('\r')
-    percent = round(100 * i / n)
-    nticks = int(percent / (100 / ticks))
-    sys.stdout.write(('[%-' + str(ticks) + 's] %d%% (%d of %d)') % ('=' * nticks, percent, i, n))
-    sys.stdout.flush()
-    if close is None:
-        close = i >= (n - 1)
-    if close:
-        sys.stdout.write('\n')
+def _progress_bar(max):
+    return progress.bar.Bar('', fill='#', max=max, hide_cursor=False,
+        suffix='%(percent)3d%% (%(index)d of %(max)d) %(elapsed_td)s')

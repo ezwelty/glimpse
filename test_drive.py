@@ -1,5 +1,5 @@
 import glimpse
-from glimpse.imports import (datetime, np, os, re, matplotlib, sharedmem)
+from glimpse.imports import (datetime, np, os)
 import glob
 import itertools
 
@@ -9,7 +9,7 @@ DATA_DIR = 'data'
 DEM_DIR = os.path.join(DATA_DIR, 'dem')
 IMG_DIR = 'images'
 CAM_DIR = 'images_json'
-MAX_DISTANCE = 30e3 # Camera world units (meters)
+MAX_DEPTH = 30e3 # Camera world units (meters)
 STATIONS = ('AK01b', 'AK10b')
 
 # ---- Prepare Observers ----
@@ -32,7 +32,7 @@ for station in STATIONS:
 
 # ---- Prepare DEM ----
 
-boxes = [obs.images[0].cam.viewbox(radius=MAX_DISTANCE)
+boxes = [obs.images[0].cam.viewbox(MAX_DEPTH)
     for obs in observers]
 box = glimpse.helpers.intersect_boxes(boxes)
 paths = glob.glob(os.path.join(DEM_DIR, '*.tif'))
@@ -61,7 +61,7 @@ tracker = glimpse.Tracker(
     observers=observers, dem=dem, dem_sigma=3, viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
     xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2), axyz_sigma=(2, 2, 0.2),
-    tile_size=(15, 15), parallel=False, return_particles=False)
+    tile_size=(15, 15), parallel=True, return_particles=False)
 
 # ---- Plot tracks ----
 

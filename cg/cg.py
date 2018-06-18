@@ -473,9 +473,8 @@ def synth_controls(img, step=None, directions=False):
             # Length-2 paths traced from image to synthetic image
             uv = np.vstack([x[0] for x in svg['points-auto'].values()])
             suv = np.vstack([x[1] for x in svg['points-auto'].values()])
-            xyz = simg.cam.invproject(suv)
-            if not directions:
-                xyz = simg.cam.xyz + xyz * depth.sample(suv * scale).reshape(-1, 1)
+            d = 1 if directions else depth.sample(suv * scale)
+            xyz = simg.cam.invproject(suv, directions=directions, depth=d)
             points = glimpse.optimize.Points(cam=img.cam, uv=uv, xyz=xyz,
                 directions=directions, correction=False)
             controls.append(points)
@@ -483,9 +482,8 @@ def synth_controls(img, step=None, directions=False):
             # Length-2 paths traced from image to synthetic image
             uv = np.vstack([x[0] for x in svg['points'].values()])
             suv = np.vstack([x[1] for x in svg['points'].values()])
-            xyz = simg.cam.invproject(suv)
-            if not directions:
-                xyz = simg.cam.xyz + xyz * depth.sample(suv * scale).reshape(-1, 1)
+            d = 1 if directions else depth.sample(suv * scale)
+            xyz = simg.cam.invproject(suv, directions=directions, depth=d)
             points = glimpse.optimize.Points(cam=img.cam, uv=uv, xyz=xyz,
                 directions=directions, correction=False)
             controls.append(points)
@@ -494,10 +492,10 @@ def synth_controls(img, step=None, directions=False):
                 # Group with paths named 'image*' and 'synth*'
                 uvs = [layer[key] for key in layer if key.find('image') == 0]
                 suvs = [layer[key] for key in layer if key.find('synth') == 0]
-                xyzs = [simg.cam.invproject(suv) for suv in suvs]
-                if not directions:
-                    depths = [depth.sample(suv * scale).reshape(-1, 1) for suv in suvs]
-                    xyzs = [simg.cam.xyz + xyz * depth for xyz, depth in zip(xyzs, depths)]
+                depths = [1 if directions else depth.sample(suv * scale)
+                    for suv in suvs]
+                xyzs = [simg.cam.invproject(suv, directions=directions, depth=d)
+                    for suv, d in zip(suvs, depths)]
                 lines = glimpse.optimize.Lines(cam=img.cam, uvs=uvs, xyzs=xyzs,
                     step=step, directions=directions, correction=False)
                 controls.append(lines)

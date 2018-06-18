@@ -56,8 +56,7 @@ for image in images:
     # print('Max parallax:', round(np.nanmax(pixels), 2), 'pixels')
     print(len(uv), 'matches (after parallax filter)')
     # Build "world" points
-    dxyz = simg.cam.invproject(suv)
-    xyz = simg.cam.xyz + dxyz * depth.sample(suv).reshape(-1, 1)
+    xyz = simg.cam.invproject(suv, directions=False, depth=depth.sample(suv))
     points = glimpse.optimize.Points(cam=img.cam, uv=uv, xyz=xyz, directions=False)
     # Filter with RANSAC
     # NOTE: 'AKJNC_20120813_205325' needed dict(viewdir=True, k=0, f=True)

@@ -392,38 +392,52 @@ class Camera(object):
         self.f *= scale2d
         self.c *= scale2d
 
-    def project(self, xyz, directions=False, correction=False):
+    def project(self, xyz, directions=False, correction=False,
+        return_depth=False):
         """
         Project world coordinates to image coordinates.
 
         Arguments:
-            xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
-            directions (bool): Whether absolute coordinates (False) or ray directions (True)
-            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+            xyz (array): World coordinates (n, 3)
+            directions (bool): Whether `xyz` are absolute coordinates (False)
+                or ray directions (True)
+            correction: Arguments to `helpers.elevation_corrections()` (dict),
                 `True` for default arguments, or `None` or `False` to skip.
                 Only applies if `directions` is `False`.
-        Returns:
-            array: Image coordinates (Nx2)
-        """
-        if xyz.shape[1] == 3:
-            xy = self._world2camera(xyz, directions=directions, correction=correction)
-        else:
-            xy = xyz
-        uv = self._camera2image(xy)
-        return uv
+            return_depth (bool): Whether to return the distance of each point
+                along the camera's optical axis.
 
-    def invproject(self, uv):
+        Returns:
+            array: Image coordinates (n, 2)
+            array (optional): Point depth (n, )
         """
-        Project image coordinates to world ray directions.
+        xy = self._world2camera(xyz, directions=directions,
+            correction=correction, return_depth=return_depth)
+        if return_depth:
+            xy, depth = xy
+        uv = self._camera2image(xy)
+        if return_depth:
+            return uv, depth
+        else:
+            return uv
+
+    def invproject(self, uv, directions=True, depth=1):
+        """
+        Project image coordinates to world coordinates or ray directions.
 
         Arguments:
-            uv (array): Image coordinates (Nx2)
+            uv (array): Image coordinates (n, 2)
+            directions (bool): Whether to return world ray directions relative
+                to the camera position (True) or absolute coordinates by adding
+                on the camera position (False)
+            depth: Distance of rays along the camera's optical axis, as either a
+                scalar or a vector (n, )
 
         Returns:
-            array: World ray directions relative to camera position (Nx3)
+            array: World coordinates or ray directions (n, 3)
         """
         xy = self._image2camera(uv)
-        xyz = self._camera2world(xy)
+        xyz = self._camera2world(xy, directions=directions, depth=depth)
         return xyz
 
     def infront(self, xyz, directions=False):
@@ -431,8 +445,9 @@ class Camera(object):
         Test whether world coordinates are in front of the camera.
 
         Arguments:
-            xyz (array): World coordinates (Nx3)
-            directions (bool): Whether `xyz` are absolute coordinates (`False`) or ray directions (`True`)
+            xyz (array): World coordinates (n, 3)
+            directions (bool): Whether `xyz` are ray directions (True)
+                or absolute coordinates (False)
         """
         if directions:
             dxyz = xyz
@@ -446,7 +461,7 @@ class Camera(object):
         Test whether image coordinates are in or on the image frame.
 
         Arguments:
-            uv (array) Image coordinates (Nx2)
+            uv (array) Image coordinates (n, 2)
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
 
@@ -455,8 +470,9 @@ class Camera(object):
         Test whether world coordinates are within view.
 
         Arguments:
-            xyz (array): World coordinates (Nx3) or normalized camera coordinates (Nx2)
-            directions (bool): Whether `xyz` are absolute coordinates (`False`) or ray directions (`True`)
+            xyz (array): World coordinates (n, 3)
+            directions (bool): Whether `xyz` are ray directions (True)
+                or absolute coordinates (False)
         """
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
@@ -492,7 +508,7 @@ class Camera(object):
         Vertices are ordered clockwise from the origin (0, 0).
 
         Arguments:
-            step (tuple): Pixel spacing of the vertices in x and y.
+            step (tuple): Pixel spacing of the vertices in x and y
         """
         if np.isscalar(step):
             step = (step, step)
@@ -507,24 +523,23 @@ class Camera(object):
             np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1]))
         ))
 
-    def viewbox(self, radius):
+    def viewbox(self, depth, step=(1, 1)):
         """
         Return bounding box of the camera viewshed.
 
-        The camera viewshed is constructed by projecting out edge pixles
-        at a fixed distance from the camera.
+        The camera viewshed is constructed by projecting out edge pixels
+        to a fixed depth.
 
         Arguments:
-            radius (float): Distance of point projections
+            depth (float): Distance of point projections
+            step (tuple): Spacing of the projected pixels in x and y
         """
-        uv = self.edges(step=1)
-        dxyz = self.invproject(uv)
-        dxyz *= radius / np.sqrt((dxyz**2).sum(axis=1))[:, None]
-        vertices = np.vstack(([[0, 0, 0]], dxyz))
-        vertices += self.xyz
+        uv = self.edges(step=step)
+        dxyz = self.invproject(uv, depth=depth, directions=False)
+        vertices = np.vstack((self.xyz, dxyz))
         return helpers.bounding_box(vertices)
 
-    def viewpoly(self, radius, step=1, plane=None):
+    def viewpoly(self, depth, step=1, plane=None):
         """
         Return bounding polygon of the camera viewshed.
 
@@ -532,8 +547,8 @@ class Camera(object):
         through the principal point, then projecting the result onto a plane.
 
         Arguments:
-            radius (float): Distance of point projections
-            step (float): Pixel spacing between projected image coordinates
+            depth (float): Distance of point projections
+            step (float): Spacing of the projected pixels
             plane (iterable): Plane (a, b, c, d), where ax + by + cz + d = 0.
                 If `None`, no planar projection is performed.
         """
@@ -541,10 +556,8 @@ class Camera(object):
         uv = np.column_stack((
             np.linspace(0, self.imgsz[0], n),
             np.repeat(self.imgsz[1] / 2 + self.c[1], n)))
-        dxyz = self.invproject(uv)
-        dxyz *= radius / np.sqrt((dxyz**2).sum(axis=1))[:, None]
-        vertices = np.row_stack(((0, 0, 0), dxyz, (0, 0, 0)))
-        vertices += self.xyz
+        xyz = self.invproject(uv, directions=False, depth=depth)
+        vertices = np.row_stack((self.xyz, xyz, self.xyz))
         if plane is None:
             return vertices
         else:
@@ -680,8 +693,9 @@ class Camera(object):
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
                 return None
-            _, distance = self._world2camera(np.atleast_2d(mean_xyz), return_distances=True)
-            tile_scale = scale * np.abs(tile.d).mean() / (distance / self.f.mean())
+            _, mean_depth = self._world2camera(np.atleast_2d(mean_xyz),
+                return_depth=True, correction=correction)
+            tile_scale = scale * np.abs(tile.d).mean() / (mean_depth / self.f.mean())
             tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
             if tile_scale != 1:
                 tile.resize(tile_scale)
@@ -692,7 +706,7 @@ class Camera(object):
             # Project tile
             xyz = helpers.grid_to_points((tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask]))
             if return_depth:
-                xy, distances = self._world2camera(xyz, correction=correction, return_distances=True)
+                xy, depth = self._world2camera(xyz, correction=correction, return_depth=True)
                 uv = self._camera2image(xy)
             else:
                 uv = self.project(xyz, correction=correction)
@@ -706,9 +720,9 @@ class Camera(object):
                 tile_values = tile_values[tile_mask][is_in]
             if return_depth:
                 if has_values:
-                    tile_values = np.column_stack((tile_values, distances[is_in, None]))
+                    tile_values = np.column_stack((tile_values, depth[is_in, None]))
                 else:
-                    tile_values = distances[is_in, None]
+                    tile_values = depth[is_in, None]
             # Build DataFrame for fast groupby operation
             df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1]))
             for i in range(tile_values.shape[1]):
@@ -977,16 +991,20 @@ class Camera(object):
         continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
         return continuous_row and continuous_col
 
-    def _world2camera(self, xyz, directions=False, correction=False, return_distances=False):
+    def _world2camera(self, xyz, directions=False, correction=False,
+        return_depth=False):
         """
         Project world coordinates to camera coordinates.
 
         Arguments:
-            xyz (array): World coordinates (Nx3)
-            directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
-            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
+            xyz (array): World coordinates (n, 3)
+            directions (bool): Whether `xyz` are absolute coordinates (False)
+                or ray directions (True)
+            correction: Arguments to `helpers.elevation_corrections()` (dict),
                 `True` for default arguments, or `None` or `False` to skip.
                 Only applies if `directions` is `False`.
+            return_depth (bool): Whether to return the distance of each point
+                along the camera's optical axis
         """
         if directions:
             dxyz = xyz
@@ -997,7 +1015,8 @@ class Camera(object):
             if isinstance(correction, dict):
                 # Apply elevation correction
                 dxyz[:, 2] += helpers.elevation_corrections(
-                    squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1), **correction)
+                    squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1),
+                    **correction)
         # Convert coordinates to ray directions
         if config._UseMatMul:
             xyz_c = np.matmul(self.R, dxyz.T).T
@@ -1008,17 +1027,22 @@ class Camera(object):
         # Set points behind camera to NaN
         behind = xyz_c[:, 2] <= 0
         xy[behind, :] = np.nan
-        if return_distances:
+        if return_depth:
             return xy, xyz_c[:, 2]
         else:
             return xy
 
-    def _camera2world(self, xy):
+    def _camera2world(self, xy, directions=True, depth=1):
         """
-        Project camera coordinates to world ray directions.
+        Project camera coordinates to world coordinates or ray directions.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
+            xy (array): Camera coordinates (n, 2)
+            directions (bool): Whether to return world ray directions relative
+                to the camera position (True) or absolute coordinates by adding
+                on the camera position (False)
+            depth: Distance of rays along the camera's optical axis, as either a
+                scalar or a vector (n, )
         """
         # Multiply 2-d coordinates
         if config._UseMatMul:
@@ -1027,6 +1051,10 @@ class Camera(object):
             xyz = np.dot(xy, self.R[0:2, :])
         # Simulate z = 1 by adding 3rd column of rotation matrix
         xyz += self.R.T[:, 2]
+        if depth != 1:
+            xyz *= np.atleast_1d(depth).reshape(-1, 1)
+        if not directions:
+            xyz += self.xyz
         return xyz
 
     def _camera2image(self, xy):

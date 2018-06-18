@@ -632,6 +632,9 @@ class Raster(Grid):
     def _sample_grid(self, xy, kx=1, ky=1, s=0):
         x, y = xy
         signs = np.sign(self.d).astype(int)
+        # HACK: scipy.interpolate.RectBivariateSpline does not support NAN
+        Zmin = np.nanmin(self.Z)
+        self.Z[np.isnan(self.Z)] = Zmin - 2 * max(1, abs(np.nanmax(self.Z)))
         fun = scipy.interpolate.RectBivariateSpline(
             self.y[::signs[1]], self.x[::signs[0]],
             self.Z[::signs[1], ::signs[0]],
@@ -640,6 +643,7 @@ class Raster(Grid):
         xdir = 1 if (len(x) < 2) or x[1] > x[0] else -1
         ydir = 1 if (len(y) < 2) or y[1] > y[0] else -1
         samples = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
+        samples[samples < Zmin] = np.nan
         return samples
 
     def resample(self, grid, order=1, bounds_error=False, fill_value=np.nan):
@@ -1089,15 +1093,18 @@ class RasterInterpolant(object):
             **kwargs (dict): Additional arguments passed to `fun`
         """
         ij = self.nearest(xi, extrapolate=extrapolate)
-        # Determine grid for reading (lowest resolution, smallest extent)
-        if d is None or xlim is None or ylim is None:
-            grids = [self._read_mean_grid(k) for k in ij]
+        # Determine common grid (lowest resolution, smallest extent)
+        grids = [self._read_mean_grid(k) for k in ij]
         if d is None:
             d = np.max(np.abs(np.stack([grid.d for grid in grids])))
         if xlim is None:
-            xlim = helpers.intersect_ranges([grid.xlim for grid in grids])
+            xlim = (-np.inf, np.inf)
         if ylim is None:
-            ylim = helpers.intersect_ranges([grid.ylim for grid in grids])
+            ylim = (-np.inf, np.inf)
+        boxes = [grid.box2d for grid in grids]
+        boxes.append([min(xlim), min(ylim), max(xlim), max(ylim)])
+        box = helpers.intersect_boxes(boxes)
+        xlim, ylim = box[0::2], box[1::2]
         # Read mean rasters
         means = [self._read_mean(k, d=d, xlim=xlim, ylim=ylim, zlim=zlim,
             fun=fun, **kwargs)

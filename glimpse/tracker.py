@@ -184,7 +184,7 @@ class Tracker(object):
 
     def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0),
         axyz=(0, 0, 0), axyz_sigma=(0, 0, 0), datetimes=None, maxdt=datetime.timedelta(0),
-        tile_size=(15, 15), parallel=False, return_particles=False):
+        tile_size=(15, 15), parallel=False, return_particles=False, observer_mask=None):
         """
         Track particles through time.
 
@@ -212,6 +212,9 @@ class Tracker(object):
                 all available CPU cores are used.
             return_particles (bool): Whether to return all particles and weights
                 at each timestep
+            observer_mask (array): Boolean mask of Observers
+                to use for each `xy` (len(xy), len(self.observers)). If `None`,
+                all Observers are used.
 
         Returns:
             `Tracks`: Tracks object
@@ -230,6 +233,8 @@ class Tracker(object):
                 obs.datetimes for obs in self.observers]))
         else:
             datetimes = self.parse_datetimes(datetimes=datetimes, maxdt=maxdt)
+        if observer_mask is None:
+            observer_mask = np.ones((len(xy), len(self.observers)), dtype=bool)
         # Compute matching images
         matching_images = self.match_datetimes(datetimes=datetimes, maxdt=maxdt)
         template_images = (matching_images != None).argmax(axis=0)
@@ -242,7 +247,8 @@ class Tracker(object):
         # Define parallel process
         bar = helpers._progress_bar(max=len(xy))
         ntimes = len(datetimes)
-        def process(xyi):
+        dts = np.diff(datetimes)
+        def process(xyi, mask):
             means = np.full((ntimes, 6), np.nan)
             covariances = np.full((ntimes, 6, 6), np.nan)
             if return_particles:
@@ -263,14 +269,15 @@ class Tracker(object):
                     if return_particles:
                         particles[0] = self.particles
                         weights[0] = self.weights
-                    dts = np.diff(datetimes)
                     for i, dt in enumerate(dts, start=1):
                         self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
                         # Initialize templates for Observers starting at datetimes[i]
                         for obs, img in enumerate(template_images):
-                            if img == i:
+                            if img == i and mask[obs]:
                                 self.initialize_template(obs=obs, img=img, tile_size=tile_size)
-                        likelihoods = self.compute_likelihoods(imgs=matching_images[i])
+                        imgs = [img if m else None
+                            for img, m in zip(matching_images[i], mask)]
+                        likelihoods = self.compute_likelihoods(imgs=imgs)
                         self.update_weights(likelihoods)
                         self.resample_particles()
                         means[i] = self.particle_mean
@@ -299,7 +306,8 @@ class Tracker(object):
             return results
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
-            results = pool.map(func=process, reduce=reduce, sequence=xy)
+            results = pool.map(func=process, reduce=reduce, star=True,
+                sequence=tuple(zip(xy, observer_mask)))
         bar.finish()
         # Return results as Tracks
         if return_particles:

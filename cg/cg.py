@@ -957,3 +957,49 @@ def intersect_glaciers(polygons):
     for i in range(1, len(shapes)):
         shape = shape.intersection(shapes[i])
     return np.asarray(shape.exterior.coords)
+
+def load_glacier_polygon(t):
+    """
+    Return the glacier extent for use at a datetime.
+    """
+    lines = get_nearest_dem_termini(t)
+    lines += [get_nearest_terminus(t)]
+    clines = [clip_terminus_with_coast(line) for line in lines]
+    polygons = [clip_glacier_with_terminus(line) for line in clines]
+    return intersect_glaciers(polygons)
+
+def load_track_points(images, dem, max_depth, step, snap=(0, 0)):
+    """
+    Return track points for a set of starting images.
+
+    Returns:
+        array: Coordinates of points to track (n, 2)
+        array: Visibility mask for each image (n, m)
+    """
+    t = min([img.datetime for img in images])
+    polygon = load_glacier_polygon(t)
+    xy = glimpse.helpers.polygon_to_grid_points(
+        polygon, step=step, snap=snap)
+    # In DEM bounds and DEM not NaN
+    z = dem.sample(xy, bounds_error=False, fill_value=np.nan)
+    selected = ~np.isnan(z)
+    # Visible in one or more images
+    xyz = np.column_stack((xy, z))[selected]
+    visible = np.ones((len(xyz), len(images)), dtype=bool)
+    for i, img in enumerate(images):
+        uv, depth = img.cam.project(xyz, return_depth=True, correction=True)
+        # In image frame
+        visible[:, i] &= img.cam.inframe(uv)
+        # In range
+        visible[:, i] &= depth < max_depth
+        # In DEM viewshed
+        viewshed = glimpse.Raster(
+            Z=dem.viewshed(img.cam.xyz), x=dem.xlim, y=dem.ylim)
+        visible[:, i] &= viewshed.sample(xyz[:, 0:2], order=1) > 0.99
+        # Not in land mask
+        # NOTE: Some stations may not have complete foreground masks (AKST03X)
+        mask = glimpse.Raster(load_masks([img])[0])
+        visible[:, i] &= mask.sample(uv, order=1, bounds_error=False,
+            fill_value=1.0) == 0
+    selected = np.count_nonzero(visible, axis=1) > 0
+    return xyz[selected, 0:2], visible[selected]

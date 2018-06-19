@@ -1063,6 +1063,10 @@ def intersect_boxes(boxes):
     else:
         return np.hstack((boxmin, boxmax))
 
+def union_boxes(boxes):
+    points = np.row_stack([unravel_box(box) for box in boxes])
+    return bounding_box(points)
+
 def pairwise_distance(x, y, metric='sqeuclidean', **params):
     """
     Return the pairwise distance between two sets of points.

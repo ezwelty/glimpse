@@ -65,6 +65,11 @@ class Tracker(object):
     def particle_covariance(self):
         return np.cov(self.particles.T, aweights=self.weights)
 
+    @property
+    def datetimes(self):
+        return np.unique(np.concatenate([obs.datetimes
+            for obs in self.observers]))
+
     def _test_particles(self):
         """
         Particle test run after each particle initialization or evolution.
@@ -250,8 +255,7 @@ class Tracker(object):
         errors = len(xy) <= 1
         parallel = helpers._parse_parallel(parallel)
         if datetimes is None:
-            datetimes = np.unique(np.concatenate([
-                obs.datetimes for obs in self.observers]))
+            datetimes = self.datetimes
         else:
             datetimes = self.parse_datetimes(datetimes=datetimes, maxdt=maxdt)
         if observer_mask is None:
@@ -392,7 +396,7 @@ class Tracker(object):
             warnings.warn('Dropping duplicate datetimes')
             datetimes = datetimes[selected]
         # Datetimes must match at least one Observer
-        distances = helpers.pairwise_distance_datetimes(datetimes, observed_datetimes)
+        distances = helpers.pairwise_distance_datetimes(datetimes, self.datetimes)
         selected = distances.min(axis=1) <= abs(maxdt.total_seconds())
         if not all(selected):
             warnings.warn('Dropping datetimes not matching any Observers')

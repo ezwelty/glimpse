@@ -1037,14 +1037,32 @@ def intersect_ranges(ranges):
     Arguments:
         ranges (iterable): Ranges, each in the format (min, max)
     """
-    ranges = as_array(ranges)
-    ranges.sort(axis=1)
+    ranges = np.sort(ranges, axis=1)
     rmin = np.nanmax(ranges[:, 0])
     rmax = np.nanmin(ranges[:, 1])
     if rmax - rmin <= 0:
         raise ValueError('Ranges do not intersect')
     else:
         return np.hstack((rmin, rmax))
+
+def cut_ranges(ranges, cuts):
+    ranges = np.sort(ranges, axis=1)
+    for x in cuts:
+        is_cut = (ranges[:, 0] < x) & (x < ranges[:, 1])
+        if np.any(is_cut):
+            cut = [[(r[0], x), (x, r[1])] for r in ranges[is_cut]]
+            not_cut = ranges[~is_cut]
+            ranges = np.vstack((not_cut, np.vstack(cut)))
+    order = np.lexsort((ranges[:, 1], ranges[:, 0]))
+    return ranges[order]
+
+def cut_out_ranges(ranges, cutouts):
+    cutouts = np.reshape(cutouts, (-1, 2))
+    ranges = cut_ranges(ranges, cuts=cutouts.ravel())
+    for x in cutouts:
+        is_cutout = (ranges[:, 0] >= x[0]) & (ranges[:, 1] <= x[1])
+        ranges = ranges[~is_cutout]
+    return ranges
 
 def intersect_boxes(boxes):
     """
@@ -1635,6 +1653,25 @@ def compute_strain(xy, vxy):
     velocities = [x[0] for x in temp]
     strains = [x[1] for x in temp]
     return np.row_stack(centroids), np.row_stack(velocities), np.row_stack(strains)
+
+def angle_between_vectors(x, y):
+    """
+    Return the angle between pairs of vectors.
+
+    Arguments:
+        x (array-like): Vectors (n vectors, m dimensions)
+        y (array-like): Vectors (n vectors, m dimensions)
+
+    Returns:
+        array: Angle in radians between each vector pair x[i], y[i] (n, )
+    """
+    x, y = np.atleast_2d(x), np.atleast_2d(y)
+    radians = np.arccos(np.sum(x * y, axis=1) /
+        (np.linalg.norm(x, axis=1) * np.linalg.norm(y, axis=1)))
+    is_nan_angle = np.isnan(radians)
+    is_nan_vector = np.any(np.isnan(x), axis=1) | np.any(np.isnan(y), axis=1)
+    radians[is_nan_angle & ~is_nan_vector] = 0
+    return radians
 
 # ---- Internal ----
 

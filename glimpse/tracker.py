@@ -320,7 +320,7 @@ class Tracker(object):
                             particles[i] = self.particles
                             weights[i] = self.weights
                 if caught:
-                    warns = tuple(caught)
+                    all_warnings = tuple(caught)
             except Exception as e:
                 # traceback object cannot be pickled, so include in message
                 # TODO: Use tblib instead (https://stackoverflow.com/a/26096355)

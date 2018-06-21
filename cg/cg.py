@@ -133,7 +133,7 @@ def find_image(path):
                 return image_path
 
 def load_images(station, services, use_exif=False, service_exif=False, anchors=False,
-    viewdir=True, viewdir_as_anchor=False, **kwargs):
+    viewdir=True, viewdir_as_anchor=False, file_errors=True, **kwargs):
     """
     Return list of calibrated Image objects.
 
@@ -194,7 +194,8 @@ def load_images(station, services, use_exif=False, service_exif=False, anchors=F
             continue
         service_calibration = glimpse.helpers.merge_dicts(
             station_calibration,
-            load_calibrations(path=paths[index[0]], camera=True, merge=True))
+            load_calibrations(path=paths[index[0]], camera=True, merge=True,
+            file_errors=file_errors))
         if service_exif:
             exif = glimpse.Exif(paths[index[0]])
         for j in index:

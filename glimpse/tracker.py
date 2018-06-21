@@ -1,6 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, cv2, warnings, datetime, scipy, matplotlib, sys, traceback)
+from .imports import (np, cv2, warnings, datetime, scipy, matplotlib, sys,
+    traceback, collections)
 from . import (helpers, raster, config)
 
 class Tracker(object):
@@ -55,6 +56,10 @@ class Tracker(object):
     @property
     def particle_mean(self):
         return np.average(self.particles, weights=self.weights, axis=0)
+
+    @property
+    def particle_sigma(self):
+        return np.sqrt(np.diag(self.particle_covariance))
 
     @property
     def particle_covariance(self):
@@ -182,9 +187,11 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0),
-        axyz=(0, 0, 0), axyz_sigma=(0, 0, 0), datetimes=None, maxdt=datetime.timedelta(0),
-        tile_size=(15, 15), parallel=False, return_particles=False, observer_mask=None):
+    def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0),
+        vxyz_sigma=(0, 0, 0), axyz=(0, 0, 0), axyz_sigma=(0, 0, 0),
+        datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
+        observer_mask=None, return_covariances=False, return_particles=False,
+        parallel=False):
         """
         Track particles through time.
 
@@ -196,36 +203,50 @@ class Tracker(object):
 
         Arguments:
             xy (iterable): Single (x, y) or multiple ((xi, yi), ...) initial positions
-            n (int): Number of particles
+            n: Number of particles for all (int) or each (iterable) `xy`
             xy_sigma (iterable): Standard deviation of initial position (x, y)
-            vxyz (iterable): Mean velocity (x, y, z)
+                for all or each `xy`
+            vxyz (iterable): Mean velocity (x, y, z) for all or each `xy`
             vxyz_sigma (iterable): Standard deviation of velocity (x, y, z)
-            axyz (iterable): Mean acceleration (x, y, z)
+                for all or each `xy`
+            axyz (iterable): Mean acceleration (x, y, z) for all or each `xy`
             axyz_sigma (iterable) Standard deviation of acceleration (x, y, z)
+                for all or each `xy`
             datetimes (iterable): Monotonic sequence of datetimes at which to
                 track particles. If `None`, defaults to all unique datetimes in
                 `self.observers`.
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
             tile_size (iterable): Size of reference tiles in pixels (width, height)
-            parallel: Number of initial positions to track in parallel (int),
-                or whether to track in parallel (bool). If `True`,
-                all available CPU cores are used.
-            return_particles (bool): Whether to return all particles and weights
-                at each timestep
             observer_mask (array): Boolean mask of Observers
                 to use for each `xy` (len(xy), len(self.observers)). If `None`,
                 all Observers are used.
+            return_covariances (bool): Whether to return particle covariance
+                matrices or just particle standard deviations
+            return_particles (bool): Whether to return all particles and weights
+                at each timestep
+            parallel: Number of initial positions to track in parallel (int),
+                or whether to track in parallel (bool). If `True`,
+                all available CPU cores are used.
 
         Returns:
             `Tracks`: Tracks object
         """
-        # Save function arguments for Tracks
+        # Save original function arguments (stored in result)
         # NOTE: Must be called first
         params = locals().copy()
-        # Clear any previous tracking state
+        # Clear previous tracking state
         self.reset()
-        # Enforce defaults
+        # Expand inputs
         xy = np.atleast_2d(xy)
+        nxy = len(xy)
+        temp = collections.OrderedDict()
+        for var in 'n', 'xy_sigma', 'vxyz', 'vxyz_sigma', 'axyz', 'axyz_sigma':
+            temp[var] = np.atleast_2d(locals()[var])
+            if len(temp[var]) == 1:
+                temp[var] = np.repeat(temp[var], nxy, axis=0)
+        n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma = temp.values()
+        n = n.ravel()
+        # Enforce defaults
         errors = len(xy) <= 1
         parallel = helpers._parse_parallel(parallel)
         if datetimes is None:
@@ -248,9 +269,12 @@ class Tracker(object):
         bar = helpers._progress_bar(max=len(xy))
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
-        def process(xyi, mask):
+        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma, mask):
             means = np.full((ntimes, 6), np.nan)
-            covariances = np.full((ntimes, 6, 6), np.nan)
+            if return_covariances:
+                sigmas = np.full((ntimes, 6, 6), np.nan)
+            else:
+                sigmas = np.full((ntimes, 6), np.nan)
             if return_particles:
                 particles = np.full((ntimes, n, 6), np.nan)
                 weights = np.full((ntimes, n), np.nan)
@@ -258,14 +282,17 @@ class Tracker(object):
             all_warnings = None
             try:
                 with warnings.catch_warnings(record=True) as caught:
-                    self.initialize_particles(n=n, xy=xyi, xy_sigma=xy_sigma,
+                    self.initialize_particles(n=n, xy=xy, xy_sigma=xy_sigma,
                         vxyz=vxyz, vxyz_sigma=vxyz_sigma)
                     # Initialize templates for Observers starting at datetimes[0]
                     for obs, img in enumerate(template_images):
                         if img == 0:
                             self.initialize_template(obs=obs, img=img, tile_size=tile_size)
                     means[0] = self.particle_mean
-                    covariances[0] = self.particle_covariance
+                    if return_covariances:
+                        sigmas[0] = self.particle_covariance
+                    else:
+                        sigmas[0] = self.particle_sigma
                     if return_particles:
                         particles[0] = self.particles
                         weights[0] = self.weights
@@ -281,7 +308,10 @@ class Tracker(object):
                         self.update_weights(likelihoods)
                         self.resample_particles()
                         means[i] = self.particle_mean
-                        covariances[i] = self.particle_covariance
+                        if return_covariances:
+                            sigmas[i] = self.particle_covariance
+                        else:
+                            sigmas[i] = self.particle_sigma
                         if return_particles:
                             particles[i] = self.particles
                             weights[i] = self.weights
@@ -297,7 +327,7 @@ class Tracker(object):
                         traceback.format_exception(*sys.exc_info())))
                 else:
                     error = e
-            results = [means, covariances, error, all_warnings]
+            results = [means, sigmas, error, all_warnings]
             if return_particles:
                 results += [particles, weights]
             return results
@@ -307,19 +337,24 @@ class Tracker(object):
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
             results = pool.map(func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(xy, observer_mask)))
+                sequence=tuple(zip(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz,
+                axyz_sigma, observer_mask)))
         bar.finish()
         # Return results as Tracks
         if return_particles:
-            means, covariances, errors, all_warnings, particles, weights = zip(*results)
+            means, sigmas, errors, all_warnings, particles, weights = zip(*results)
         else:
-            means, covariances, errors, all_warnings = zip(*results)
+            means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
-        return Tracks(
-            datetimes=datetimes, means=means, covariances=covariances,
+        kwargs = dict(datetimes=datetimes, means=means,
             particles=particles, weights=weights,
             tracker=self, images=matching_images, params=params,
             errors=errors, warnings=all_warnings)
+        if return_covariances:
+            kwargs['covariances'] = sigmas
+        else:
+            kwargs['sigmas'] = sigmas
+        return Tracks(**kwargs)
 
     def reset(self):
         """
@@ -523,13 +558,18 @@ class Tracks(object):
 
     Attributes:
         datetimes (array): Datetimes at which particles were estimated (m, )
-        means (array): Mean particle positions and velocities (x, y, z, vx, vy, vz) (n, m, 6)
-        covariances (array): Covariance of particle positions and velocities (n, m, 6, 6)
+        means (array): Mean particle positions and velocities
+            (x, y, z, vx, vy, vz) (n, m, 6)
+        sigmas (array): Standard deviations of particle positions and velocities
+            (x, y, z, vx, vy, vz) (n, m, 6)
+        covariances (array): Covariance of particle positions and velocities
+            (n, m, 6, 6)
         particles (array): Particle positions and velocities (n, m, p, 6)
         weights (array): Particle weights (n, m, p)
         tracker (Tracker): Tracker object used for tracking
-        images (array): Grid of image indices ([i, j] for `datetimes[i]`, `tracker.observers`[j]`).
-            `None` indicates no image from `tracker.observers[j]` matched `datetimes[i]`.
+        images (array): Grid of image indices ([i, j] for `datetimes[i]`,
+            `tracker.observers`[j]`). `None` indicates no image from
+            `tracker.observers[j]` matched `datetimes[i]`.
         params (dict): Arguments to `Tracker.track`
         errors (array): The error, if any, caught for each track (n, ).
             An error indicates that the track did not complete successfully.
@@ -537,12 +577,16 @@ class Tracks(object):
             Warnings indicate the track completed but may not be valid.
     """
 
-    def __init__(self, datetimes, means, covariances=None, particles=None, weights=None,
-        tracker=None, images=None, params=None, errors=None, warnings=None):
+    def __init__(self, datetimes, means, sigmas=None, covariances=None,
+        particles=None, weights=None, tracker=None, images=None, params=None,
+        errors=None, warnings=None):
         self.datetimes = np.asarray(datetimes)
         if np.iterable(means) and not isinstance(means, np.ndarray):
             means = np.stack(means, axis=0)
         self.means = means
+        if np.iterable(sigmas) and not isinstance(sigmas, np.ndarray):
+            sigmas = np.stack(sigmas, axis=0)
+        self.sigmas = sigmas
         if np.iterable(covariances) and not isinstance(covariances, np.ndarray):
             covariances = np.stack(covariances, axis=0)
         self.covariances = covariances
@@ -577,7 +621,9 @@ class Tracks(object):
         """
         array: Standard deviation of particle positions (n, m, [x, y, z])
         """
-        if self.covariances is not None:
+        if self.sigmas is not None:
+            return self.sigmas[:, :, 0:3]
+        elif self.covariances is not None:
             return np.sqrt(self.covariances[:, :, (0, 1, 2), (0, 1, 2)])
 
     @property
@@ -585,7 +631,9 @@ class Tracks(object):
         """
         array: Standard deviation of particle velocities (n, m, [vx, vy, vz])
         """
-        if self.covariances is not None:
+        if self.sigmas is not None:
+            return self.sigmas[:, :, 3:6]
+        elif self.covariances is not None:
             return np.sqrt(self.covariances[:, :, (3, 4, 5), (3, 4, 5)])
 
     @property

@@ -262,7 +262,7 @@ class Tracker(object):
             observer_mask = np.ones((len(xy), len(self.observers)), dtype=bool)
         # Compute matching images
         matching_images = self.match_datetimes(datetimes=datetimes, maxdt=maxdt)
-        template_images = (matching_images != None).argmax(axis=0)
+        template_indices = (matching_images != None).argmax(axis=0)
         # Cache matching images
         if len(xy) > 1:
             for i, observer in enumerate(self.observers):
@@ -289,9 +289,10 @@ class Tracker(object):
                     self.initialize_particles(n=n, xy=xy, xy_sigma=xy_sigma,
                         vxyz=vxyz, vxyz_sigma=vxyz_sigma)
                     # Initialize templates for Observers starting at datetimes[0]
-                    for obs, img in enumerate(template_images):
-                        if img == 0:
-                            self.initialize_template(obs=obs, img=img, tile_size=tile_size)
+                    for obs, idx in enumerate(template_indices):
+                        if idx == 0:
+                            self.initialize_template(obs=obs,
+                                img=matching_images[idx][obs], tile_size=tile_size)
                     means[0] = self.particle_mean
                     if return_covariances:
                         sigmas[0] = self.particle_covariance
@@ -303,9 +304,11 @@ class Tracker(object):
                     for i, dt in enumerate(dts, start=1):
                         self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
                         # Initialize templates for Observers starting at datetimes[i]
-                        for obs, img in enumerate(template_images):
-                            if img == i and mask[obs]:
-                                self.initialize_template(obs=obs, img=img, tile_size=tile_size)
+                        template_indices
+                        for obs, idx in enumerate(template_indices):
+                            if idx == i and mask[obs]:
+                                self.initialize_template(obs=obs,
+                                    img=matching_images[idx][obs], tile_size=tile_size)
                         imgs = [img if m else None
                             for img, m in zip(matching_images[i], mask)]
                         likelihoods = self.compute_likelihoods(imgs=imgs)

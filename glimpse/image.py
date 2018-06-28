@@ -333,24 +333,24 @@ class Camera(object):
         obj = self.as_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
-    def normal(self, std):
+    def normal(self, sigma):
         """
         Return a new Camera sampled from a normal distribution centered on the
         current camera.
         """
-        if isinstance(std, self.__class__):
-            std = std.vector
-        if isinstance(std, dict):
-            mean = self.to_dict()
+        if isinstance(sigma, self.__class__):
+            sigma = sigma.vector
+        if isinstance(sigma, dict):
+            mean = self.as_dict()
             args = {key: np.add(mean[key],
-                np.random.normal(scale=std[key]) if std.get(key) else 0)
+                np.random.normal(scale=sigma[key]) if sigma.get(key) else 0)
                 for key in mean}
-            if 'f' in std:
+            if 'f' in sigma:
                 args.pop('fmm', None)
-            if 'c' in std:
+            if 'c' in sigma:
                 args.pop('cmm', None)
         else:
-            args = {'vector': self.vector + np.random.normal(scale=std)}
+            args = {'vector': self.vector + np.random.normal(scale=sigma)}
         return self.__class__(**args)
 
     def idealize(self):
@@ -1291,7 +1291,7 @@ class Image(object):
                 if 'f' not in cam:
                     if 'fmm' not in cam:
                         cam['fmm'] = self.exif.fmm
-                    if 'sensorsz' not in cam:
+                    if 'sensorsz' not in cam and self.exif.make and self.exif.model:
                         cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
             self.cam = Camera(**cam)
         self.I = None

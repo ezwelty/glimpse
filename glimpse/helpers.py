@@ -234,7 +234,7 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTO
     pickle.dump(obj, file=fp, protocol=protocol)
     fp.close()
 
-def read_pickle(path, gz=False, binary=True):
+def read_pickle(path, gz=False, binary=True, **kwargs):
     """
     Read object from pickle file.
 
@@ -242,13 +242,14 @@ def read_pickle(path, gz=False, binary=True):
         path (str): Path to file
         gz (bool): Whether pickle is gzip compressed
         binary (bool): Whether pickle is binary
+        **kwargs: Arguments to `pickle.load()`
     """
     mode = 'rb' if binary else 'r'
     if gz:
         fp = gzip.open(path, mode=mode)
     else:
         fp = open(path, mode=mode)
-    obj = pickle.load(fp)
+    obj = pickle.load(fp, **kwargs)
     fp.close()
     return obj
 
@@ -1377,9 +1378,9 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
     """
     df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
     groups = df.groupby(('row', 'col')).aggregate(fun).reset_index()
-    idx = np.ravel_multi_index((groups.row.as_matrix(), groups.col.as_matrix()), shape)
+    idx = np.ravel_multi_index((groups.row.values, groups.col.values), shape)
     grid = np.full(shape, np.nan)
-    grid.flat[idx] = groups.value.as_matrix()
+    grid.flat[idx] = groups.value.values
     return grid
 
 def polygons_to_mask(polygons, size, holes=None):

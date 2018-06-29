@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (np, scipy, gdal, matplotlib, datetime, copy, warnings,
-    numbers)
+    numbers, osgeo)
 from . import (helpers)
 
 class Grid(object):
@@ -421,7 +421,8 @@ class Raster(Grid):
         return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
-    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None):
+    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None,
+        nan=None):
         """
         Read Raster from gdal raster file.
 
@@ -462,9 +463,14 @@ class Raster(Grid):
             win_xsize=int(win_xsize), win_ysize=int(win_ysize),
             buf_xsize=int(buf_xsize), buf_ysize=int(buf_ysize))
         # FIXME: band.GetNoDataValue() not equal to read values due to rounding
-        nan_value = band.GetNoDataValue()
-        if np.issubdtype(Z.dtype, np.floating) and nan_value:
-            Z[Z == nan_value] = np.nan
+        default_nan = band.GetNoDataValue()
+        is_float = np.issubdtype(Z.dtype, np.floating)
+        if nan is not None or (is_float and default_nan):
+            if nan is None:
+                nan = default_nan
+            if not is_float:
+                Z = Z.astype(float)
+            Z[Z == nan] = np.nan
         return cls(Z, x=xlim, y=ylim, datetime=datetime)
 
     @property
@@ -634,7 +640,8 @@ class Raster(Grid):
         signs = np.sign(self.d).astype(int)
         # HACK: scipy.interpolate.RectBivariateSpline does not support NAN
         Zmin = np.nanmin(self.Z)
-        self.Z[np.isnan(self.Z)] = Zmin - 2 * max(1, abs(np.nanmax(self.Z)))
+        is_nan = np.isnan(self.Z)
+        self.Z[is_nan] = helpers.numpy_dtype_minmax(self.Z.dtype)[0]
         fun = scipy.interpolate.RectBivariateSpline(
             self.y[::signs[1]], self.x[::signs[0]],
             self.Z[::signs[1], ::signs[0]],
@@ -644,6 +651,7 @@ class Raster(Grid):
         ydir = 1 if (len(y) < 2) or y[1] > y[0] else -1
         samples = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
         samples[samples < Zmin] = np.nan
+        self.Z[is_nan] = np.nan
         return samples
 
     def resample(self, grid, order=1, bounds_error=False, fill_value=np.nan):
@@ -679,7 +687,7 @@ class Raster(Grid):
         Convert points to a raster image.
 
         Arguments:
-            xy (array): Point coordinates (Nx2)
+            xy (array): Point coordinates (n, 2)
             values (array): Point values
             fun (function): Aggregate function to apply to values of overlapping points
         """
@@ -937,6 +945,91 @@ class Raster(Grid):
         else:
             # Starts with not-isnan group
             return splits[0::2]
+
+    def gradient(self):
+        """
+        Return gradients in x and y.
+
+        Returns:
+            array: Derivative of `self.Z` with respect to x
+            array: Derivative of `self.Z` with respect to y
+        """
+        dzdy, dzdx = np.gradient(self.Z)
+        dzdx *= 1 / self.d[0]
+        dzdy *= 1 / self.d[1]
+        return dzdx, dzdy
+
+    def write(self, path, nan=None, crs=None):
+        """
+        Write to file.
+
+        Arguments:
+            path (str): Path to file
+            nan (number): Value to interpret as missing. Any `np.nan` in `self.Z` are
+                written with this value.
+            crs: Coordinate system, either as an EPSG code (int) or Proj4 (str)
+        """
+        # top-left x, dx, rotation, top-left y, rotation, dy
+        transform = (self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1])
+        dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(self.Z.dtype)
+        output = gdal.GetDriverByName('Gtiff').Create(
+            utf8_path=path, xsize=int(self.n[0]), ysize=int(self.n[1]),
+            bands=1, eType=dtype)
+        output.SetGeoTransform(transform)
+        if crs is not None:
+            srs = osgeo.osr.SpatialReference()
+            if isinstance(crs, int):
+                srs.ImportFromEPSG(crs)
+            elif isinstance(crs, str):
+                srs.ImportFromProj4(crs)
+            else:
+                raise ValueError('crs must be an integer or string')
+            output.SetProjection(srs.ExportToWkt())
+        if nan is not None:
+            output.GetRasterBand(1).SetNoDataValue(nan)
+            is_nan = np.isnan(self.Z)
+            if np.any(is_nan):
+                Z = self.Z.copy()
+                Z[is_nan] = nan
+            else:
+                Z = self.Z
+        else:
+            Z = self.Z
+        output.GetRasterBand(1).WriteArray(Z)
+        output.FlushCache()
+
+    def data_extent(self):
+        """
+        Return slices for the region bounding all non-missing values.
+
+        Returns:
+            slice: Row slice
+            slice: Column slice
+        """
+        data = ~np.isnan(self.Z)
+        data_row = np.any(data, axis=1)
+        first_data_row = np.argmax(data_row)
+        if first_data_row == 0 and not data_row[0]:
+            raise ValueError('No non-missing values present')
+        last_data_row = data_row.size - np.argmax(data_row[::-1])
+        data_col = np.any(data, axis=0)
+        first_data_col = np.argmax(data_col)
+        last_data_col = data_col.size - np.argmax(data_col[::-1])
+        return (slice(first_data_row, last_data_row),
+            slice(first_data_col, last_data_col))
+
+    def crop_to_data(self):
+        """
+        Crop to bounds of non-missing values.
+        """
+        slices = self.data_extent()
+        x = self.x[slices[1]]
+        y = self.y[slices[0]]
+        self.xlim = x[[0, -1]] + (-0.5, 0.5) * self.d[0:1]
+        self.ylim = y[[0, -1]] + (-0.5, 0.5) * self.d[1:2]
+        self.Z = self.Z[slices]
+        self._x = x
+        self._y = y
 
 class RasterInterpolant(object):
     """

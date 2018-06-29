@@ -29,6 +29,8 @@ import matplotlib.animation
 import numbers
 import numpy as np
 import os
+import osgeo.gdal_array
+import osgeo.osr
 import pandas
 import piexif
 import PIL.Image

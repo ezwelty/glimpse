@@ -1040,7 +1040,8 @@ class RasterInterpolant(object):
             or numbers (interpreted as infinite rasters).
             If `None`, defaults to zero.
         x (array): 1-dimensional coordinates of the observations,
-            as either numbers or `datetime.datetime`
+            as either numbers or `datetime.datetime`.
+            If `None`, tries to read datetimes from `means`.
     """
 
     def __init__(self, means, x=None, sigmas=None):
@@ -1144,14 +1145,15 @@ class RasterInterpolant(object):
         dz = means[1].Z - means[0].Z
         dx = x[1] - x[0]
         scale = ((xi - x[0]) / dx)
-        z = means[0].Z + dz * ((xi - x[0]) / dx)
+        z = means[0].Z + dz * scale
         t = xi if isinstance(xi, datetime.datetime) else None
         raster = means[0].__class__(z,
             x=means[0].xlim, y=means[0].ylim, datetime=t)
         if sigmas is not None:
             # Bounds uncertainty: error propagation of z above
-            z_sigma = np.sqrt((sigmas[0].Z * (1 - scale))**2 +
-                (sigmas[1].Z * scale)**2)
+            # NOTE: 'a * (1 - scale) + b * scale' form underestimates uncertainty
+            z_sigma = np.sqrt(sigmas[0].Z**2 +
+                (np.sqrt(sigmas[0].Z**2 + sigmas[1].Z**2) * np.abs(scale))**2)
             # Interpolation uncertainty: nearest bound at 99.7%
             nearest_dx = np.min(np.abs(np.subtract(xi, x)))
             zi_sigma = np.abs((1 / 3) * dz * (nearest_dx / dx))

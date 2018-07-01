@@ -7,3 +7,5 @@ motion/*.[jJ][pP][gG]
 motion/*.[pP][nN][gG]
 *-calib*
 *-ideal*
+points
+dems

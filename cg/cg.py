@@ -21,12 +21,10 @@ except NameError:
 
 # ---- Environment variables ---
 
-print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, MATCH_PATH, and DEM_PATHS')
+print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and MATCH_PATH')
 IMAGE_PATH = None
 KEYPOINT_PATH = None
 MATCH_PATH = None
-DEM_PATHS = []
-DEM_SIGMAS = []
 
 # ---- Images ----
 
@@ -859,33 +857,15 @@ def parse_dem_path(path):
     typestr = re.findall(r'dem-([^\/]+)', path)[0]
     return dict(datetime=t, type=typestr)
 
-@lru_cache(maxsize=1)
-def DEMInterpolant():
-    """
-    Return a canonical RasterInterpolant object.
-    """
-    datetimes = [parse_dem_path(path)['datetime'] for path in DEM_PATHS]
-    return glimpse.RasterInterpolant(
-        means=DEM_PATHS, sigmas=DEM_SIGMAS, x=datetimes)
-
-def get_dem_terminus(path):
+def get_dem_terminus(t, demtype):
     """
     Return the terminus corresponding to a DEM path.
     """
     termini = Termini()
     termini_keys = [(f['properties']['date'], f['properties']['type'])
         for f in termini]
-    meta = parse_dem_path(path)
-    i = termini_keys.index((meta['datetime'].strftime('%Y-%m-%d'), meta['type']))
+    i = termini_keys.index((t.strftime('%Y-%m-%d'), demtype))
     return termini[i]['geometry']['coordinates']
-
-def get_nearest_dem_termini(t, extrapolate=False):
-    """
-    Return the termini corresponding to the nearest DEMs.
-    """
-    interpolant = DEMInterpolant()
-    ij = interpolant.nearest(t, extrapolate=extrapolate)
-    return [get_dem_terminus(interpolant.means[i]) for i in ij]
 
 def get_nearest_terminus(t):
     """
@@ -949,58 +929,57 @@ def clip_glacier_with_terminus(line):
         areas = [split.area for split in splits]
         return np.asarray(splits[np.argmax(areas)].exterior.coords)
 
-def intersect_glaciers(polygons):
+def load_glacier_polygon(t, demtype=None):
     """
-    Return intersection of glacier extents.
+    Return the glacier extent at a datetime.
+    """
+    if demtype is not None:
+        line = get_dem_terminus(t, demtype=demtype)
+    else:
+        line = get_nearest_terminus(t)
+    cline = clip_terminus_with_coast(line)
+    return clip_glacier_with_terminus(cline)
+
+def intersect_polygons(polygons):
+    """
+    Return intersection of polygons.
     """
     shapes = [shapely.geometry.Polygon(shell=xy) for xy in polygons]
     shape = shapes[0]
     for i in range(1, len(shapes)):
         shape = shape.intersection(shapes[i])
+    if np.iterable(shape):
+        i = np.argmax([poly.area for poly in shape])
+        shape = shape[i]
     return np.asarray(shape.exterior.coords)
 
-def load_glacier_polygon(t):
+def select_track_points(xy, images, polygon, dem, max_distance):
     """
-    Return the glacier extent for use at a datetime.
-    """
-    lines = get_nearest_dem_termini(t)
-    lines += [get_nearest_terminus(t)]
-    clines = [clip_terminus_with_coast(line) for line in lines]
-    polygons = [clip_glacier_with_terminus(line) for line in clines]
-    return intersect_glaciers(polygons)
-
-def load_track_points(images, dem, max_depth, step, snap=(0, 0)):
-    """
-    Return track points for a set of starting images.
+    Return track points mask for a set of starting images.
 
     Returns:
         array: Coordinates of points to track (n, 2)
         array: Visibility mask for each image (n, m)
     """
-    t = min([img.datetime for img in images])
-    polygon = load_glacier_polygon(t)
-    xy = glimpse.helpers.polygon_to_grid_points(
-        polygon, step=step, snap=snap)
-    # In DEM bounds and DEM not NaN
+    # In DEM, in polygon, and DEM not NaN
     z = dem.sample(xy, bounds_error=False, fill_value=np.nan)
-    selected = ~np.isnan(z)
+    mask = ~np.isnan(z) & glimpse.helpers.points_in_polygon(xy, polygon)
     # Visible in one or more images
-    xyz = np.column_stack((xy, z))[selected]
-    visible = np.ones((len(xyz), len(images)), dtype=bool)
+    xyz = np.column_stack((xy, z))[mask]
+    visible = np.tile(mask.reshape(-1, 1), reps=(1, len(images)))
     for i, img in enumerate(images):
-        uv, depth = img.cam.project(xyz, return_depth=True, correction=True)
+        uv = img.cam.project(xyz, correction=True)
         # In image frame
-        visible[:, i] &= img.cam.inframe(uv)
+        visible[mask, i] &= img.cam.inframe(uv)
         # In range
-        visible[:, i] &= depth < max_depth
+        distance = np.linalg.norm(xyz[:, 0:2] - img.cam.xyz[0:2], axis=1)
+        visible[mask, i] &= distance < max_distance
         # In DEM viewshed
         viewshed = glimpse.Raster(
             Z=dem.viewshed(img.cam.xyz), x=dem.xlim, y=dem.ylim)
-        visible[:, i] &= viewshed.sample(xyz[:, 0:2], order=1) > 0.99
+        visible[mask, i] &= viewshed.sample(xyz[:, 0:2], order=1) > 0.99
         # Not in land mask
-        # NOTE: Some stations may not have complete foreground masks (AKST03X)
-        mask = glimpse.Raster(load_masks([img])[0])
-        visible[:, i] &= mask.sample(uv, order=1, bounds_error=False,
+        land_mask = glimpse.Raster(load_masks([img])[0])
+        visible[mask, i] &= land_mask.sample(uv, order=1, bounds_error=False,
             fill_value=1.0) == 0
-    selected = np.count_nonzero(visible, axis=1) > 0
-    return xyz[selected, 0:2], visible[selected]
+    return visible

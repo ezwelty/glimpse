@@ -212,6 +212,85 @@ def sorted_nearest(x, y):
     nearest = np.argmin(np.abs(y.reshape(-1, 1) - x[neighbors]), axis=1)
     return neighbors[range(len(y)), nearest]
 
+def tile_axis(a, shape, axis=None):
+    """
+    Construct an array by repeating an input array.
+
+    Arguments:
+        a (array-like): Input array
+        shape (iterable): Output array shape
+        axis: Axis (int) or axes (iterable) of output array along which to
+            repeat `a`
+    """
+    a = np.atleast_1d(a)
+    shape = np.asarray(shape)
+    if axis is None:
+        assert a.size == 1
+    elif isinstance(axis, int):
+        axis = np.atleast_1d(axis)
+    else:
+        axis = np.sort(np.asarray(axis))
+    if axis is None:
+        reps = shape
+    else:
+        reps = np.ones(len(shape), dtype=int)
+        reps[axis] = shape[axis]
+        for ax in axis:
+            a = np.expand_dims(a, axis=ax)
+    result = np.tile(a, reps=reps)
+    assert np.all(result.shape == shape)
+    return result
+
+def weighted_nanmean(a, weights, axis=None):
+    """
+    Return the weighted mean of non-missing values in an array.
+
+    Arguments:
+        a (array-like): Input array
+        weights (array-like): Weights with same shape as `a`
+        axis: Axis (int) or axes (iterable) along which to compute mean
+    """
+    a = np.asarray(a)
+    weights = np.asarray(weights)
+    return (np.nansum(a * weights, axis=axis) /
+        np.nansum(weights * ~np.isnan(a), axis=axis))
+
+def weighted_nanstd(a, weights, axis=None, means=None):
+    """
+    Return the weighted standard deviation of non-missing values in an array.
+
+    Arguments:
+        a (array-like): Input array
+        weights (array-like): Weights with same shape as `a`
+        axis: Axis (int) or axes (iterable) along which to compute standard
+            deviation
+        means (array-like): Means computed over the same `axis`.
+            If `None`, computed with `weighted_nanmean()`.
+    """
+    a = np.asarray(a)
+    weights = np.asarray(weights)
+    if means is None:
+        means = weighted_nanmean(a, weights=weights, axis=axis)
+    means = tile_axis(means, shape=a.shape, axis=axis)
+    std = np.sqrt(weighted_nanmean(
+        (a - means)**2, weights=weights, axis=axis))
+    return std
+
+def hypot_sigma(x, y):
+    """
+    Returns hypotenuse means and standard deviations.
+
+    Arguments:
+        x (iterable): Means and standard deviations in x
+        y (iterable): Means and standard deviations in y
+    """
+    # https://en.wikipedia.org/wiki/Propagation_of_uncertainty#Example_formulas
+    z = np.hypot(x[0], y[0])
+    z_sigma = np.sqrt(
+        (x[0] / z)**2 * x[1]**2 +
+        (y[0] / z)**2 * y[1]**2)
+    return z, z_sigma
+
 # ---- Pickles ---- #
 
 def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):

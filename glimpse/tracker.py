@@ -244,12 +244,12 @@ class Tracker(object):
         # Expand inputs
         xy = np.atleast_2d(xy)
         nxy = len(xy)
-        temp = collections.OrderedDict()
-        for var in 'n', 'xy_sigma', 'vxyz', 'vxyz_sigma', 'axyz', 'axyz_sigma':
-            temp[var] = np.atleast_2d(locals()[var])
-            if len(temp[var]) == 1:
-                temp[var] = np.repeat(temp[var], nxy, axis=0)
-        n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma = temp.values()
+        temp = [n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma]
+        for i, value in enumerate(temp):
+            temp[i] = np.atleast_2d(temp[i])
+            if len(temp[i]) == 1:
+                temp[i] = np.repeat(temp[i], nxy, axis=0)
+        n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma = temp
         n = n.ravel()
         # Enforce defaults
         errors = len(xy) <= 1
@@ -273,7 +273,7 @@ class Tracker(object):
         bar = helpers._progress_bar(max=len(xy))
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
-        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma, mask):
+        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma, observer_mask):
             means = np.full((ntimes, 6), np.nan)
             if return_covariances:
                 sigmas = np.full((ntimes, 6, 6), np.nan)
@@ -286,34 +286,30 @@ class Tracker(object):
             all_warnings = None
             try:
                 with warnings.catch_warnings(record=True) as caught:
-                    self.initialize_particles(n=n, xy=xy, xy_sigma=xy_sigma,
-                        vxyz=vxyz, vxyz_sigma=vxyz_sigma)
-                    # Initialize templates for Observers starting at datetimes[0]
-                    for obs, idx in enumerate(template_indices):
-                        if idx == 0:
-                            self.initialize_template(obs=obs,
-                                img=matching_images[idx][obs], tile_size=tile_size)
-                    means[0] = self.particle_mean
-                    if return_covariances:
-                        sigmas[0] = self.particle_covariance
-                    else:
-                        sigmas[0] = self.particle_sigma
-                    if return_particles:
-                        particles[0] = self.particles
-                        weights[0] = self.weights
-                    for i, dt in enumerate(dts, start=1):
-                        self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
+                    # Skip datetimes before first and after last available image
+                    # NOTE: Track thus starts from xy at first available image
+                    observed = np.any(matching_images[:, observer_mask] != None, axis=1)
+                    first = np.argmax(observed)
+                    last = len(observed) - 1 - np.argmax(observed[::-1])
+                    for i in range(first, last + 1):
+                        if i == first:
+                            self.initialize_particles(n=n, xy=xy, xy_sigma=xy_sigma,
+                                vxyz=vxyz, vxyz_sigma=vxyz_sigma)
+                            started = True
+                        else:
+                            dt = dts[i - 1]
+                            self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
                         # Initialize templates for Observers starting at datetimes[i]
-                        template_indices
-                        for obs, idx in enumerate(template_indices):
-                            if idx == i and mask[obs]:
-                                self.initialize_template(obs=obs,
-                                    img=matching_images[idx][obs], tile_size=tile_size)
-                        imgs = [img if m else None
-                            for img, m in zip(matching_images[i], mask)]
-                        likelihoods = self.compute_likelihoods(imgs=imgs)
-                        self.update_weights(likelihoods)
-                        self.resample_particles()
+                        at_template = observer_mask & (template_indices == i)
+                        for obs in np.nonzero(at_template)[0]:
+                            self.initialize_template(obs=obs,
+                                img=matching_images[i][obs], tile_size=tile_size)
+                        if i > first:
+                            imgs = [img if m else None
+                                for img, m in zip(matching_images[i], observer_mask)]
+                            likelihoods = self.compute_likelihoods(imgs=imgs)
+                            self.update_weights(likelihoods)
+                            self.resample_particles()
                         means[i] = self.particle_mean
                         if return_covariances:
                             sigmas[i] = self.particle_covariance
@@ -651,6 +647,29 @@ class Tracks(object):
         if self.errors is not None:
             return np.array([error is None for error in self.errors])
 
+    def endpoints(self, tracks=None):
+        if tracks is None:
+            tracks = slice(None)
+        valid = ~np.isnan(self.means[tracks, :, 0])
+        first = np.argmax(valid, axis=1)
+        last = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
+        first_valid = valid[np.arange(len(first)), first]
+        return first_valid, first[first_valid], last[first_valid]
+
+    # @property
+    # def first(self):
+    #     valid = ~np.isnan(self.means[:, :, 0])
+    #     idx = np.argmax(valid, axis=1)
+    #     still_valid = valid[np.arange(len(idx)), idx]
+    #     return np.nonzero(still_valid)[0], idx[idx]
+    #
+    # @property
+    # def last(self):
+    #     valid = ~np.isnan(self.means[:, :, 0])
+    #     idx = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
+    #     still_valid = valid[np.arange(len(idx)), idx]
+    #     return np.nonzero(still_valid)[0], idx[idx]
+
     def plot_xy(self, tracks=None, start=True, mean=True, sigma=False):
         """
         Plot tracks on the x-y plane.
@@ -779,8 +798,7 @@ class Tracks(object):
         if frames is None:
             frames = np.arange(len(self.datetimes))
         has_frame = np.where(
-            ~np.isnan(self.xyz[track, :, 0]) &
-            self.images[:, obs] != None)[0]
+            ~np.isnan(self.xyz[track, :, 0]) & (self.images[:, obs] != None))[0]
         frames = np.intersect1d(frames, has_frame)
         # Initialize plot
         i = frames[0]

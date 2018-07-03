@@ -116,32 +116,40 @@ dem_keys = [
 ]
 dem_keys.sort(key=lambda x: x[0])
 
-# ---- Read DEMs from file ----
-
-means, sigmas = [], []
-for datestr, demtype in dem_keys:
-    print(datestr, demtype)
-    path = os.path.join(root, 'dem-' + demtype, 'data', datestr + '.tif')
-    # HACK: Aerial and satellite imagery taken around local noon (~ 22:00 UTC)
-    t = datetime.datetime.strptime(datestr + str(22), '%Y%m%d%H')
-    dem = glimpse.Raster.read(path,
-        xlim=dem_template.xlim + np.array((-1, 1)) * dem_args['d'],
-        ylim=dem_template.ylim + np.array((1, -1)) * dem_args['d'],
-        d=dem_args['d'])
-    dem.crop(zlim=dem_args['zlim'])
-    z = dem.sample(dem_points, order=1, bounds_error=False).reshape(dem_template.shape)
-    dem = glimpse.Raster(z, x=dem_template.xlim, y=dem_template.ylim, datetime=t)
-    dem_args['fun'](self=dem, mask=dem_args['mask'], fill=dem_args['fill'])
-    # HACK: Embed dem type for later retrieving correct terminus
-    dem.type = demtype
-    means.append(dem)
-    sigma = dem_sigmas[demtype] + surface_sigma
-    sigmas.append(sigma)
-
 # ---- Build DEM interpolant ----
 
-dem_interpolant = glimpse.RasterInterpolant(means=means, sigmas=sigmas,
-    x=[dem.datetime for dem in means])
+# # Compute means and sigmas
+# means, sigmas = [], []
+# for datestr, demtype in dem_keys:
+#     print(datestr, demtype)
+#     path = os.path.join(root, 'dem-' + demtype, 'data', datestr + '.tif')
+#     # HACK: Aerial and satellite imagery taken around local noon (~ 22:00 UTC)
+#     t = datetime.datetime.strptime(datestr + str(22), '%Y%m%d%H')
+#     dem = glimpse.Raster.read(path,
+#         xlim=dem_template.xlim + np.array((-1, 1)) * dem_args['d'],
+#         ylim=dem_template.ylim + np.array((1, -1)) * dem_args['d'],
+#         d=dem_args['d'])
+#     dem.crop(zlim=dem_args['zlim'])
+#     z = dem.sample(dem_points, order=1, bounds_error=False).reshape(dem_template.shape)
+#     dem = glimpse.Raster(z, x=dem_template.xlim, y=dem_template.ylim, datetime=t)
+#     dem_args['fun'](self=dem, mask=dem_args['mask'], fill=dem_args['fill'])
+#     # HACK: Embed dem type for later retrieving correct terminus
+#     dem.type = demtype
+#     means.append(dem)
+#     sigma = dem_sigmas[demtype] + surface_sigma
+#     sigmas.append(sigma)
+
+# Initialize interpolant
+# dem_interpolant = glimpse.RasterInterpolant(means=means, sigmas=sigmas,
+#     x=[dem.datetime for dem in means])
+
+# Cache glacier polygon for each DEM
+# for dem in dem_interpolant.means:
+#     dem.polygon = cg.load_glacier_polygon(t=dem.datetime, demtype=dem.type)
+
+# Write to / Read from file
+# glimpse.helpers.write_pickle(dem_interpolant, 'dem_interpolant.pkl')
+dem_interpolant = glimpse.helpers.read_pickle('dem_interpolant.pkl')
 
 # ---- Load canonical velocities ----
 # vx, vx_sigma, vy, vy_sigma
@@ -156,11 +164,6 @@ vx, vx_sigma, vy, vy_sigma = [glimpse.Raster.read(
 
 bed = glimpse.Raster.read('bed.tif')
 
-# ---- Cache glacier polygon for each DEM ----
-
-for dem in dem_interpolant.means:
-    dem.polygon = cg.load_glacier_polygon(t=dem.datetime, demtype=dem.type)
-
 # ---- Build track template ----
 
 grid = glimpse.helpers.box_to_grid(dem_template.box2d, step=grid_step,
@@ -168,9 +171,14 @@ grid = glimpse.helpers.box_to_grid(dem_template.box2d, step=grid_step,
 track_template = glimpse.Raster(np.ones(grid[0].shape, dtype=bool),
     x=grid[0], y=grid[1][::-1])
 xy = glimpse.helpers.grid_to_points((track_template.X, track_template.Y))
-mask = glimpse.helpers.points_in_polygon(xy, cg.Glacier()).reshape(track_template.shape)
+selected = glimpse.helpers.points_in_polygon(xy, cg.Glacier())
+# Filter by velocity availability
+# NOTE: Use nearest to avoid NaN propagation (and on same grid anyway)
+selected &= ~np.isnan(vx.sample(xy, order=0))
+mask = selected.reshape(track_template.shape)
 track_points = xy[mask.ravel()]
 track_ids = np.ravel_multi_index(np.nonzero(mask), track_template.shape)
+
 # Write to file
 track_template.Z &= mask
 track_template.Z = track_template.Z.astype(np.uint8)
@@ -178,7 +186,7 @@ track_template.write(os.path.join('points', 'template.tif'), crs=32606)
 
 # ---- For each observer ----
 
-for obs in range(237, len(start_images)):
+for obs in range(len(start_images)):
     print(obs)
     images = start_images[obs]
     # Check within DEM interpolant bounds
@@ -225,10 +233,10 @@ for obs in range(237, len(start_images)):
     vxyz = np.ones((n, 3), dtype=float)
     vxyz_sigma = np.ones((n, 3), dtype=float)
     # (x, y): Sample from velocity grids
-    vxyz[:, 0] = vx.sample(xy, order=1)
-    vxyz[:, 1] = vy.sample(xy, order=1)
-    vxyz_sigma[:, 0] = vx_sigma.sample(xy, order=1)
-    vxyz_sigma[:, 1] = vy_sigma.sample(xy, order=1)
+    vxyz[:, 0] = vx.sample(xy, order=0)
+    vxyz[:, 1] = vy.sample(xy, order=0)
+    vxyz_sigma[:, 0] = vx_sigma.sample(xy, order=0)
+    vxyz_sigma[:, 1] = vy_sigma.sample(xy, order=0)
     # (z): Compute by integrating dz/dx and dz/dy over vx and vy
     rowcol = dem.xy_to_rowcol(xy, snap=True)
     dz = np.dstack(dem.gradient())[rowcol[:, 0], rowcol[:, 1], :]
@@ -253,7 +261,7 @@ for obs in range(237, len(start_images)):
     # vxyz, vxyz_sigma (based on long term statistics only)
     # flotation: Probability of flotation
     glimpse.helpers.write_pickle(
-        dict(ids=ids, xy=xy, observer_mask=observer_mask, vxyz=vxyz,
+        dict(ids=ids, xy=xy, observer_mask=obsmask, vxyz=vxyz,
         vxyz_sigma=vxyz_sigma, flotation=flotation),
         path=os.path.join('points', t.strftime('%Y%m%d') + '-' + str(obs) + '.pkl'))
 

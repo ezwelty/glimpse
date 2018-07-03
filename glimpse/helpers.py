@@ -451,11 +451,42 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
     if mask is None:
         return scipy.ndimage.filters.maximum_filter(array, **kwargs)
     else:
+        dtype_min = numpy_dtype_minmax(array)[0]
         x = array.copy()
-        x[~mask] = numpy_dtype_minmax(x)[0]
+        mask = ~mask
+        x[~mask] = dtype_min
         x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
+        if fill:
+            mask = x == dtype_min
+        x[mask] = array[mask]
+        return x
+
+def median_filter(array, mask=None, fill=False, **kwargs):
+    """
+    Return a median-filtered array.
+
+    Excludes cells by setting them to `np.nan` and using
+    `scipy.ndimage.filters.generic_filter` with `np.nanmedian`. This is much
+    slower than `scipy.ndimage.filters.median_filter`.
+
+    Arguments:
+        array (array): Array to filter
+        mask (array): Boolean mask of cells to include (True) or exclude (False).
+            If `None`, all cells are included.
+        fill (bool): Whether to fill cells excluded by `mask` with interpolated values
+        **kwargs (dict): Additional arguments to either
+            `scipy.ndimage.filters.median_filter` (`mask` is False) or
+            `scipy.ndimage.filters.generic_filter()`
+    """
+    if mask is None:
+        return scipy.ndimage.filters.median_filter(array, **kwargs)
+    else:
+        x = array.copy()
+        mask = ~mask
+        x[mask] = np.nan
+        x = scipy.ndimage.filters.generic_filter(x, function=np.nanmedian, **kwargs)
         if not fill:
-            x[~mask] = array[~mask]
+            x[mask] = array[mask]
         return x
 
 # ---- Arrays: Images ---- #

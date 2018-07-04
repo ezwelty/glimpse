@@ -1,48 +1,50 @@
+# [Mac OS] Parallel requires disabling default matplotlib backend
 import matplotlib
 matplotlib.use('agg')
+
 import cg
 from cg import glimpse
-# glimpse.config.use_numpy_matmul(False)
-from glimpse.imports import (datetime, np, os, collections)
-import glob
-root = '/volumes/science/data/columbia'
-cg.IMAGE_PATH = os.path.join(root, 'timelapse')
-flat_image_path = False
+from glimpse.imports import (datetime, np, os, collections, copy)
 
-# ---- Observer list ----
+# ---- Environment ----
 
-observer_json = glimpse.helpers.read_json('observers.json',
-    object_pairs_hook=collections.OrderedDict)
-
-# ---- DEM interpolant ----
-# NOTE: If not defined, requires geotiffs dems/<datestr>-<obs>[_stderr].tif
-
-dem_interpolant = None
-# dem_interpolant = glimpse.helpers.read_pickle('dem_interpolant.pkl')
-# dem_padding = 200 # m
+cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
+flat_image_path = False # Whether path contains flat list of images
+parallel = True # Number of parallel processes, True = all, False = disable parallel
 
 # ---- Tracker heuristics ----
-# NOTE: All units in meters, days
+# units: meters, days
 
 n = 10000
 # xy = (pre-computed)
 xy_sigma = (2, 2)
 # vxyz = (pre-computed from mean long-term x, y velocities and DEM slope)
 # vxyz_sigma = (pre-computed from long-term x, y velocities and DEM slope)
-short_vxy_sigma = 0.25 # additional short vxy_sigma, as fraction of long vxy_sigma
-flotation_vz_sigma = 3.5 # multiplied by flotation probability
-min_vz_sigma = 0.2 # minimum vz_sigma, applied after flotation_vz_sigma
-axyz = (0, 0, 0)
-axy_sigma_scale = 0.75 # fraction of final vxy_sigma
-flotation_az_sigma = 12 # multiplied by flotation probability
-min_az_sigma = 0.2 # minimum vz_sigma, applied after flotation_vz_sigma
-parallel = 7
+short_vxy_sigma = 0.25 # Additional short vxy_sigma, as fraction of long vxy_sigma
+flotation_vz_sigma = 3.5 # Multiplied by flotation probability
+min_vz_sigma = 0.2 # Minimum vz_sigma, applied after flotation_vz_sigma
+axy_sigma_scale = 0.75 # Fraction of final vxy_sigma
+flotation_az_sigma = 12 # Multiplied by flotation probability
+min_az_sigma = 0.2 # Minimum vz_sigma, applied after flotation_vz_sigma
 tile_size = (15, 15)
-reverse_run = False
 
-# ---- Tracker points ----
+# ---- Load observer list ----
 
-for i_obs in (184, ): #range(184, len(observer_json)):
+observer_json = glimpse.helpers.read_json('observers.json',
+    object_pairs_hook=collections.OrderedDict)
+
+# ---- Load DEM interpolant ----
+# Checks for `dems/` (<datestr>-<obs>[_stderr].tif), then `dem_interpolant.pkl`
+
+if os.path.isdir('dems'):
+    dem_interpolant = None
+else:
+    dem_interpolant = glimpse.helpers.read_pickle('dem_interpolant.pkl')
+    dem_padding = 200 # m
+
+# ---- Track points ----
+
+for i_obs in range(len(observer_json)):
     # ---- Load observers ----
     # observers
     observers = []
@@ -74,6 +76,7 @@ for i_obs in (184, ): #range(184, len(observer_json)):
     datestr = t.strftime('%Y%m%d')
     basename = datestr + '-' + str(i_obs)
     params = glimpse.helpers.read_pickle(os.path.join('points', basename + '.pkl'))
+    print(basename)
     # ---- Load DEM ----
     # dem, dem_sigma
     if dem_interpolant is None:
@@ -82,7 +85,8 @@ for i_obs in (184, ): #range(184, len(observer_json)):
     else:
         dem, dem_sigma = dem_interpolant(t, return_sigma=True)
         # Crop DEM
-        box = glimpse.helpers.bounding_box(params['xy']) + np.array([-1, -1, 1, 1]) * dem_padding
+        box = (glimpse.helpers.bounding_box(params['xy']) +
+            np.array([-1, -1, 1, 1]) * dem_padding)
         dem.crop(xlim=box[0::2], ylim=box[1::2])
         dem_sigma.crop(xlim=box[0::2], ylim=box[1::2])
         dem.crop_to_data()
@@ -100,7 +104,7 @@ for i_obs in (184, ): #range(184, len(observer_json)):
             params['vxyz_sigma'][:, 2] +
                 np.maximum(params['flotation'] * flotation_vz_sigma, min_vz_sigma)
         )),
-        axyz=axyz,
+        axyz=(0, 0, 0),
         observer_mask=params['observer_mask']
     )
     kwargs['axyz_sigma'] = np.column_stack((
@@ -112,29 +116,35 @@ for i_obs in (184, ): #range(184, len(observer_json)):
     time_unit = datetime.timedelta(days=1)
     tracker = glimpse.Tracker(
         observers=observers, dem=dem, dem_sigma=dem_sigma, time_unit=time_unit)
-    tracks, tracks_r = None, None
-    # Forward
-    path = os.path.join('tracks', basename + '.pkl')
-    if not os.path.isfile(path):
-        tracks = tracker.track(tile_size=tile_size, parallel=parallel, **kwargs)
-    # Reverse
-    path_r = os.path.join('tracks', basename + '_r.pkl')
-    if not os.path.isfile(path_r) and reverse_run:
-        if tracks is None:
-            tracks = glimpse.helpers.read_pickle(path)
-        mask, first, last = tracks.endpoints()
-        # Use last positions from forward track?
-        # kwargs['xy'][mask] = tracks.xyz[mask, last, 0:2]
-        # Use last distribution from forward track
-        kwargs['vxyz'][mask, 0:2] = tracks.vxyz[mask, last, 0:2]
-        kwargs['vxyz_sigma'][mask, 0:2] = tracks.vxyz_sigma[mask, last, 0:2]
-        tracks_r = tracker.track(tile_size=tile_size, parallel=parallel,
-            datetimes=tracker.datetimes[::-1], **kwargs)
+    # Initialize placeholders
+    # forward | forward + last vxy | reverse | reverse + last vxy
+    suffixes = ('f', 'fv', 'r', 'rv')
+    directions = (1, 1, -1, -1)
+    tracks = [None] * len(suffixes)
+    paths = [os.path.join('tracks', basename + '-' + suffix + '.pkl')
+        for suffix in suffixes]
+    is_file = [os.path.isfile(path) for path in paths]
+    # Run forward and backward
+    for i in (0, 2):
+        if not is_file[i]:
+            print(basename + suffixes[i])
+            tracks[i] = tracker.track(tile_size=tile_size, parallel=parallel,
+                datetimes=tracker.datetimes[::directions[i]], **kwargs)
+        if not is_file[i + 1]:
+            print(basename + suffixes[i + 1])
+            if not tracks[i]:
+                tracks[i] = glimpse.helpers.read_pickle(paths[i])
+            # Start with last vx, vy distribution of first run
+            mask, first, last = tracks[i].endpoints()
+            vxy_kwargs = copy.deepcopy(kwargs)
+            vxy_kwargs['vxyz'][mask, 0:2] = tracks[i].vxyz[mask, last, 0:2]
+            vxy_kwargs['vxyz_sigma'][mask, 0:2] = tracks[i].vxyz_sigma[mask, last, 0:2]
+            tracks[i + 1] = tracker.track(tile_size=tile_size, parallel=parallel,
+                datetimes=tracker.datetimes[::directions[i + 1]], **vxy_kwargs)
     # ---- Save tracks to file ----
     tracker.dem, tracker.dem_sigma = None, None
     for observer in observers:
         observer.clear_images()
-    if not os.path.isfile(path) and tracks is not None:
-        glimpse.helpers.write_pickle(tracks, path)
-    if not os.path.isfile(path_r) and tracks_r is not None:
-        glimpse.helpers.write_pickle(tracks_r, path_r)
+    for i in range(len(suffixes)):
+        if not os.path.isfile(paths[i]) and tracks[i] is not None:
+            glimpse.helpers.write_pickle(tracks[i], paths[i])

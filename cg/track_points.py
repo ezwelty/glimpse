@@ -10,7 +10,7 @@ from glimpse.imports import (datetime, np, os, collections, copy)
 
 cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
 flat_image_path = False # Whether path contains flat list of images
-parallel = True # Number of parallel processes, True = all, False = disable parallel
+parallel = 7 # Number of parallel processes, True = all, False = disable parallel
 
 # ---- Tracker heuristics ----
 # units: meters, days
@@ -76,7 +76,6 @@ for i_obs in range(len(observer_json)):
     datestr = t.strftime('%Y%m%d')
     basename = datestr + '-' + str(i_obs)
     params = glimpse.helpers.read_pickle(os.path.join('points', basename + '.pkl'))
-    print(basename)
     # ---- Load DEM ----
     # dem, dem_sigma
     if dem_interpolant is None:
@@ -127,11 +126,11 @@ for i_obs in range(len(observer_json)):
     # Run forward and backward
     for i in (0, 2):
         if not is_file[i]:
-            print(basename + suffixes[i])
+            print(basename + '-' + suffixes[i])
             tracks[i] = tracker.track(tile_size=tile_size, parallel=parallel,
                 datetimes=tracker.datetimes[::directions[i]], **kwargs)
         if not is_file[i + 1]:
-            print(basename + suffixes[i + 1])
+            print(basename + '-' + suffixes[i + 1])
             if not tracks[i]:
                 tracks[i] = glimpse.helpers.read_pickle(paths[i])
             # Start with last vx, vy distribution of first run

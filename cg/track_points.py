@@ -142,7 +142,10 @@ for i_obs in range(len(observer_json)):
             tracks[i + 1] = tracker.track(tile_size=tile_size, parallel=parallel,
                 datetimes=tracker.datetimes[::directions[i + 1]], **vxy_kwargs)
     # ---- Save tracks to file ----
+    # Clean up tracker, since saved in tracks.tracker
+    tracker.reset()
     tracker.dem, tracker.dem_sigma = None, None
+    # Clear cached images, since saved in tracks.tracker.observers
     for observer in observers:
         observer.clear_images()
     for i in range(len(suffixes)):

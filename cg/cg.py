@@ -25,6 +25,7 @@ print('cg: Remember to set IMAGE_PATH, KEYPOINT_PATH, and MATCH_PATH')
 IMAGE_PATH = None
 KEYPOINT_PATH = None
 MATCH_PATH = None
+FLAT_IMAGE_PATH = False
 
 # ---- Images ----
 
@@ -120,15 +121,28 @@ def find_image(path):
         path (str): Image path or basename
     """
     ids = parse_image_path(path, sequence=True)
-    service_dir = os.path.join(IMAGE_PATH, ids['station'],
-        ids['station'] + '_' + ids['service'])
     filename = ids['basename'] + '.JPG'
-    if os.path.isdir(service_dir):
-        subdirs = [''] + next(os.walk(service_dir))[1]
-        for subdir in subdirs:
-            image_path = os.path.join(service_dir, subdir, filename)
-            if os.path.isfile(image_path):
-                return image_path
+    if FLAT_IMAGE_PATH:
+        img_path = os.path.join(IMAGE_PATH, filename)
+        if os.path.isfile(img_path):
+            return img_path
+        else:
+            raise ValueError('Image not found: ' + path)
+    else:
+        service_dir = os.path.join(IMAGE_PATH, ids['station'],
+            ids['station'] + '_' + ids['service'])
+        found_img = None
+        if os.path.isdir(service_dir):
+            subdirs = [''] + next(os.walk(service_dir))[1]
+            for subdir in subdirs:
+                img_path = os.path.join(service_dir, subdir, filename)
+                if os.path.isfile(img_path):
+                    found_img = img_path
+                    break
+        if found_img:
+            return found_img
+        else:
+            raise ValueError('Image not found: ' + path)
 
 def load_images(station, services, use_exif=False, service_exif=False, anchors=False,
     viewdir=True, viewdir_as_anchor=False, file_errors=True, **kwargs):

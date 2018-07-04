@@ -9,8 +9,8 @@ from glimpse.imports import (datetime, np, os, collections, copy)
 # ---- Environment ----
 
 cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
-flat_image_path = False # Whether path contains flat list of images
-parallel = 7 # Number of parallel processes, True = all, False = disable parallel
+cg.FLAT_IMAGE_PATH = False # Whether path contains flat list of images
+parallel = True # Number of parallel processes, True = all, False = disable parallel
 
 # ---- Tracker heuristics ----
 # units: meters, days
@@ -61,10 +61,7 @@ for i_obs in range(len(observer_json)):
             calibration = glimpse.helpers.merge_dicts(service_calibration,
                 cg.load_calibrations(image=basename, viewdir=basename, merge=True,
                 file_errors=False))
-            if flat_image_path:
-                path = os.path.join(cg.IMAGE_PATH, basename + '.JPG')
-            else:
-                path = cg.find_image(basename)
+            path = cg.find_image(basename)
             image = glimpse.Image(path, cam=calibration, datetime=t, exif=service_exif)
             images.append(image)
         # NOTE: Determine sigma programmatically?
@@ -148,5 +145,5 @@ for i_obs in range(len(observer_json)):
     for observer in observers:
         observer.clear_images()
     for i in range(len(suffixes)):
-        if not os.path.isfile(paths[i]) and tracks[i] is not None:
+        if not is_file[i] and tracks[i] is not None:
             glimpse.helpers.write_pickle(tracks[i], paths[i])

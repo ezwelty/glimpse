@@ -8,7 +8,7 @@ from glimpse.imports import (datetime, np, os, collections, copy)
 
 # ---- Environment ----
 
-cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
+cg.IMAGE_PATH = '/data/brinkerhoff/glimpse_data/timelapse' # Path to time-lapse images
 cg.FLAT_IMAGE_PATH = False # Whether path contains flat list of images
 parallel = True # Number of parallel processes, True = all, False = disable parallel
 
@@ -44,7 +44,7 @@ else:
 
 # ---- Track points ----
 
-for i_obs in range(len(observer_json)):
+for i_obs in range(4,len(observer_json)):
     # ---- Load observers ----
     # observers
     observers = []

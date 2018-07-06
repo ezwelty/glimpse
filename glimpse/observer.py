@@ -42,9 +42,9 @@ class Observer(object):
         self.grid = raster.Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
-    def test_images(images):
+    def test_images(images,cam_tol=1e-3):
         for img in images[1:]:
-            if any(img.cam.xyz != images[0].cam.xyz):
+            if np.linalg.norm(img.cam.xyz-images[0].cam.xyz)>cam_tol:
                 raise ValueError('Positions (xyz) are not equal')
             if any(img.cam.f != images[0].cam.f):
                 raise ValueError('Focal lengths (f) are not equal')

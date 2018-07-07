@@ -454,7 +454,7 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
         dtype_min = numpy_dtype_minmax(array)[0]
         x = array.copy()
         mask = ~mask
-        x[~mask] = dtype_min
+        x[mask] = dtype_min
         x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
         if fill:
             mask = x == dtype_min

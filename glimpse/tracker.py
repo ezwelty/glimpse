@@ -37,9 +37,10 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, time_unit, dem, dem_sigma=0, viewshed=None, resample_method='systematic',
+    def __init__(self, observers, motion_model, time_unit, dem, dem_sigma=0, viewshed=None, resample_method='systematic',
         grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
         self.observers = observers
+        self.motion_model = motion_model
         self.dem = dem
         self.dem_sigma = dem_sigma
         self.viewshed = viewshed
@@ -193,7 +194,7 @@ class Tracker(object):
         self.weights *= 1 / self.weights.sum()
 
     def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0),
-        vxyz_sigma=(0, 0, 0), axyz=(0, 0, 0), axyz_sigma=(0, 0, 0),
+        vxyz_sigma=(0, 0, 0),
         datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
         observer_mask=None, return_covariances=False, return_particles=False,
         n_processes=1):
@@ -241,12 +242,12 @@ class Tracker(object):
         # Expand inputs
         xy = np.atleast_2d(xy)
         nxy = len(xy)
-        temp = [n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma]
+        temp = [n, xy_sigma, vxyz, vxyz_sigma]
         for i, value in enumerate(temp):
             temp[i] = np.atleast_2d(temp[i])
             if len(temp[i]) == 1:
                 temp[i] = np.repeat(temp[i], nxy, axis=0)
-        n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma = temp
+        n, xy_sigma, vxyz, vxyz_sigma = temp
         n = n.ravel()
         # Enforce defaults
         errors = len(xy) <= 1
@@ -269,7 +270,7 @@ class Tracker(object):
         bar = helpers._progress_bar(max=len(xy))
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
-        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz, axyz_sigma, observer_mask):
+        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, observer_mask):
             means = np.full((ntimes, 6), np.nan)
             if return_covariances:
                 sigmas = np.full((ntimes, 6, 6), np.nan)
@@ -294,7 +295,7 @@ class Tracker(object):
                             started = True
                         else:
                             dt = dts[i - 1]
-                            self.evolve_particles(dt=dt, axyz=axyz, axyz_sigma=axyz_sigma)
+                            self.motion_model.evolve_particles(dt=dt, tracker=self)
                         # Initialize templates for Observers starting at datetimes[i]
                         at_template = observer_mask & (template_indices == i)
                         for obs in np.nonzero(at_template)[0]:
@@ -336,8 +337,7 @@ class Tracker(object):
         # Run process in parallel
         with config._MapReduce(np=n_processes) as pool:
             results = pool.map(func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(xy, n, xy_sigma, vxyz, vxyz_sigma, axyz,
-                axyz_sigma, observer_mask)))
+                sequence=tuple(zip(xy, n, xy_sigma, vxyz, vxyz_sigma, observer_mask)))
         bar.finish()
         # Return results as Tracks
         if return_particles:
@@ -893,3 +893,88 @@ class Tracks(object):
             else:
                 return map_track, map_txt
         return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, blit=True, **animation)
+
+class CartesianMotionModel(object):
+     """
+    A class for evolving particles according to a Cartesian motion model, which is
+    to say that accelerations in x,y,z are independent and Gaussian distributed
+
+
+    Attributes:
+        axyz: the mean of random accelerations (x,y,z)
+        axyz_sigma: the standard deviation of random accelerations (x,y,z)
+
+    Methods:
+        evolve_particles: Apply the motion model to advance particles one time step
+    """
+    def __init__(self,axyz=(0, 0, 0), axyz_sigma=(0, 0, 0)):
+        self.axyz = axyz
+        self.axyz_sigma = axyz_sigma
+
+    def evolve_particles(self,dt,tracker):
+        """
+        Evolve particles through time by stochastic differentiation.
+
+        Accelerations (`axyz`, `axyz_sigma`) are assumed to be with respect to
+        `self.time_unit`.
+
+        Arguments:
+            dt (timedelta): Time difference to evolve particles forward or backward
+            axyz (iterable): Mean of random accelerations (x, y, z)
+            axyz_sigma (iterable): Standard deviation of random accelerations (x, y, z)
+        """
+        n = len(tracker.particles)
+        time_units = dt.total_seconds() / tracker.time_unit.total_seconds()
+        daxyz = self.axyz_sigma * np.random.randn(n, 3)
+        tracker.particles[:, 0:3] += (time_units * tracker.particles[:, 3:6]
+            + 0.5 * (self.axyz + daxyz) * time_units**2)
+        tracker.particles[:, 3:6] += time_units * (self.axyz + daxyz)
+        tracker._test_particles()
+
+class CylindricalMotionModel(object):
+    """
+    A class for evolving particles according to a cylindrical motion model, which is
+    to say that horizontal speed changes, direction changes, and z direction changes 
+    are independent and Gaussian distributed.
+
+    Attributes:
+        aUTz_sigma: the standard deviation of random accelerations (U,theta,z)
+
+    Methods:
+        evolve_particles: Apply the motion model to advance particles one time step
+
+    """
+
+    def __init__(self,aUTz_sigma=(0,0,0)):
+        self.aUTz_sigma = aUTz_sigma
+
+    def evolve_particles(self,dt,tracker):
+        """
+        Evolve particles through time by stochastic differentiation.
+
+        Arguments:
+            dt (timedelta): Time difference to evolve particles forward or backward
+            tracker (Tracker): tracker object that contains a mutable particles array
+
+        """
+        n = len(tracker.particles)
+        u_t = tracker.particles[:,3]
+        v_t = tracker.particles[:,4]
+        U_t = np.sqrt(u_t**2 + v_t**2)
+        cos_theta = u_t/U_t
+        sin_theta = v_t/U_t
+        time_units = dt.total_seconds() / tracker.time_unit.total_seconds()
+        U_dot = np.random.randn(n)
+        theta_dot = np.random.randn(n)
+        z_dot = np.random.randn(n)
+
+        daxyz = np.zeros((n,3))
+        daxyz[:,0] = U_dot*cos_theta - U_t*sin_theta*theta_dot
+        daxyz[:,1] = U_dot*sin_theta + U_t*cos_theta*theta_dot
+        daxyz[:,2] = z_dot
+
+        tracker.particles[:, 0:3] += (time_units * tracker.particles[:, 3:6]
+            + 0.5 * daxyz * time_units**2)
+        tracker.particles[:, 3:6] += time_units * daxyz
+        tracker._test_particles()
+

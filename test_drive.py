@@ -60,12 +60,14 @@ for obs in observers:
 
 xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
-    itertools.product(range(-400, 300, 25), range(-400, 300, 25))])
+    itertools.product(range(-400, 300, 50), range(-400, 300, 50))])
 time_unit = datetime.timedelta(days=1)
+motion_model = glimpse.CylindricalMotionModel(aUTz_sigma=(2.0/0.7,0.05,0.2))
+#motion_model = glimpse.CartesianMotionModel(axyz_sigma=(2.0,2.0,0.2))
 tracker = glimpse.Tracker(
-    observers=observers, dem=dem, dem_sigma=3, viewshed=viewshed, time_unit=time_unit)
+    observers=observers, motion_model=motion_model, dem=dem, dem_sigma=3, viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
-    xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2), axyz_sigma=(2, 2, 0.2),
+    xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2),
     tile_size=(15, 15), n_processes=4, return_particles=False)
 
 #n=3555 upper limit before major slowdown

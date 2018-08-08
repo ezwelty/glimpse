@@ -1,5 +1,5 @@
 from .image import (Camera, Image, Exif)
 from .observer import (Observer)
-from .tracker import (Tracker)
+from .tracker import (Tracker,CartesianMotionModel,CylindricalMotionModel)
 from .raster import (Grid, Raster, RasterInterpolant)
 from . import (helpers, optimize, svg, convert, config, unumpy)

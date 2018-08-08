@@ -1786,14 +1786,6 @@ def angle_between_vectors(x, y):
 
 # ---- Internal ----
 
-def _parse_parallel(parallel):
-    if parallel is True:
-        return sharedmem.cpu_count()
-    elif parallel is False:
-        return 0
-    else:
-        return parallel
-
 def _progress_bar(max):
     return progress.bar.Bar('', fill='#', max=max, hide_cursor=False,
         suffix='%(percent)3d%% (%(index)d of %(max)d) %(elapsed_td)s')

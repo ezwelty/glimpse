@@ -2,7 +2,12 @@ import glimpse
 from glimpse.imports import (datetime, np, os)
 import glob
 import itertools
+import os
 
+# Required if numpy is built using OpenBLAS or MKL!
+os.environ['OMP_NUM_THREADS']='1'
+
+#glimpse.config.use_numpy_matmul(False)
 # ---- Constants ----
 
 DATA_DIR = 'data'
@@ -40,7 +45,7 @@ paths.sort()
 path = paths[0]
 dem = glimpse.Raster.read(path, xlim=box[0::3], ylim=box[1::3])
 dem.crop(zlim=(0, np.inf))
-dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
+dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=True)
 
 # ---- Prepare viewshed ----
 
@@ -55,13 +60,15 @@ for obs in observers:
 
 xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
-    itertools.product(range(-400, 300, 100), range(-400, 300, 100))])
+    itertools.product(range(-400, 300, 25), range(-400, 300, 25))])
 time_unit = datetime.timedelta(days=1)
 tracker = glimpse.Tracker(
     observers=observers, dem=dem, dem_sigma=3, viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
     xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2), axyz_sigma=(2, 2, 0.2),
-    tile_size=(15, 15), parallel=True, return_particles=False)
+    tile_size=(15, 15), n_processes=4, return_particles=False)
+
+#n=3555 upper limit before major slowdown
 
 # ---- Plot tracks ----
 

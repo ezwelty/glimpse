@@ -6,6 +6,7 @@ import glimpse
 from glimpse.imports import (datetime, np, os)
 import glob
 import itertools
+import os
 
 # [Mac OS] Parallel may require disabling use of numpy.matmul() in Camera
 glimpse.config.use_numpy_matmul(False)
@@ -49,7 +50,7 @@ paths.sort()
 path = paths[0]
 dem = glimpse.Raster.read(path, xlim=box[0::3], ylim=box[1::3])
 dem.crop(zlim=(0, np.inf))
-dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=False)
+dem.fill_crevasses(mask=~np.isnan(dem.Z), fill=True)
 
 # ---- Prepare viewshed ----
 
@@ -64,7 +65,7 @@ for obs in observers:
 
 xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
-    itertools.product(range(-400, 300, 100), range(-400, 300, 100))])
+    itertools.product(range(-400, 300, 50), range(-400, 300, 50))])
 time_unit = datetime.timedelta(days=1)
 motion_model = glimpse.CylindricalMotionModel(aUTz_sigma=(2.0 / 0.7, 0.05, 0.2))
 # motion_model = glimpse.CartesianMotionModel(axyz_sigma=(2.0, 2.0, 0.2))

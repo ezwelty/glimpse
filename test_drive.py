@@ -1,7 +1,16 @@
+# [Mac OS] Parallel requires disabling default matplotlib backend
+import matplotlib
+matplotlib.use('agg')
+
 import glimpse
 from glimpse.imports import (datetime, np, os)
 import glob
 import itertools
+
+# [Mac OS] Parallel may require disabling use of numpy.matmul() in Camera
+glimpse.config.use_numpy_matmul(False)
+# Required if numpy is built using OpenBLAS or MKL!
+os.environ['OMP_NUM_THREADS'] = '1'
 
 # ---- Constants ----
 
@@ -15,7 +24,7 @@ STATIONS = ('AK01b', 'AK10b')
 # ---- Prepare Observers ----
 
 start = datetime.datetime(2013, 6, 12, 20)
-end = datetime.datetime(2013, 6, 18, 20)
+end = datetime.datetime(2013, 6, 15, 20)
 observers = []
 for station in STATIONS:
     station_dir = os.path.join(DATA_DIR, station)
@@ -57,11 +66,14 @@ xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
     itertools.product(range(-400, 300, 100), range(-400, 300, 100))])
 time_unit = datetime.timedelta(days=1)
+motion_model = glimpse.CylindricalMotionModel(aUTz_sigma=(2.0 / 0.7, 0.05, 0.2))
+# motion_model = glimpse.CartesianMotionModel(axyz_sigma=(2.0, 2.0, 0.2))
 tracker = glimpse.Tracker(
-    observers=observers, dem=dem, dem_sigma=3, viewshed=viewshed, time_unit=time_unit)
+    observers=observers, motion_model=motion_model, dem=dem, dem_sigma=3,
+    viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
-    xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2), axyz_sigma=(2, 2, 0.2),
-    tile_size=(15, 15), parallel=True, return_particles=False)
+    xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2),
+    tile_size=(15, 15), n_processes=4, return_particles=False)
 
 # ---- Plot tracks ----
 

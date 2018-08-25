@@ -432,6 +432,29 @@ def moraines_mlines(img, markup, correction=True, step=None):
         mlines.append(glimpse.optimize.Lines(img.cam, luv, [xyz], correction=correction, step=step))
     return mlines
 
+def tide_height(t):
+    if isinstance(t, datetime.datetime):
+        t = [t]
+    t = np.asarray(t)
+    dt = datetime.timedelta(hours=1.5)
+    t_begin = np.nanmin(t).replace(minute=0, second=0, microsecond=0)
+    t_end = np.nanmax(t) + dt
+    # https://tidesandcurrents.noaa.gov/api/
+    params = dict(
+        format='json',
+        units='metric',
+        time_zone='gmt',
+        datum='MLLW',
+        product='hourly_height',
+        station=9454240, # Valdez
+        begin_date=t_begin.strftime('%Y%m%d %H:%M'),
+        end_date=t_end.strftime('%Y%m%d %H:%M'))
+    r = requests.get('https://tidesandcurrents.noaa.gov/api/datagetter', params=params)
+    v = [float(item['v']) for item in r.json()['data']]
+    return np.interp(
+        [dti.total_seconds() for dti in t - t_begin],
+        np.linspace(0, 3600 * len(v[1:]), len(v)), v)
+
 def sea_height(xy, t=None):
     """
     Return the height of sea level relative to the WGS 84 ellipsoid.
@@ -444,28 +467,14 @@ def sea_height(xy, t=None):
             If `None`, tide is ignored in result.
     """
     egm2008 = glimpse.Raster.read(os.path.join(CG_PATH, 'egm2008.tif'))
-    geoid_height = egm2008.sample(xy).reshape(-1, 1)
-    if t:
-        t_begin = t.replace(minute=0, second=0, microsecond=0)
-        t_end = t_begin + datetime.timedelta(hours=1)
-        # https://tidesandcurrents.noaa.gov/api/
-        params = dict(
-            format='json',
-            units='metric',
-            time_zone='gmt',
-            datum='MLLW',
-            product='hourly_height',
-            station=9454240, # Valdez
-            begin_date=t_begin.strftime('%Y%m%d %H:%M'),
-            end_date=t_end.strftime('%Y%m%d %H:%M'))
-        r = requests.get('https://tidesandcurrents.noaa.gov/api/datagetter', params=params)
-        v = [float(item['v']) for item in r.json()['data']]
-        tide_height = np.interp(
-            (t - t_begin).total_seconds(),
-            [0, (t_end - t_begin).total_seconds()], v)
+    geoid = egm2008.sample(xy).reshape(-1, 1)
+    if t is not None:
+        if not isinstance(t, datetime.datetime) and len(tide) > 1:
+            raise ValueError('t must specify a single datetime')
+        tide = tide_height(t)[0]
     else:
-        tide_height = 0
-    return geoid_height + tide_height
+        tide = 0
+    return geoid + tide
 
 def synth_controls(img, step=None, directions=False):
     image = glimpse.helpers.strip_path(img.path)

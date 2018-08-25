@@ -6,16 +6,21 @@ import cg
 from cg import glimpse
 from glimpse.imports import (datetime, np, os, collections, copy)
 
+import os
+
+# Required if numpy is built using OpenBLAS or MKL!
+os.environ['OMP_NUM_THREADS']='1'
+
 # ---- Environment ----
 
 cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
 cg.FLAT_IMAGE_PATH = False # Whether path contains flat list of images
-parallel = 7 # Number of parallel processes, True = all, False = disable parallel
+n_processes = 4 # Number of parallel processes
 
 # ---- Tracker heuristics ----
 # units: meters, days
 
-n = 10000
+n = 3550
 # xy = (pre-computed)
 xy_sigma = (2, 2)
 # vxyz = (pre-computed from mean long-term x, y velocities and DEM slope)
@@ -124,7 +129,7 @@ for i_obs in np.arange(len(observer_json)):
     for i in (0, 2):
         if not is_file[i]:
             print(basename + '-' + suffixes[i])
-            tracks[i] = tracker.track(tile_size=tile_size, parallel=parallel,
+            tracks[i] = tracker.track(tile_size=tile_size, n_processes=n_processes,
                 datetimes=tracker.datetimes[::directions[i]], **kwargs)
         if not is_file[i + 1]:
             print(basename + '-' + suffixes[i + 1])
@@ -135,7 +140,7 @@ for i_obs in np.arange(len(observer_json)):
             vxy_kwargs = copy.deepcopy(kwargs)
             vxy_kwargs['vxyz'][mask, 0:2] = tracks[i].vxyz[mask, last, 0:2]
             vxy_kwargs['vxyz_sigma'][mask, 0:2] = tracks[i].vxyz_sigma[mask, last, 0:2]
-            tracks[i + 1] = tracker.track(tile_size=tile_size, parallel=parallel,
+            tracks[i + 1] = tracker.track(tile_size=tile_size, n_processes=n_processes,
                 datetimes=tracker.datetimes[::directions[i + 1]], **vxy_kwargs)
     # ---- Save tracks to file ----
     # Clean up tracker, since saved in tracks.tracker

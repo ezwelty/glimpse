@@ -647,7 +647,7 @@ class Camera(object):
                 are named by their integer position in the stack (e.g. 0, 1, ...).
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
-                all available CPU cores are used.
+                defaults to `os.cpu_count()`.
             correction: Whether or how to apply elevation corrections (see `helpers.elevation_corrections()`)
             return_depth: Whether to return a depth map - the distance of the
                 `dem` surface measured along the camera's optical axis

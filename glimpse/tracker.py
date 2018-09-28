@@ -197,7 +197,7 @@ class Tracker(object):
         vxyz_sigma=(0, 0, 0),
         datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
         observer_mask=None, return_covariances=False, return_particles=False,
-        n_processes=1):
+        parallel=False):
         """
         Track particles through time.
 
@@ -230,7 +230,9 @@ class Tracker(object):
                 matrices or just particle standard deviations
             return_particles (bool): Whether to return all particles and weights
                 at each timestep
-            n_process: Number of positions to track in parallel (int)
+            parallel: Number of initial positions to track in parallel (int),
+                or whether to track in parallel (bool). If `True`,
+                defaults to `os.cpu_count()`.
         Returns:
             `Tracks`: Tracks object
         """
@@ -251,6 +253,7 @@ class Tracker(object):
         n = n.ravel()
         # Enforce defaults
         errors = len(xy) <= 1
+        parallel = helpers._parse_parallel(parallel)
         if datetimes is None:
             datetimes = self.datetimes
         else:
@@ -322,7 +325,7 @@ class Tracker(object):
                 # TODO: Use tblib instead (https://stackoverflow.com/a/26096355)
                 if errors:
                     raise e
-                elif n_processes:
+                elif parallel:
                     error = e.__class__(''.join(
                         traceback.format_exception(*sys.exc_info())))
                 else:
@@ -335,7 +338,7 @@ class Tracker(object):
             bar.next()
             return results
         # Run process in parallel
-        with config._MapReduce(np=n_processes) as pool:
+        with config._MapReduce(np=parallel) as pool:
             results = pool.map(func=process, reduce=reduce, star=True,
                 sequence=tuple(zip(xy, n, xy_sigma, vxyz, vxyz_sigma, observer_mask)))
         bar.finish()

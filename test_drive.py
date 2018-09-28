@@ -74,7 +74,7 @@ tracker = glimpse.Tracker(
     viewshed=viewshed, time_unit=time_unit)
 tracks = tracker.track(
     xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2),
-    tile_size=(15, 15), n_processes=4, return_particles=False)
+    tile_size=(15, 15), parallel=4, return_particles=False)
 
 # ---- Plot tracks ----
 

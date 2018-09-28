@@ -15,7 +15,7 @@ os.environ['OMP_NUM_THREADS']='1'
 
 cg.IMAGE_PATH = '/volumes/science/data/columbia/timelapse' # Path to time-lapse images
 cg.FLAT_IMAGE_PATH = False # Whether path contains flat list of images
-n_processes = 4 # Number of parallel processes
+parallel = 4 # Number of parallel processes, True = os.cpu_count(), False = disable parallel
 
 # ---- Tracker heuristics ----
 # units: meters, days
@@ -129,7 +129,7 @@ for i_obs in np.arange(len(observer_json)):
     for i in (0, 2):
         if not is_file[i]:
             print(basename + '-' + suffixes[i])
-            tracks[i] = tracker.track(tile_size=tile_size, n_processes=n_processes,
+            tracks[i] = tracker.track(tile_size=tile_size, parallel=parallel,
                 datetimes=tracker.datetimes[::directions[i]], **kwargs)
         if not is_file[i + 1]:
             print(basename + '-' + suffixes[i + 1])
@@ -140,7 +140,7 @@ for i_obs in np.arange(len(observer_json)):
             vxy_kwargs = copy.deepcopy(kwargs)
             vxy_kwargs['vxyz'][mask, 0:2] = tracks[i].vxyz[mask, last, 0:2]
             vxy_kwargs['vxyz_sigma'][mask, 0:2] = tracks[i].vxyz_sigma[mask, last, 0:2]
-            tracks[i + 1] = tracker.track(tile_size=tile_size, n_processes=n_processes,
+            tracks[i + 1] = tracker.track(tile_size=tile_size, parallel=parallel,
                 datetimes=tracker.datetimes[::directions[i + 1]], **vxy_kwargs)
     # ---- Save tracks to file ----
     # Clean up tracker, since saved in tracks.tracker

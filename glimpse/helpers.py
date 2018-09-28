@@ -1789,3 +1789,14 @@ def angle_between_vectors(x, y):
 def _progress_bar(max):
     return progress.bar.Bar('', fill='#', max=max, hide_cursor=False,
         suffix='%(percent)3d%% (%(index)d of %(max)d) %(elapsed_td)s')
+
+def _parse_parallel(parallel):
+    if parallel is True:
+        n = os.cpu_count()
+        if n is None:
+            raise NotImplementedError('Cannot determine number of CPUs')
+    elif parallel is False:
+        n = 0
+    else:
+        n = parallel
+    return n

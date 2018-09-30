@@ -6,10 +6,8 @@ import cg
 from cg import glimpse
 from glimpse.imports import (datetime, np, os, collections, copy)
 
-import os
-
 # Required if numpy is built using OpenBLAS or MKL!
-os.environ['OMP_NUM_THREADS']='1'
+os.environ['OMP_NUM_THREADS'] = '1'
 
 # ---- Environment ----
 
@@ -92,31 +90,26 @@ for i_obs in np.arange(len(observer_json)):
         dem_sigma.crop(xlim=box[0::2], ylim=box[1::2])
         dem.crop_to_data()
         dem_sigma.crop_to_data()
-    # ---- Compute final motion parameters ----
-    # Tracker.track(**kwargs)
-    kwargs = dict(
-        n=n,
-        xy=params['xy'],
-        xy_sigma=xy_sigma,
-        vxyz=params['vxyz'],
-        vxyz_sigma=np.column_stack((
-            params['vxyz_sigma'][:, 0] * (1 + short_vxy_sigma),
-            params['vxyz_sigma'][:, 1] * (1 + short_vxy_sigma),
-            params['vxyz_sigma'][:, 2] +
-                np.maximum(params['flotation'] * flotation_vz_sigma, min_vz_sigma)
-        )),
-        axyz=(0, 0, 0),
-        observer_mask=params['observer_mask']
-    )
-    kwargs['axyz_sigma'] = np.column_stack((
-        kwargs['vxyz_sigma'][:, 0:2] * axy_sigma_scale,
-        np.maximum(params['flotation'] * flotation_az_sigma, min_az_sigma)
-    ))
+    # ---- Compute motion models ----
+    # motion_models
+    time_unit = datetime.timedelta(days=1)
+    motion_models = [glimpse.tracker.CartesianMotionModel(
+        n=n, dem=dem, dem_sigma=dem_sigma, time_unit=time_unit,
+        xy_sigma=xy_sigma, xy=params['xy'][i], vxyz=params['vxyz'][i],
+        vxyz_sigma=np.hstack((
+            params['vxyz_sigma'][i, 0:2] * (1 + short_vxy_sigma),
+            params['vxyz_sigma'][i, 2] +
+                np.maximum(params['flotation'][i] * flotation_vz_sigma, min_vz_sigma)
+            ))
+        ) for i in range(len(params['xy']))]
+    for i, model in enumerate(motion_models):
+        model.axyz_sigma = np.hstack((
+            model.vxyz_sigma[0:2] * axy_sigma_scale,
+            np.maximum(params['flotation'][i] * flotation_az_sigma, min_az_sigma)
+            ))
     # ---- Track points ----
     # tracks, tracks_r
-    time_unit = datetime.timedelta(days=1)
-    tracker = glimpse.Tracker(
-        observers=observers, dem=dem, dem_sigma=dem_sigma, time_unit=time_unit)
+    tracker = glimpse.Tracker(observers=observers)
     # Initialize placeholders
     # forward | forward + last vxy | reverse | reverse + last vxy
     suffixes = ('f', 'fv', 'r', 'rv')
@@ -129,26 +122,35 @@ for i_obs in np.arange(len(observer_json)):
     for i in (0, 2):
         if not is_file[i]:
             print(basename + '-' + suffixes[i])
-            tracks[i] = tracker.track(tile_size=tile_size, parallel=parallel,
-                datetimes=tracker.datetimes[::directions[i]], **kwargs)
+            tracks[i] = tracker.track(motion_models=motion_models,
+                observer_mask=params['observer_mask'], tile_size=tile_size,
+                parallel=False, datetimes=tracker.datetimes[::directions[i]])
         if not is_file[i + 1]:
             print(basename + '-' + suffixes[i + 1])
             if not tracks[i]:
                 tracks[i] = glimpse.helpers.read_pickle(paths[i])
             # Start with last vx, vy distribution of first run
             mask, first, last = tracks[i].endpoints()
-            vxy_kwargs = copy.deepcopy(kwargs)
-            vxy_kwargs['vxyz'][mask, 0:2] = tracks[i].vxyz[mask, last, 0:2]
-            vxy_kwargs['vxyz_sigma'][mask, 0:2] = tracks[i].vxyz_sigma[mask, last, 0:2]
-            tracks[i + 1] = tracker.track(tile_size=tile_size, parallel=parallel,
-                datetimes=tracker.datetimes[::directions[i + 1]], **vxy_kwargs)
-    # ---- Save tracks to file ----
-    # Clean up tracker, since saved in tracks.tracker
+            last_vxy = tracks[i].vxyz[mask, last, 0:2]
+            last_vxy_sigma = tracks[i].vxyz_sigma[mask, last, 0:2]
+            vxy_motion_models = [copy.copy(model) for model in motion_models]
+            for j, model in enumerate(np.array(vxy_motion_models)[mask]):
+                model.vxyz = np.hstack((last_vxy[j], model.vxyz[2]))
+                model.vxyz_sigma = np.hstack((last_vxy_sigma[j], model.vxyz_sigma[2]))
+            # Repeat track
+            tracks[i + 1] = tracker.track(motion_models=vxy_motion_models,
+                observer_mask=params['observer_mask'], tile_size=tile_size,
+                parallel=False, datetimes=tracker.datetimes[::directions[i + 1]])
+    # ---- Clean up tracks ----
+    # Clean up tracker, since saved in Tracks.tracker
     tracker.reset()
-    tracker.dem, tracker.dem_sigma = None, None
-    # Clear cached images, since saved in tracks.tracker.observers
+    # Clear cached images, since saved in Tracks.tracker.observers
     for observer in observers:
         observer.clear_images()
+    # Clear motion_models from Tracks.params
+    for track in tracks:
+        track.params['motion_models'] = None
+    # ---- Save tracks to file ----
     for i in range(len(suffixes)):
         if not is_file[i] and tracks[i] is not None:
             glimpse.helpers.write_pickle(tracks[i], paths[i])

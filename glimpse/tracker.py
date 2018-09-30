@@ -53,13 +53,6 @@ class Tracker(object):
         return np.average(self.particles, weights=self.weights, axis=0)
 
     @property
-    def particle_sigma(self):
-        """
-        Weighted particle standard deviation.
-        """
-        return np.sqrt(np.diag(self.particle_covariance))
-
-    @property
     def particle_covariance(self):
         """
         Weighted (biased) particle covariance matrix.
@@ -74,22 +67,31 @@ class Tracker(object):
         return np.unique(np.concatenate([obs.datetimes
             for obs in self.observers]))
 
-    def _get_fast_particle_sigma(self, mean):
+    def compute_particle_sigma(self, mean=None):
         """
         Return the weighted particle standard deviation.
 
-        Works faster than `self.particle_sigma` by taking a precomputed mean.
+        Works faster by using a precomputed weighted particle mean.
 
         Arguments:
-            mean (iterable): Weighted particle mean
+            mean (iterable): Weighted particle mean. If `None`, it is computed
+                by `self.particle_mean`.
         """
+        if mean is None:
+            mean = self.particle_mean
         variance = np.average((self.particles - mean)**2,
             weights=self.weights, axis=0)
         return np.sqrt(variance)
 
-    def _test_particles(self):
+    def test_particles(self):
         """
         Test particle validity.
+
+        The following tests are performed. An exception is raised if a test
+        fails.
+
+            - Particles are on visible viewshed cells (if specified)
+            - Particle values are not missing (NaN)
         """
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], order=0)
@@ -105,13 +107,25 @@ class Tracker(object):
         n = len(self.particles)
         self.weights = np.full(n, 1 / n)
 
-    def update_weights(self, likelihoods):
+    def update_weights(self, imgs, motion_model=None):
         """
-        Update particle weights based on their likelihoods.
+        Update particle weights.
+
+        Particle log likelihoods are summed across all Observers and,
+        optionally, a motion model.
 
         Arguments:
-            likelihoods (array): Likelihood of each particle
+            imgs (iterable): Image index for each Observer, or `None` to skip
+            motion_model (MotionModel): Motion model
         """
+        log_likelihoods = [self.compute_observer_log_likelihoods(obs, img)
+            for obs, img in enumerate(imgs)]
+        if motion_model:
+            log_likelihoods.append(
+                motion_model.compute_log_likelihoods(self.particles))
+        # Remove empty elements
+        log_likelihoods = [x for x in log_likelihoods if x is not None]
+        likelihoods = np.exp(-sum(log_likelihoods))
         self.weights = likelihoods + 1e-300
         self.weights *= 1 / self.weights.sum()
 
@@ -246,12 +260,12 @@ class Tracker(object):
                     for i in range(first, last + 1):
                         if i == first:
                             self.particles = motion_model.initialize_particles()
+                            self.test_particles()
                             self.initialize_weights()
-                            self._test_particles()
                         else:
                             dt = dts[i - 1]
                             motion_model.evolve_particles(self.particles, dt=dt)
-                            self._test_particles()
+                            self.test_particles()
                         # Initialize templates for Observers starting at datetimes[i]
                         at_template = observer_mask & (template_indices == i)
                         for obs in np.nonzero(at_template)[0]:
@@ -268,7 +282,7 @@ class Tracker(object):
                         if return_covariances:
                             sigmas[i] = self.particle_covariance
                         else:
-                            sigmas[i] = self._get_fast_particle_sigma(mean=means[i])
+                            sigmas[i] = self.compute_particle_sigma(mean=means[i])
                         if return_particles:
                             particles[i] = self.particles
                             weights[i] = self.weights
@@ -379,21 +393,26 @@ class Tracker(object):
             matches[not_selected, i] = None
         return matches
 
-    def _extract_tile(self, obs, img, box, histogram=None, return_histogram=False):
+    def extract_tile(self, obs, img, box, histogram=None, return_histogram=False):
         """
         Extract image tile.
 
         The tile is converted to grayscale, normalized to mean 0, variance 1,
         matched to a histogram (if `histogram`), and passed through a
-        median low pass filer.
+        median low-pass filer.
 
         Arguments:
             obs (int): Observer index
-            img (int): Observer image index
+            img (int): Image index of Observer `obs`
             box (iterable): Tile boundaries (see `Observer.extract_tile()`)
             histogram (iterable): Template for histogram matching (see `helpers.match_histogram`)
             return_histogram (bool): Whether to return a tile histogram.
-                The histogram is computed for the low pass filter.
+                The histogram is computed before the low-pass filter.
+
+        Returns:
+            array: Image tile
+            tuple (if `return_histogram = True`): Histogram (values, quantiles)
+                of image tile computed before the low-pass filter
         """
         tile = self.observers[obs].extract_tile(box=box, img=img)
         if tile.ndim > 2:
@@ -429,40 +448,17 @@ class Tracker(object):
         template = dict(
             obs=obs, img=img, box=box,
             duv=uv - box.reshape(2, -1).mean(axis=0))
-        template['tile'], template['histogram'] = self._extract_tile(
+        template['tile'], template['histogram'] = self.extract_tile(
             obs=obs, img=img, box=box, return_histogram=True)
         self.templates[obs] = template
 
-    def compute_likelihoods(self, imgs, motion_model=None):
-        """
-        Compute particle likelihoods.
-
-        Particle log likelihoods are summed across all Observers and,
-        optionally, a motion model.
-
-        Arguments:
-            imgs (iterable): Image index for each Observer, or `None` to skip
-            motion_model (MotionModel): Motion model
-
-        Returns:
-            array: Particle likelihoods
-        """
-        log_likelihoods = [self._compute_observer_log_likelihoods(obs, img)
-            for obs, img in enumerate(imgs)]
-        if motion_model:
-            log_likelihoods.append(
-                motion_model.compute_log_likelihoods(self.particles))
-        # Remove empty elements
-        log_likelihoods = [x for x in log_likelihoods if x is not None]
-        return np.exp(-sum(log_likelihoods))
-
-    def _compute_observer_log_likelihoods(self, obs, img):
+    def compute_observer_log_likelihoods(self, obs, img):
         """
         Compute the log likelihoods of each particle for an Observer.
 
         Arguments:
-            t (datetime): Date and time at which to query Observer
-            observer (Observer): Observer object
+            obs (int): Observer index
+            img (int): Image index for Observer `obs`
 
         Returns:
             array: Particle log likelihoods, or `None`
@@ -496,7 +492,7 @@ class Tracker(object):
         # Flatten box
         box = box.ravel()
         # Extract search tile
-        search_tile = self._extract_tile(
+        search_tile = self.extract_tile(
             obs=obs, img=img, box=box, histogram=self.templates[obs]['histogram'])
         # Compute area-averaged sum of squares error (SSE)
         sse = cv2.matchTemplate(search_tile.astype(np.float32),

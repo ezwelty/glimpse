@@ -47,22 +47,45 @@ class Tracker(object):
 
     @property
     def particle_mean(self):
+        """
+        Weighted particle mean.
+        """
         return np.average(self.particles, weights=self.weights, axis=0)
 
     @property
     def particle_sigma(self):
-        variance = np.average((self.particles - self.particle_mean)**2,
-            weights=self.weights, axis=0)
-        return np.sqrt(variance)
+        """
+        Weighted particle standard deviation.
+        """
+        return np.sqrt(np.diag(self.particle_covariance))
 
     @property
     def particle_covariance(self):
-        return np.cov(self.particles.T, aweights=self.weights)
+        """
+        Weighted (biased) particle covariance matrix.
+        """
+        return np.cov(self.particles.T, aweights=self.weights, ddof=0)
 
     @property
     def datetimes(self):
+        """
+        Sorted list of all unique Observer datetimes.
+        """
         return np.unique(np.concatenate([obs.datetimes
             for obs in self.observers]))
+
+    def _get_fast_particle_sigma(self, mean):
+        """
+        Return the weighted particle standard deviation.
+
+        Works faster than `self.particle_sigma` by taking a precomputed mean.
+
+        Arguments:
+            mean (iterable): Weighted particle mean
+        """
+        variance = np.average((self.particles - mean)**2,
+            weights=self.weights, axis=0)
+        return np.sqrt(variance)
 
     def _test_particles(self):
         """
@@ -243,7 +266,7 @@ class Tracker(object):
                         if return_covariances:
                             sigmas[i] = self.particle_covariance
                         else:
-                            sigmas[i] = self.particle_sigma
+                            sigmas[i] = self._get_fast_particle_sigma(mean=means[i])
                         if return_particles:
                             particles[i] = self.particles
                             weights[i] = self.weights

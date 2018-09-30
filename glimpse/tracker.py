@@ -51,7 +51,9 @@ class Tracker(object):
 
     @property
     def particle_sigma(self):
-        return np.std(self.particles, axis=0, ddof=1)
+        variance = np.average((self.particles - self.particle_mean)**2,
+            weights=self.weights, axis=0)
+        return np.sqrt(variance)
 
     @property
     def particle_covariance(self):

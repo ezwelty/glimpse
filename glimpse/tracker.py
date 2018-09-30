@@ -89,14 +89,14 @@ class Tracker(object):
 
     def _test_particles(self):
         """
-        Particle test run after each particle initialization or evolution.
+        Test particle validity.
         """
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], order=0)
             if not all(is_visible):
                 raise ValueError('Some particles are on non-visible viewshed cells')
-        if any(np.isnan(self.particles[:, 2])):
-            raise ValueError('Some particles are on NaN dem cells')
+        if np.isnan(self.particles).any():
+            raise ValueError('Some particles have missing (NaN) values')
 
     def initialize_weights(self):
         """
@@ -247,9 +247,11 @@ class Tracker(object):
                         if i == first:
                             self.particles = motion_model.initialize_particles()
                             self.initialize_weights()
+                            self._test_particles()
                         else:
                             dt = dts[i - 1]
                             motion_model.evolve_particles(self.particles, dt=dt)
+                            self._test_particles()
                         # Initialize templates for Observers starting at datetimes[i]
                         at_template = observer_mask & (template_indices == i)
                         for obs in np.nonzero(at_template)[0]:

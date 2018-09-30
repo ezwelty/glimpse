@@ -10,12 +10,6 @@ class Tracker(object):
 
     Attributes:
         observers (list): Observer objects
-        time_unit (timedelta): Length of time unit for temporal arguments
-        dem: Elevation of the surface on which to track points, as either a scalar or
-             a Raster
-        dem_sigma: Elevation standard deviations, as either a scalar or
-             a Raster with the same extent as `dem`. `0` means particles stay glued to
-             `dem` and weighing particles by their distance from the `dem` is disabled.
         viewshed (Raster): Binary viewshed with the same extent as `dem`
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
@@ -37,14 +31,11 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, motion_model, time_unit, dem, dem_sigma=0, viewshed=None, resample_method='systematic',
-        grayscale=dict(method='average'), highpass=dict(size=(5, 5)), interpolation=dict(kx=3, ky=3)):
+    def __init__(self, observers, viewshed=None, resample_method='systematic',
+        grayscale=dict(method='average'), highpass=dict(size=(5, 5)),
+        interpolation=dict(kx=3, ky=3)):
         self.observers = observers
-        self.motion_model = motion_model
-        self.dem = dem
-        self.dem_sigma = dem_sigma
         self.viewshed = viewshed
-        self.time_unit = time_unit
         self.resample_method = resample_method
         self.grayscale = grayscale
         self.highpass = highpass
@@ -60,7 +51,7 @@ class Tracker(object):
 
     @property
     def particle_sigma(self):
-        return np.std(self.particles,axis=0,ddof=1)
+        return np.std(self.particles, axis=0, ddof=1)
 
     @property
     def particle_covariance(self):
@@ -82,56 +73,12 @@ class Tracker(object):
         if any(np.isnan(self.particles[:, 2])):
             raise ValueError('Some particles are on NaN dem cells')
 
-    def _sample_dem(self, xy, sigma=False):
-        obj = self.dem_sigma if sigma else self.dem
-        if isinstance(obj, raster.Raster):
-            return obj.sample(xy)
-        else:
-            return np.full(len(self.particles), obj)
-
-    def initialize_particles(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0)):
+    def initialize_weights(self):
         """
-        Initialize particles given an initial normal distribution.
-
-        Temporal arguments (`vxyz`, `vxyz_sigma`) are assumed to be in
-        `self.time_unit` time units.
-
-        Arguments:
-            xy (iterable): Mean position (x, y)
-            n (int): Number of particles
-            xy_sigma (iterable): Standard deviation of position (x, y)
-            vxyz (iterable): Mean velocity (x, y, z)
-            vxyz_sigma (iterable): Standard deviation of velocity (x, y, z)
-        """
-        if self.particles is None or len(self.particles) != n:
-            self.particles = np.zeros((n, 6), dtype=float)
-        self.particles[:, 0:2] = xy + xy_sigma * np.random.randn(n, 2)
-        z = self._sample_dem(self.particles[:, 0:2])
-        z_sigma = self._sample_dem(self.particles[:, 0:2], sigma=True)
-        self.particles[:, 2] = z + z_sigma * np.random.randn(n)
-        self.particles[:, 3:6] = vxyz + vxyz_sigma * np.random.randn(n, 3)
-        self._test_particles()
-        self.weights = np.full(n, 1 / n)
-
-    def evolve_particles(self, dt, axyz=(0, 0, 0), axyz_sigma=(0, 0, 0)):
-        """
-        Evolve particles through time by stochastic differentiation.
-
-        Accelerations (`axyz`, `axyz_sigma`) are assumed to be with respect to
-        `self.time_unit`.
-
-        Arguments:
-            dt (timedelta): Time difference to evolve particles forward or backward
-            axyz (iterable): Mean of random accelerations (x, y, z)
-            axyz_sigma (iterable): Standard deviation of random accelerations (x, y, z)
+        Initialize particle weights.
         """
         n = len(self.particles)
-        time_units = dt.total_seconds() / self.time_unit.total_seconds()
-        daxyz = axyz_sigma * np.random.randn(n, 3)
-        self.particles[:, 0:3] += (time_units * self.particles[:, 3:6]
-            + 0.5 * (axyz + daxyz) * time_units**2)
-        self.particles[:, 3:6] += time_units * (axyz + daxyz)
-        self._test_particles()
+        self.weights = np.full(n, 1 / n)
 
     def update_weights(self, likelihoods):
         """
@@ -193,38 +140,26 @@ class Tracker(object):
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, xy, n=1000, xy_sigma=(0, 0), vxyz=(0, 0, 0),
-        vxyz_sigma=(0, 0, 0),
-        datetimes=None, maxdt=datetime.timedelta(0), tile_size=(15, 15),
-        observer_mask=None, return_covariances=False, return_particles=False,
-        parallel=False):
+    def track(self, motion_models, datetimes=None, maxdt=datetime.timedelta(0),
+        tile_size=(15, 15), observer_mask=None, return_covariances=False,
+        return_particles=False, parallel=False):
         """
         Track particles through time.
 
-        Velocities and accelerations (`vxyz`, `vxyz_sigma`, `axyz`, `axyz_sigma`)
-        are assumed to be in `self.time_unit` time units.
-
-        If `len(xy) > 1`, errors and warnings are caught silently,
+        If `len(motion_models) > 1`, errors and warnings are caught silently,
         and matching images from Observers with `cache = True` are cached.
 
         Arguments:
-            xy (iterable): Single (x, y) or multiple ((xi, yi), ...) initial positions
-            n: Number of particles for all (int) or each (iterable) `xy`
-            xy_sigma (iterable): Standard deviation of initial position (x, y)
-                for all or each `xy`
-            vxyz (iterable): Mean velocity (x, y, z) for all or each `xy`
-            vxyz_sigma (iterable): Standard deviation of velocity (x, y, z)
-                for all or each `xy`
-            axyz (iterable): Mean acceleration (x, y, z) for all or each `xy`
-            axyz_sigma (iterable) Standard deviation of acceleration (x, y, z)
-                for all or each `xy`
+            motion_models (iterable): MotionModel objects specifying which
+                particles to track
             datetimes (iterable): Monotonic sequence of datetimes at which to
                 track particles. If `None`, defaults to all unique datetimes in
                 `self.observers`.
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
             tile_size (iterable): Size of reference tiles in pixels (width, height)
             observer_mask (array): Boolean mask of Observers
-                to use for each `xy` (len(xy), len(self.observers)). If `None`,
+                to use for each `motion_models`
+                (len(motion_models), len(self.observers)). If `None`,
                 all Observers are used.
             return_covariances (bool): Whether to return particle covariance
                 matrices or just particle standard deviations
@@ -233,6 +168,7 @@ class Tracker(object):
             parallel: Number of initial positions to track in parallel (int),
                 or whether to track in parallel (bool). If `True`,
                 defaults to `os.cpu_count()`.
+
         Returns:
             `Tracks`: Tracks object
         """
@@ -241,39 +177,30 @@ class Tracker(object):
         params = locals().copy()
         # Clear previous tracking state
         self.reset()
-        # Expand inputs
-        xy = np.atleast_2d(xy)
-        nxy = len(xy)
-        temp = [n, xy_sigma, vxyz, vxyz_sigma]
-        for i, value in enumerate(temp):
-            temp[i] = np.atleast_2d(temp[i])
-            if len(temp[i]) == 1:
-                temp[i] = np.repeat(temp[i], nxy, axis=0)
-        n, xy_sigma, vxyz, vxyz_sigma = temp
-        n = n.ravel()
         # Enforce defaults
-        errors = len(xy) <= 1
+        ntracks = len(motion_models)
+        errors = ntracks < 2
         parallel = helpers._parse_parallel(parallel)
         if datetimes is None:
             datetimes = self.datetimes
         else:
             datetimes = self.parse_datetimes(datetimes=datetimes, maxdt=maxdt)
         if observer_mask is None:
-            observer_mask = np.ones((len(xy), len(self.observers)), dtype=bool)
+            observer_mask = np.ones((ntracks, len(self.observers)), dtype=bool)
         # Compute matching images
         matching_images = self.match_datetimes(datetimes=datetimes, maxdt=maxdt)
         template_indices = (matching_images != None).argmax(axis=0)
         # Cache matching images
-        if len(xy) > 1:
+        if ntracks > 1:
             for i, observer in enumerate(self.observers):
                 if observer.cache:
                     index = [img for img in matching_images[:, i] if img is not None]
                     observer.cache_images(index=index)
         # Define parallel process
-        bar = helpers._progress_bar(max=len(xy))
+        bar = helpers._progress_bar(max=ntracks)
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
-        def process(xy, n, xy_sigma, vxyz, vxyz_sigma, observer_mask):
+        def process(motion_model, observer_mask):
             means = np.full((ntimes, 6), np.nan)
             if return_covariances:
                 sigmas = np.full((ntimes, 6, 6), np.nan)
@@ -287,18 +214,17 @@ class Tracker(object):
             try:
                 with warnings.catch_warnings(record=True) as caught:
                     # Skip datetimes before first and after last available image
-                    # NOTE: Track thus starts from xy at first available image
+                    # NOTE: Track thus starts from initial particle state at first available image
                     observed = np.any(matching_images[:, observer_mask] != None, axis=1)
                     first = np.argmax(observed)
                     last = len(observed) - 1 - np.argmax(observed[::-1])
                     for i in range(first, last + 1):
                         if i == first:
-                            self.initialize_particles(n=n, xy=xy, xy_sigma=xy_sigma,
-                                vxyz=vxyz, vxyz_sigma=vxyz_sigma)
-                            started = True
+                            self.particles = motion_model.initialize_particles()
+                            self.initialize_weights()
                         else:
                             dt = dts[i - 1]
-                            self.motion_model.evolve_particles(dt=dt, tracker=self)
+                            motion_model.evolve_particles(self.particles, dt=dt)
                         # Initialize templates for Observers starting at datetimes[i]
                         at_template = observer_mask & (template_indices == i)
                         for obs in np.nonzero(at_template)[0]:
@@ -307,7 +233,8 @@ class Tracker(object):
                         if i > first:
                             imgs = [img if m else None
                                 for img, m in zip(matching_images[i], observer_mask)]
-                            likelihoods = self.compute_likelihoods(imgs=imgs)
+                            likelihoods = self.compute_likelihoods(imgs=imgs,
+                                motion_model=motion_model)
                             self.update_weights(likelihoods)
                             self.resample_particles()
                         means[i] = self.particle_mean
@@ -340,7 +267,7 @@ class Tracker(object):
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
             results = pool.map(func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(xy, n, xy_sigma, vxyz, vxyz_sigma, observer_mask)))
+                sequence=tuple(zip(motion_models, observer_mask)))
         bar.finish()
         # Return results as Tracks
         if return_particles:
@@ -479,23 +406,28 @@ class Tracker(object):
             obs=obs, img=img, box=box, return_histogram=True)
         self.templates[obs] = template
 
-    def compute_likelihoods(self, imgs):
+    def compute_likelihoods(self, imgs, motion_model=None):
         """
-        Compute the particle likelihoods summed across all observers.
+        Compute particle likelihoods.
+
+        Particle log likelihoods are summed across all Observers and,
+        optionally, a motion model.
 
         Arguments:
             imgs (iterable): Image index for each Observer, or `None` to skip
+            motion_model (MotionModel): Motion model
+
+        Returns:
+            array: Particle likelihoods
         """
-        log_likelihoods_observer = [self._compute_observer_log_likelihoods(obs, img)
+        log_likelihoods = [self._compute_observer_log_likelihoods(obs, img)
             for obs, img in enumerate(imgs)]
-        z = self._sample_dem(self.particles[:, 0:2])
-        z_sigma = self._sample_dem(self.particles[:, 0:2], sigma=True)
-        # Avoid division by zero
-        nonzero = np.nonzero(z_sigma)[0]
-        log_likelihoods_dem = np.zeros(len(self.particles), dtype=float)
-        log_likelihoods_dem[nonzero] = (1 / (2 * z_sigma[nonzero]**2) *
-            (z[nonzero] - self.particles[nonzero, 2])**2)
-        return np.exp(-sum(log_likelihoods_observer) - log_likelihoods_dem)
+        if motion_model:
+            log_likelihoods.append(
+                motion_model.compute_log_likelihoods(self.particles))
+        # Remove empty elements
+        log_likelihoods = [x for x in log_likelihoods if x is not None]
+        return np.exp(-sum(log_likelihoods))
 
     def _compute_observer_log_likelihoods(self, obs, img):
         """
@@ -504,8 +436,11 @@ class Tracker(object):
         Arguments:
             t (datetime): Date and time at which to query Observer
             observer (Observer): Observer object
+
+        Returns:
+            array: Particle log likelihoods, or `None`
         """
-        constant_log_likelihood = np.array([0.0])
+        constant_log_likelihood = None
         if img is None:
             return constant_log_likelihood
         # Build image box around all particles, with a buffer for template matching
@@ -897,82 +832,284 @@ class Tracks(object):
                 return map_track, map_txt
         return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, blit=True, **animation)
 
-class CartesianMotionModel(object):
+class MotionModel(object):
     """
-    A class for evolving particles according to a Cartesian motion model, which is
-    to say that accelerations in x,y,z are independent and Gaussian distributed
+    `MotionModel` is a base class illustrating the motion model interface
+    required by a `Tracker`.
 
+    A `Tracker` requires a motion model to have the following methods:
+
+        - initialize_particles(): Initializes particles, typically around an
+            initial position.
+        - evolve_particles(particles, dt): Evolves particles forward or backward
+            in time (dt).
+        - compute_log_likelihoods(particles): Computes particle log likelihoods
+            (optional). If provided, these are added to the Observer log
+            likelihoods computed by a `Tracker` to calculate the final particle
+            likelihoods.
+
+    This minimal example initializes all particles at the same position
+    (x, y, 0) with velocity components in x, y, z drawn from normal
+    distributions with zero mean. Particles are evolved based only on their
+    initial velocities since accelerations are absent.
 
     Attributes:
-        axyz: the mean of random accelerations (x,y,z)
-        axyz_sigma: the standard deviation of random accelerations (x,y,z)
-
-    Methods:
-        evolve_particles: Apply the motion model to advance particles one time step
+        xy (iterable): Mean initial position (x, y)
+        time_unit (timedelta): Length of time unit for temporal arguments
+        n (int): Number of particles
+        vxyz_sigma (iterable): Standard deviation of velocity
+            (dx/dt, dy/dt, dz/dt) in `time_unit` time units
     """
-    def __init__(self, axyz=(0, 0, 0), axyz_sigma=(0, 0, 0)):
+    def __init__(self, xy, time_unit, n=1000, vxyz_sigma=(0, 0, 0)):
+        self.xy = xy
+        self.time_unit = time_unit
+        self.n = n
+        self.vxyz_sigma = vxyz_sigma
+
+    def initialize_particles(self):
+        """
+        Initialize particles around an initial mean position.
+
+        Returns:
+            array: Particle positions and velocities (x, y, z, vx, vy, vz)
+        """
+        particles = np.zeros((self.n, 6), dtype=float)
+        particles[:, 0:2] = self.xy
+        particles[:, 3:6] = self.vxyz_sigma * np.random.randn(self.n, 3)
+        return particles
+
+    def evolve_particles(self, particles, dt):
+        """
+        Evolve particles through time by stochastic differentiation.
+
+        Arguments:
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+            dt (timedelta): Time step to evolve particles forward or backward
+        """
+        time_units = dt.total_seconds() / self.time_unit.total_seconds()
+        particles[:, 0:3] += time_units * particles[:, 3:6]
+
+    def compute_log_likelihoods(self, particles):
+        """
+        Compute particle log likelihoods.
+
+        If specified, these are added to the Observer log likelihoods computed
+        by a Tracker to calculate the final particle likelihoods.
+
+        Arguments:
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+
+        Returns:
+            array: Particle log likelihoods, or `None`
+        """
+        return None
+
+class CartesianMotionModel(MotionModel):
+    """
+    `CartesianModelModel` evolves particles following a Cartesian motion model.
+
+    Initial particle positions and velocities, and random accelerations, are
+    specified by independent and normally distributed x, y, z components.
+    Temporal arguments (e.g. `vxyz`, `axyz`) are assumed to be in `time_unit`
+    time units.
+
+    Particle heights (z) are initialized based on a mean surface (`dem`) and its
+    associated uncertainty (`dem_sigma`), then evolved following the motion
+    model. Particles are weighted based on their distance (dz) from the surface
+    and its uncertainty.
+
+    Attributes:
+        xy (iterable): Mean initial position (x, y)
+        time_unit (timedelta): Length of time unit for temporal arguments
+        dem: Elevation of the surface on which to track points
+            (scalar or Raster)
+        dem_sigma: Elevation standard deviations, as either a scalar or
+             a Raster with the same extent as `dem`. `0` means particles stay
+             glued to `dem` and weighing particles by their offset from `dem`
+             is disabled.
+        n (int): Number of particles
+        xy_sigma (iterable): Standard deviation of initial position (x, y)
+        vxyz (iterable): Mean initial velocity (dx/dt, dy/dt, dz/dt)
+        vxyz_sigma (iterable): Standard deviation of initial velocity
+            (dx/dt, dy/dt, dz/dt)
+        axyz (iterable): Mean acceleration (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2)
+        axyz_sigma (iterable): Standard deviation of acceleration
+            (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2)
+    """
+    def __init__(self, xy, time_unit, dem, dem_sigma=0, n=1000, xy_sigma=(0, 0),
+        vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0), axyz=(0, 0, 0),
+        axyz_sigma=(0, 0, 0)):
+        self.xy = xy
+        self.time_unit = time_unit
+        self.dem = dem
+        self.dem_sigma = dem_sigma
+        self.n = n
+        self.xy_sigma = xy_sigma
+        self.vxyz = vxyz
+        self.vxyz_sigma = vxyz_sigma
         self.axyz = axyz
         self.axyz_sigma = axyz_sigma
 
-    def evolve_particles(self,dt,tracker):
+    def initialize_particles(self):
+        """
+        Initialize particles around an initial mean position.
+
+        Returns:
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+        """
+        particles = np.zeros((self.n, 6), dtype=float)
+        particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
+        z = self._sample_dem(particles[:, 0:2])
+        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
+        particles[:, 2] = z + z_sigma * np.random.randn(self.n)
+        particles[:, 3:6] = (self.vxyz
+            + self.vxyz_sigma * np.random.randn(self.n, 3))
+        return particles
+
+    def evolve_particles(self, particles, dt):
         """
         Evolve particles through time by stochastic differentiation.
 
-        Accelerations (`axyz`, `axyz_sigma`) are assumed to be with respect to
-        `self.time_unit`.
+        Arguments:
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+            dt (timedelta): Time step to evolve particles forward or backward
+        """
+        n = len(particles)
+        time_units = dt.total_seconds() / self.time_unit.total_seconds()
+        axyz = self.axyz + self.axyz_sigma * np.random.randn(n, 3)
+        particles[:, 0:3] += (time_units * particles[:, 3:6]
+            + 0.5 * axyz * time_units**2)
+        particles[:, 3:6] += time_units * axyz
+
+    def compute_log_likelihoods(self, particles):
+        """
+        Compute particle log likelihoods.
+
+        Particles are weighted based on their distance from the mean surface
+        (`dem`) and its associated uncertainty (`dem_sigma`).
 
         Arguments:
-            dt (timedelta): Time difference to evolve particles forward or backward
-            axyz (iterable): Mean of random accelerations (x, y, z)
-            axyz_sigma (iterable): Standard deviation of random accelerations (x, y, z)
-        """
-        n = len(tracker.particles)
-        time_units = dt.total_seconds() / tracker.time_unit.total_seconds()
-        daxyz = self.axyz_sigma * np.random.randn(n, 3)
-        tracker.particles[:, 0:3] += (time_units * tracker.particles[:, 3:6]
-            + 0.5 * (self.axyz + daxyz) * time_units**2)
-        tracker.particles[:, 3:6] += time_units * (self.axyz + daxyz)
-        tracker._test_particles()
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
 
-class CylindricalMotionModel(object):
+        Returns:
+            array: Particle log likelihoods, or `None`
+        """
+        if self.dem_sigma is 0:
+            return None
+        else:
+            z = self._sample_dem(particles[:, 0:2])
+            z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
+            # Avoid division by zero
+            nonzero = np.nonzero(z_sigma)[0]
+            log_likelihoods = np.zeros(len(particles), dtype=float)
+            log_likelihoods[nonzero] = (1 / (2 * z_sigma[nonzero]**2) *
+                (z[nonzero] - particles[nonzero, 2])**2)
+            return log_likelihoods
+
+    def _sample_dem(self, xy, sigma=False):
+        """
+        Sample DEM at points.
+
+        Arguments:
+            xy (array-like): Points (x, y)
+        """
+        obj = self.dem_sigma if sigma else self.dem
+        if isinstance(obj, raster.Raster):
+            return obj.sample(xy)
+        else:
+            return np.full(len(xy), obj)
+
+class CylindricalMotionModel(CartesianMotionModel):
     """
-    A class for evolving particles according to a cylindrical motion model, which is
-    to say that horizontal speed changes, direction changes, and z direction changes
-    are independent and Gaussian distributed.
+    `CylindricalModelModel` evolves particles following a cylindrical motion
+    model.
+
+    Identical to `CartesianMotionModel`, except that particle motion is
+    specified by independent and normally distributed components of magnitude
+    (radius), direction (theta), and elevation (z). Angular arguments are
+    assumed to be in radians counterclockwise from the +x axis.
 
     Attributes:
-        aUTz_sigma: the standard deviation of random accelerations (U,theta,z)
-
-    Methods:
-        evolve_particles: Apply the motion model to advance particles one time step
+        xy (iterable): Mean initial position (x, y)
+        time_unit (timedelta): Length of time unit for temporal arguments
+        dem: Elevation of the surface on which to track points
+            (scalar or Raster)
+        dem_sigma: Elevation standard deviations, as either a scalar or
+             a Raster with the same extent as `dem`. `0` means particles stay
+             glued to `dem` and weighing particles by their offset from `dem`
+             is disabled.
+        n (int): Number of particles
+        xy_sigma (iterable): Standard deviation of initial position (x, y)
+        vrthz (iterable): Mean initial velocity (d radius/dt, theta, dz/dt)
+        vrthz_sigma (iterable): Standard deviation of initial velocity
+            (d radius/dt, theta, dz/dt)
+        arthz (iterable): Mean acceleration
+            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2)
+        arthz_sigma (iterable): Standard deviation of acceleration
+            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2)
     """
+    def __init__(self, xy, time_unit, dem, dem_sigma=0, n=1000, xy_sigma=(0, 0),
+        vrthz=(0, 0, 0), vrthz_sigma=(0, 0, 0), arthz=(0, 0, 0),
+        arthz_sigma=(0, 0, 0)):
+        self.xy = xy
+        self.time_unit = time_unit
+        self.dem = dem
+        self.dem_sigma = dem_sigma
+        self.n = n
+        self.xy_sigma = xy_sigma
+        self.vrthz = vrthz
+        self.vrthz_sigma = vrthz_sigma
+        self.arthz = arthz
+        self.arthz_sigma = arthz_sigma
 
-    def __init__(self, aUTz_sigma=(0, 0, 0)):
-        self.aUTz_sigma = aUTz_sigma
+    def initialize_particles(self):
+        """
+        Initialize particles around an initial mean position.
 
-    def evolve_particles(self, dt, tracker):
+        Returns:
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+        """
+        particles = np.zeros((self.n, 6), dtype=float)
+        particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
+        z = self._sample_dem(particles[:, 0:2])
+        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
+        particles[:, 2] = z + z_sigma * np.random.randn(self.n)
+        v = self.vrthz + self.vrthz_sigma * np.random.randn(self.n, 3)
+        particles[:, 3:6] = np.column_stack((
+            # r' * cos(th)
+            v[:, 0] * np.cos(v[:, 1]),
+            # r' * sin(th)
+            v[:, 0] * np.sin(v[:, 1]),
+            v[:, 2]))
+        return particles
+
+    def evolve_particles(self, particles, dt):
         """
         Evolve particles through time by stochastic differentiation.
 
         Arguments:
-            dt (timedelta): Time difference to evolve particles forward or backward
-            tracker (Tracker): tracker object that contains a mutable particles array
+            particles (array): Particle positions and velocities
+                (x, y, z, vx, vy, vz)
+            dt (timedelta): Time step to evolve particles forward or backward
         """
-        n = len(tracker.particles)
-        u_t = tracker.particles[:, 3]
-        v_t = tracker.particles[:, 4]
-        U_t = np.sqrt(u_t**2 + v_t**2)
-        cos_theta = u_t / U_t
-        sin_theta = v_t / U_t
-        time_units = dt.total_seconds() / tracker.time_unit.total_seconds()
-        U_dot = np.random.randn(n)
-        theta_dot = np.random.randn(n)
-        z_dot = np.random.randn(n)
-        daxyz = np.zeros((n, 3))
-        daxyz[:, 0] = U_dot * cos_theta - U_t * sin_theta * theta_dot
-        daxyz[:, 1] = U_dot * sin_theta + U_t * cos_theta * theta_dot
-        daxyz[:, 2] = z_dot
-        tracker.particles[:, 0:3] += (time_units * tracker.particles[:, 3:6]
-            + 0.5 * daxyz * time_units**2)
-        tracker.particles[:, 3:6] += time_units * daxyz
-        tracker._test_particles()
+        n = len(particles)
+        time_units = dt.total_seconds() / self.time_unit.total_seconds()
+        vx = particles[:, 3]
+        vy = particles[:, 4]
+        vr = np.sqrt(vx**2 + vy**2)
+        arthz = self.arthz + self.arthz_sigma * np.random.randn(n, 3)
+        axyz = np.column_stack((
+            # r'' * cos(th) - r' * sin(th) * th'
+            arthz[:, 0] * (vx / vr) - vy * arthz[:, 1],
+            # r'' * sin(th) - r' * cos(th) * th'
+            arthz[:, 0] * (vy / vr) + vx * arthz[:, 1],
+            arthz[:, 2]))
+        particles[:, 0:3] += (time_units * particles[:, 3:6]
+            + 0.5 * axyz * time_units**2)
+        particles[:, 3:6] += time_units * axyz

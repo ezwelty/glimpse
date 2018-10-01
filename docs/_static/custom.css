@@ -1,0 +1,9 @@
+.rst-content table.field-list td {
+  /* Prevent smaller font size in Parameter lists */
+  font-size: 100%;
+}
+
+.wy-nav-content {
+  /* Increase content width */
+  max-width: 960px !important;
+}

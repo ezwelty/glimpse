@@ -1094,177 +1094,206 @@ class Camera(object):
 
 class Exif(object):
     """
-    `Exif` is a container and parser for image file metadata.
+    Container and parser for image metadata.
+
+    Provides access to the Exchangeable image file format (Exif) metadata tags
+    embedded in an image file using :doc:`piexif <piexif:index>`.
 
     Arguments:
-        path (str): Path to image file.
-            If `None` (default), an empty Exif object is returned.
+        path (str): Path to image.
+            If `None`, :attr:`tags` will be empty.
         thumbnail (bool): Whether to retain the image thumbnail
 
     Attributes:
-        tags (dict): Image file metadata, as returned by piexif.load()
-        size (array): Image size in pixels [nx, ny]
-        datetime (datetime): Capture date and time
-        fmm (float): Focal length in millimeters
-        shutter (float): Shutter speed in seconds
-        aperture (float): Aperture size as f-number
-        iso (float): Film speed
-        make (str): Camera make
-        model (str): Camera model
-    """
+        tags (dict): Exif tags returned by :func:`piexif.load`.
+            The tags are grouped by their Image File Directory (IFD):
 
+                - 'Exif' (Exif SubIFD): Image generation
+                - '0th' (IFD0): Main image
+                - '1st' (IFD1): Thumbnail image
+                - 'GPS' (GPS IFD): Position and trajectory
+                - 'Interop' (Interoperability IFD): Compatibility
+
+            The thumbnail image, if present, is stored as `bytes` in 'thumbnail'.
+
+        size (numpy.ndarray): Image size in pixels (nx, ny).
+            Parsed from 'PixelXDimension' and 'PixelYDimension'.
+        datetime (datetime.datetime): Capture date and time.
+            Parsed from 'DateTimeOriginal' and 'SubSecTimeOriginal'.
+        exposure (float): Exposure time in seconds.
+            Parsed from 'ExposureTime'.
+        aperture (float): Aperture size as the f-number
+            (https://wikipedia.org/wiki/F-number).
+            Parsed from 'FNumber'.
+        iso (float): Film speed following the ISO system
+            (https://wikipedia.org/wiki/Film_speed#ISO).
+            Parsed from 'ISOSpeedRatings'.
+        fmm (float): Focal length in millimeters.
+            Parsed from 'FocalLength'.
+        make (str): Camera make.
+            Parsed from 'Make'.
+        model (str): Camera model.
+            Parsed from 'Model'.
+    """
     def __init__(self, path=None, thumbnail=False):
         if path:
-            self.tags = piexif.load(path, key_is_name=False)
+            self.tags = piexif.load(path, key_is_name=True)
             if not thumbnail:
                 self.tags.pop('thumbnail', None)
                 self.tags.pop('1st', None)
             if self.size is None:
-                # NOTE: Is this still necessary?
-                size = np.array(PIL.Image.open(path).size, dtype=float)
-                self.set_tag('PixelXDimension', size[0])
-                self.set_tag('PixelYDimension', size[1])
+                im = gdal.Open(path)
+                self.tags['Exif']['PixelXDimension'] = im.RasterXSize
+                self.tags['Exif']['PixelYDimension'] = im.RasterYSize
         else:
             self.tags = {}
 
     @property
     def size(self):
-        width = self.get_tag('PixelXDimension')
-        height = self.get_tag('PixelYDimension')
+        width = self.parse_tag('PixelXDimension')
+        height = self.parse_tag('PixelYDimension')
         if width and height:
-            return np.array((width, height), dtype=float)
+            return np.array((width, height))
         else:
             return None
 
     @property
     def datetime(self):
-        datetime_str = self.get_tag('DateTimeOriginal')
-        subsec_str = self.get_tag('SubSecTimeOriginal')
-        if datetime_str and not subsec_str:
-            return datetime.datetime.strptime(datetime_str, '%Y:%m:%d %H:%M:%S')
-        elif datetime_str and subsec_str:
-            return datetime.datetime.strptime(datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
-        else:
+        datetime_str = self.parse_tag('DateTimeOriginal')
+        if not datetime_str:
             return None
+        subsec_str = self.parse_tag('SubSecTimeOriginal')
+        if subsec_str:
+            return datetime.datetime.strptime(
+                datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
+        else:
+            return datetime.datetime.strptime(
+                datetime_str, '%Y:%m:%d %H:%M:%S')
 
     @property
-    def shutter(self):
-        tag = self.get_tag('ExposureTime')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+    def exposure(self):
+        return self.parse_tag('ExposureTime')
 
     @property
     def aperture(self):
-        tag = self.get_tag('FNumber')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+        return self.parse_tag('FNumber')
 
     @property
     def iso(self):
-        tag = self.get_tag('ISOSpeedRatings')
-        if tag:
-            return float(tag)
-        else:
-            return None
+        return self.parse_tag('ISOSpeedRatings')
 
     @property
     def fmm(self):
-        tag = self.get_tag('FocalLength')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+        return self.parse_tag('FocalLength')
 
     @property
     def make(self):
-        return self.get_tag('Make', group='Image')
+        return self.parse_tag('Make', group='0th')
 
     @property
     def model(self):
-        return self.get_tag('Model', group='Image')
+        return self.parse_tag('Model', group='0th')
 
-    def get_tag(self, tag, group='Exif'):
+    def parse_tag(self, tag, group='Exif'):
         """
-        Return the value of a tag (or None if missing).
+        Return the parsed value of a tag.
+
+        The following strategies are applied:
+
+            - if `bytes`, decode to `str`
+            - if `tuple` of length 2 (rational), convert to `float`
+            - if `int`, convert to `float`
 
         Arguments:
             tag (str): Tag name
-            group (str): Group name ('Exif', 'Image', or 'GPS')
+            group (str): Group name ('Exif', '0th', '1st', 'GPS', or 'Interop')
+
+        Returns:
+            object: Parsed tag value, or `None` if missing
         """
-        code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group == 'Image':
-            group = '0th'
-        if group not in self.tags or code not in self.tags[group]:
+        try:
+            value = self.tags[group][tag]
+        except KeyError:
             return None
+        if isinstance(value, bytes):
+            return value.decode()
+        elif isinstance(value, tuple) and len(value) == 2:
+            return value[0] / value[1]
+        elif isinstance(value, int):
+            return float(value)
         else:
-            value = self.tags[group][code]
-            if isinstance(value, bytes):
-                value = value.decode()
             return value
-
-    def set_tag(self, tag, value, group='Exif'):
-        """
-        Set the value of a tag, adding it if missing.
-
-        Arguments:
-            tag (str): Tag name
-            value (object): Tag value
-            group (str): Group name ('Exif', 'Image', or 'GPS')
-        """
-        code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group == 'Image':
-            group = '0th'
-        if group not in self.tags:
-            self.tags[group] = {}
-        if isinstance(value, str):
-            value = value.encode()
-        self.tags[group][code] = value
 
     def dump(self):
         """
-        Return exif as bytes.
-        """
-        return piexif.dump(self.tags)
+        Return tags as bytes.
 
-    def copy(self):
+        The encoding is performed by :func:`piexif.dump`.
+        The result can be embedded into an image file, for example using
+        :func:`piexif.insert` or :meth:`PIL.Image.Image.save`.
+
+        Returns:
+            bytes: :attr:`tags` encoded as a byte string
         """
-        Return a copy.
-        """
-        exif = Exif()
-        exif.tags = self.tags
-        return exif
+        # Copy tags before modifying inplace
+        tags = copy.deepcopy(self.tags)
+        # Replace key names with codes
+        for group in self.tags.keys():
+            if group == 'thumbnail':
+                continue
+            if group not in ('0th', '1st', 'Exif', 'GPS', 'Interop'):
+                raise ValueError('Invalid group \'{0}\''.format(group))
+            ifd_name = 'ImageIFD' if group in ('0th', '1st') else group + 'IFD'
+            ifd = getattr(piexif, ifd_name)
+            for tag in self.tags[group].keys():
+                try:
+                    code = getattr(ifd, tag)
+                except AttributeError:
+                    raise ValueError('Invalid tag \'{0}\' in group \'{1}\''
+                        .format(tag, group))
+                tags[group][code] = tags[group].pop(tag)
+        # Encode to bytes
+        return piexif.dump(tags)
 
 class Image(object):
     """
-    An `Image` describes the camera settings and resulting image captured at a particular time.
+    Container for image content and the settings that gave rise to the image.
 
     Arguments:
-        cam (Camera, dict, or str): Camera object or arguments passed to `Camera()`.
-            If string, assumes a JSON file path and reads arguments from file.
-            If `imgsz` is missing, the actual size of the image is used.
-            If `f` is missing, an attempt is made to specify both `fmm` and `sensorsz`.
-            If `fmm` is missing, it is read from the metadata, and if `sensorsz` is missing,
-            `Camera.get_sensor_size()` is called with `make` and `model` read from the metadata.
+        path (str): Path to image
+        cam (:class:`Camera`, dict, or str): Camera or arguments passed to
+            Camera constructors:
+
+                - if `dict`: Arguments passed to :class:`Camera()`.
+                - if `str`: File path passed to :meth:`Camera.read`
+
+            If 'imgsz' is missing, it is read from **exif**.
+            If 'f', 'fmm', and 'sensorsz' are missing, 'fmm' is read from
+            **exif** and 'sensorsz' is gotten from :meth:`Camera.get_sensor_size`
+            with 'make' and 'model' from **exif**.
+        exif (:class:`Exif`): Image metadata.
+            If `None`, it is read from **path** with :class:`Exif()`.
+        datetime (datetime.datetime): Capture date and time.
+            If `None`, it is read from **exif.datetime**.
+        anchor (bool):
+        keypoints_path (str):
 
     Attributes:
-        path (str): Path to the image file
-        exif (Exif): Image metadata object.
-            Unless specified, it is read from `path`.
-        datetime (datetime): Capture date and time.
-            Unless specified, it is read from `exif`.
-        cam (Camera): Camera object.
+        path (str): Path to image
+        cam (:class:`Camera`): Camera
+        exif (:class:`Exif`): Image metadata
+        datetime (datetime.datetime): Capture date and time
         anchor (bool): Whether the camera parameters, especially view direction,
             are known absolutely. "Anchor" images are used as a reference for
             optimizing other images whose camera parameters are not known absolutely.
         keypoints_path (str): Path for caching image keypoints and their descriptors
             to a `pickle` file. Unless specified, defaults to `path` with a '.pkl' extension.
+        keypoints: Cached keypoints
+        I (numpy.ndarray): Cached image content
     """
 
-    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False, keypoints_path=None):
+    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False,
+        keypoints_path=None):
         self.path = path
         if exif is None:
             exif = Exif(path=path)

@@ -7,42 +7,44 @@ from . import (helpers, config)
 
 class Camera(object):
     """
-    A `Camera` converts between 3D world coordinates and 2D image coordinates.
+    Distorted camera model.
+
+    A `Camera` converts between 3-D world coordinates and their corresponding 2-D image coordinates.
 
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
-    All attributes are coerced to :class:`numpy.ndarray` during initialization or when individually set.
+    All attributes are coerced to `numpy.ndarray` during initialization or when individually set.
     The focal length in pixels (:attr:`f`) is calculated from :attr:`fmm` and :attr:`sensorsz` if both are provided.
     The principal point offset in pixels (:attr:`c`) is calculated from :attr:`cmm` and :attr:`sensorsz` if both are provided.
     If :attr:`vector` is provided, all arguments are ignored except :attr:`sensorsz`,
     which is saved for later calculation of :attr:`fmm` and :attr:`cmm`.
 
     Attributes:
-        vector (:class:`numpy.ndarray`): Vector of the core camera attributes
+        vector (numpy.ndarray): Vector of the core camera attributes
             (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`)
-        xyz (:class:`numpy.ndarray`): Position in world coordinates (x, y, z)
-        viewdir (:class:`numpy.ndarray`): View direction in degrees (yaw, pitch, roll)
+        xyz (numpy.ndarray): Position in world coordinates (x, y, z)
+        viewdir (numpy.ndarray): View direction in degrees (yaw, pitch, roll)
 
             - yaw: clockwise rotation about z-axis (0 = look north)
             - pitch: rotation from horizon (+ look up, - look down)
             - roll: rotation about optical axis (+ down right, - down left, from behind)
 
-        imgsz (:class:`numpy.ndarray`): Image size in pixels (nx, ny)
-        f (:class:`numpy.ndarray`): Focal length in pixels (fx, fy)
-        c (:class:`numpy.ndarray`): Principal point offset from the image center in pixels (dx, dy)
-        k (:class:`numpy.ndarray`): Radial distortion coefficients (k1, ..., k6)
-        p (:class:`numpy.ndarray`): Tangential distortion coefficients (p1, p2)
-        sensorsz (:class:`numpy.ndarray`): Sensor size in millimeters (nx, ny)
-        fmm (:class:`numpy.ndarray`): Focal length in millimeters (fx, fy).
+        imgsz (numpy.ndarray): Image size in pixels (nx, ny)
+        f (numpy.ndarray): Focal length in pixels (fx, fy)
+        c (numpy.ndarray): Principal point offset from the image center in pixels (dx, dy)
+        k (numpy.ndarray): Radial distortion coefficients (k1, ..., k6)
+        p (numpy.ndarray): Tangential distortion coefficients (p1, p2)
+        sensorsz (numpy.ndarray): Sensor size in millimeters (nx, ny)
+        fmm (numpy.ndarray): Focal length in millimeters (fx, fy).
             Computed from :attr:`f` and :attr:`sensorsz` (if set).
-        cmm (:class:`numpy.ndarray`): Principal point offset from the image center in millimeters (dx, dy).
+        cmm (numpy.ndarray): Principal point offset from the image center in millimeters (dx, dy).
             Computed from :attr:`c` and :attr:`sensorsz` (if set).
-        R (:class:`numpy.ndarray`): Rotation matrix equivalent of :attr:`viewdir` (3, 3).
+        R (numpy.ndarray): Rotation matrix equivalent of :attr:`viewdir` (3, 3).
             Assumes an initial camera orientation with +z pointing up, +x east, and +y north.
-        Rprime (:class:`numpy.ndarray`): Derivative of :attr:`R` with respect to :attr:`viewdir`.
-            Used for fast Jacobian (gradient) calculations in ``optimize.ObserverCameras``.
-        original_vector (:class:`numpy.ndarray`): Value of :attr:`vector` when first initialized
-        cameraMatrix (:class:`numpy.ndarray`): Camera matrix in OpenCV format
-        distCoeffs (:class:`numpy.ndarray`): Distortion coefficients (:attr:`k`, :attr:`p`) in OpenCV format
+        Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
+            Used for fast Jacobian (gradient) calculations by :class:`optimize.ObserverCameras`.
+        original_vector (numpy.ndarray): Value of :attr:`vector` when first initialized
+        cameraMatrix (numpy.ndarray): Camera matrix in OpenCV format
+        distCoeffs (numpy.ndarray): Distortion coefficients (:attr:`k`, :attr:`p`) in OpenCV format
     """
 
     def __init__(self, vector=None, xyz=(0, 0, 0), viewdir=(0, 0, 0),
@@ -220,7 +222,7 @@ class Camera(object):
         See :meth:`write` for the reverse.
 
         Arguments:
-            path (:obj:`str`): Path to JSON file
+            path (str): Path to JSON file
             **kwargs: Additional parameters passed to :meth:`Camera`.
                 These override any parameters read from **path**.
 
@@ -248,11 +250,11 @@ class Camera(object):
         and their article https://dpreview.com/articles/8095816568/sensorsizes.
 
         Arguments:
-            make (:obj:`str`): Camera make (see :attr:`Exif.make`)
-            model (:obj:`str`): Camera model (see :attr:`Exif.model`)
+            make (str): Camera make (see :attr:`Exif.make`)
+            model (str): Camera model (see :attr:`Exif.model`)
 
         Returns:
-            :obj:`tuple`: Sensor size in millimeters (nx, ny)
+            tuple: Sensor size in millimeters (nx, ny)
         """
         sensor_sizes = {
             'NIKON CORPORATION NIKON D2X': (23.7, 15.7), # https://www.dpreview.com/reviews/nikond2x/2
@@ -278,7 +280,7 @@ class Camera(object):
             new_size (iterable of :obj:`int`): Target image size (nx, ny)
 
         Returns:
-            :obj:`float`: Scale factor, or :obj:`None` if **new_size** cannot
+            float: Scale factor, or `None` if **new_size** cannot
             be achieved exactly
         """
         if all(new_size == old_size):
@@ -322,11 +324,11 @@ class Camera(object):
 
         Arguments:
             attributes (iterable of :obj:`str`): Attributes to include.
-                If :obj:`None`, defaults to the core attributes
+                If `None`, defaults to the core attributes
                 (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`).
 
         Returns:
-            :obj:`dict`: Attribute names and values
+            dict: Attribute names and values
         """
         if attributes is None:
             attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
@@ -340,16 +342,16 @@ class Camera(object):
         See :meth:`read` for the reverse.
 
         Arguments:
-            path (:obj:`str`): Path of file to write to.
-                If :obj:`None`, a JSON-formatted string is returned.
+            path (str): Path of file to write to.
+                If `None`, a JSON-formatted string is returned.
             attributes (:obj:`list` of :obj:`str`): Attributes to include.
-                If :obj:`None`, defaults to the core attributes
+                If `None`, defaults to the core attributes
                 (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`).
-            **kwargs: Additional arguments to ``helpers.write_json()``
+            **kwargs: Additional arguments to :func:`helpers.write_json()`
 
         Returns:
-            :obj:`str`: Attribute names and values as a JSON-formatted string,
-            or :obj:`None` if **path** is specified.
+            str: Attribute names and values as a JSON-formatted string,
+            or `None` if **path** is specified.
         """
         obj = self.as_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
@@ -360,7 +362,7 @@ class Camera(object):
         camera.
 
         Arguments:
-            sigma (:class:`Camera`, :obj:`dict`, or ):
+            sigma (:class:`Camera` or :obj:`dict`):
 
         Returns:
             A :class:`Camera` object
@@ -1121,7 +1123,7 @@ class Camera(object):
 
 class Exif(object):
     """
-    Container and parser for image metadata.
+    Container and parser of image metadata.
 
     Provides access to the Exchangeable image file format (Exif) metadata tags
     embedded in an image file using :doc:`piexif <piexif:index>`.
@@ -1284,7 +1286,7 @@ class Exif(object):
 
 class Image(object):
     """
-    Container for image content and the settings that gave rise to the image.
+    Photographic image and the settings that gave rise to the image.
 
     Arguments:
         path (str): Path to image

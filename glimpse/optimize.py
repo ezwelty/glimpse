@@ -1766,7 +1766,7 @@ class KeypointMatcher(object):
                 Ignored if `Image.keypoints_path` is `None`.
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
-                all available CPU cores are used.
+                defaults to `os.cpu_count()`.
             **params: Additional arguments to `optimize.detect_keypoints()`
         """
         # Enforce defaults
@@ -1825,7 +1825,7 @@ class KeypointMatcher(object):
                 processing very large image sets.
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
-                all available CPU cores are used.
+                defaults to `os.cpu_count()`.
             weights (bool): Whether to include weights in `Matches` objects,
                 computed as the inverse of the maximum descriptor-distance ratio
             filter (dict): Arguments to `optimize.Matches.filter()`.

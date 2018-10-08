@@ -6,7 +6,6 @@ import glimpse
 from glimpse.imports import (datetime, np, os)
 import glob
 import itertools
-import os
 
 # [Mac OS] Parallel may require disabling use of numpy.matmul() in Camera
 glimpse.config.use_numpy_matmul(False)
@@ -67,14 +66,16 @@ xy0 = np.array((4.988e5, 6.78186e6))
 xy = xy0 + np.vstack([xy for xy in
     itertools.product(range(-400, 300, 50), range(-400, 300, 50))])
 time_unit = datetime.timedelta(days=1)
-motion_model = glimpse.CylindricalMotionModel(aUTz_sigma=(2.0 / 0.7, 0.05, 0.2))
-# motion_model = glimpse.CartesianMotionModel(axyz_sigma=(2.0, 2.0, 0.2))
-tracker = glimpse.Tracker(
-    observers=observers, motion_model=motion_model, dem=dem, dem_sigma=3,
-    viewshed=viewshed, time_unit=time_unit)
-tracks = tracker.track(
-    xy=xy, n=5000, xy_sigma=(2, 2), vxyz_sigma=(5, 5, 0.2),
-    tile_size=(15, 15), n_processes=4, return_particles=False)
+motion_models = [glimpse.CartesianMotionModel(
+    xyi, time_unit=time_unit, dem=dem, dem_sigma=3, n=5000, xy_sigma=(2, 2),
+    vxyz_sigma=(5, 5, 0.2), axyz_sigma=(2, 2, 0.2)) for xyi in xy]
+# motion_models = [glimpse.CylindricalMotionModel(
+#     xyi, time_unit=time_unit, dem=dem, dem_sigma=3, n=5000, xy_sigma=(2, 2),
+#     vrthz_sigma=(np.sqrt(50), np.pi, 0.2), arthz_sigma=(np.sqrt(8), 0.05, 0.2))
+#     for xyi in xy]
+tracker = glimpse.Tracker(observers=observers, viewshed=viewshed)
+tracks = tracker.track(motion_models=motion_models, tile_size=(15, 15),
+    parallel=4)
 
 # ---- Plot tracks ----
 

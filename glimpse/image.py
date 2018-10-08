@@ -10,39 +10,43 @@ class Camera(object):
     A `Camera` converts between 3D world coordinates and 2D image coordinates.
 
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the horizon (xy-plane), and pointed north (+y).
-    All attributes are coerced to numpy arrays during initialization or when individually set.
-    The focal length in pixels (`f`) is calculated from `fmm` and `sensorsz` if both are provided.
-    The principal point offset in pixels (`c`) is calculated from `cmm` and `sensorsz` if both are provided.
-    If `vector` is provided, all arguments are ignored except `sensorsz`,
-    which is saved for later calculation of `fmm` and `cmm`.
+    All attributes are coerced to :class:`numpy.ndarray` during initialization or when individually set.
+    The focal length in pixels (:attr:`f`) is calculated from :attr:`fmm` and :attr:`sensorsz` if both are provided.
+    The principal point offset in pixels (:attr:`c`) is calculated from :attr:`cmm` and :attr:`sensorsz` if both are provided.
+    If :attr:`vector` is provided, all arguments are ignored except :attr:`sensorsz`,
+    which is saved for later calculation of :attr:`fmm` and :attr:`cmm`.
 
     Attributes:
-        vector (array): Flat vector of all camera attributes [xyz, viewdir, imgsz, f, c, k, p]
-        xyz (array): Position in world coordinates [x, y, z]
-        viewdir (array): View direction in degrees [yaw, pitch, roll]
+        vector (:class:`numpy.ndarray`): Vector of the core camera attributes
+            (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`)
+        xyz (:class:`numpy.ndarray`): Position in world coordinates (x, y, z)
+        viewdir (:class:`numpy.ndarray`): View direction in degrees (yaw, pitch, roll)
 
             - yaw: clockwise rotation about z-axis (0 = look north)
             - pitch: rotation from horizon (+ look up, - look down)
             - roll: rotation about optical axis (+ down right, - down left, from behind)
 
-        imgsz (array): Image size in pixels [nx, ny]
-        f (array): Focal length in pixels [fx, fy]
-        c (array): Principal point offset from center in pixels [dx, dy]
-        k (array): Radial distortion coefficients [k1, ..., k6]
-        p (array): Tangential distortion coefficients [p1, p2]
-        sensorsz (array_like): Sensor size in millimters [nx, ny]
-        fmm (array_like): Focal length in millimeters [fx, fy]
-        cmm (array_like): Principal point offset from center in millimiters [dx, dy]
-        R (array): Rotation matrix equivalent of `viewdir`.
-            Assumes the camera is initially oriented with +z pointing up, +x east, and +y north.
-        Rprime (array): Derivative of `R` with respect to `viewdir`.
-            Used for fast Jacobian (gradient) calculations in `optimize.ObserverCameras`.
-        cameraMatrix (array): Camera matrix in OpenCV format
-        distCoeffs (array): Distortion coefficients (k, p) in OpenCV format
-        original_vector (array): Original value of `vector`
+        imgsz (:class:`numpy.ndarray`): Image size in pixels (nx, ny)
+        f (:class:`numpy.ndarray`): Focal length in pixels (fx, fy)
+        c (:class:`numpy.ndarray`): Principal point offset from the image center in pixels (dx, dy)
+        k (:class:`numpy.ndarray`): Radial distortion coefficients (k1, ..., k6)
+        p (:class:`numpy.ndarray`): Tangential distortion coefficients (p1, p2)
+        sensorsz (:class:`numpy.ndarray`): Sensor size in millimeters (nx, ny)
+        fmm (:class:`numpy.ndarray`): Focal length in millimeters (fx, fy).
+            Computed from :attr:`f` and :attr:`sensorsz` (if set).
+        cmm (:class:`numpy.ndarray`): Principal point offset from the image center in millimeters (dx, dy).
+            Computed from :attr:`c` and :attr:`sensorsz` (if set).
+        R (:class:`numpy.ndarray`): Rotation matrix equivalent of :attr:`viewdir` (3, 3).
+            Assumes an initial camera orientation with +z pointing up, +x east, and +y north.
+        Rprime (:class:`numpy.ndarray`): Derivative of :attr:`R` with respect to :attr:`viewdir`.
+            Used for fast Jacobian (gradient) calculations in ``optimize.ObserverCameras``.
+        original_vector (:class:`numpy.ndarray`): Value of :attr:`vector` when first initialized
+        cameraMatrix (:class:`numpy.ndarray`): Camera matrix in OpenCV format
+        distCoeffs (:class:`numpy.ndarray`): Distortion coefficients (:attr:`k`, :attr:`p`) in OpenCV format
     """
 
-    def __init__(self, vector=None, xyz=[0, 0, 0], viewdir=[0, 0, 0], imgsz=[100, 100], f=[100, 100], c=[0, 0], k=[0, 0, 0, 0, 0, 0], p=[0, 0],
+    def __init__(self, vector=None, xyz=(0, 0, 0), viewdir=(0, 0, 0),
+        imgsz=(100, 100), f=(100, 100), c=(0, 0), k=(0, 0, 0, 0, 0, 0), p=(0, 0),
         sensorsz=None, fmm=None, cmm=None):
         self.vector = np.full(20, np.nan, dtype=float)
         self.sensorsz = sensorsz
@@ -65,28 +69,6 @@ class Camera(object):
             self.k = k
             self.p = p
         self.original_vector = self.vector.copy()
-
-    @classmethod
-    def read(cls, path, **kwargs):
-        """
-        Read Camera from JSON.
-
-        See `.write()` for the reverse.
-
-        Arguments:
-            path (str): Path to JSON file
-            **kwargs (dict): Additional arguments passed to `Camera()`.
-                These take precedence over arguments read from file.
-        """
-        json_args = helpers.read_json(path)
-        for key in json_args.keys():
-            # Conversion to float converts None to nan
-            value = np.array(json_args[key], dtype=float)
-            if np.isnan(value).all():
-                value = None
-            json_args[key] = value
-        args = helpers.merge_dicts(json_args, kwargs)
-        return cls(**args)
 
     # ---- Properties (dependent) ----
 
@@ -215,9 +197,6 @@ class Camera(object):
 
     @property
     def cameraMatrix(self):
-        """
-        OpenCV camera matrix.
-        """
         return np.array([
             [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
             [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
@@ -225,39 +204,63 @@ class Camera(object):
 
     @property
     def distCoeffs(self):
-        """
-        OpenCV distortion coefficients.
-        """
         return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
 
     @property
     def shape(self):
         return int(self.imgsz[1]), int(self.imgsz[0])
 
+    # ----- Methods (class) ----
+
+    @classmethod
+    def read(cls, path, **kwargs):
+        """
+        Read Camera from JSON.
+
+        See :meth:`write` for the reverse.
+
+        Arguments:
+            path (:obj:`str`): Path to JSON file
+            **kwargs: Additional parameters passed to :meth:`Camera`.
+                These override any parameters read from **path**.
+
+        Returns:
+            A :class:`Camera` object
+        """
+        json_args = helpers.read_json(path)
+        for key in json_args.keys():
+            # Conversion to float converts None to nan
+            value = np.array(json_args[key], dtype=float)
+            if np.isnan(value).all():
+                value = None
+            json_args[key] = value
+        args = helpers.merge_dicts(json_args, kwargs)
+        return cls(**args)
+
     # ---- Methods (static) ----
 
     @staticmethod
     def get_sensor_size(make, model):
         """
-        Get a camera model's CCD sensor width and height in mm.
+        Return the nominal sensor size of a digital camera model.
 
-        Data is from Digital Photography Review (https://dpreview.com).
-        See also https://www.dpreview.com/articles/8095816568/sensorsizes.
+        Data is from Digital Photography Review (https://dpreview.com) reviews
+        and their article https://dpreview.com/articles/8095816568/sensorsizes.
 
         Arguments:
-            make (str): Camera make (EXIF Make)
-            model (str): Camera model (EXIF Model)
+            make (:obj:`str`): Camera make (see :attr:`Exif.make`)
+            model (:obj:`str`): Camera model (see :attr:`Exif.model`)
 
-        Return:
-            list: Camera sensor width and height in mm
+        Returns:
+            :obj:`tuple`: Sensor size in millimeters (nx, ny)
         """
-        sensor_sizes = { # mm
-            'NIKON CORPORATION NIKON D2X': [23.7, 15.7], # https://www.dpreview.com/reviews/nikond2x/2
-            'NIKON CORPORATION NIKON D200': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond200/2
-            'NIKON CORPORATION NIKON D300S': [23.6, 15.8], # https://www.dpreview.com/reviews/nikond300s/2
-            'NIKON E8700': [8.8, 6.6], # https://www.dpreview.com/reviews/nikoncp8700/2
-            'Canon Canon EOS 20D': [22.5, 15.0], # https://www.dpreview.com/reviews/canoneos20d/2
-            'Canon Canon EOS 40D': [22.2, 14.8], # https://www.dpreview.com/reviews/canoneos40d/2
+        sensor_sizes = {
+            'NIKON CORPORATION NIKON D2X': (23.7, 15.7), # https://www.dpreview.com/reviews/nikond2x/2
+            'NIKON CORPORATION NIKON D200': (23.6, 15.8), # https://www.dpreview.com/reviews/nikond200/2
+            'NIKON CORPORATION NIKON D300S': (23.6, 15.8), # https://www.dpreview.com/reviews/nikond300s/2
+            'NIKON E8700': (8.8, 6.6), # https://www.dpreview.com/reviews/nikoncp8700/2
+            'Canon Canon EOS 20D': (22.5, 15.0), # https://www.dpreview.com/reviews/canoneos20d/2
+            'Canon Canon EOS 40D': (22.2, 14.8), # https://www.dpreview.com/reviews/canoneos40d/2
         }
         make_model = make.strip() + " " + model.strip()
         if make_model in sensor_sizes:
@@ -268,17 +271,16 @@ class Camera(object):
     @staticmethod
     def get_scale_from_size(old_size, new_size):
         """
-        Return the scale factor that achieves the target image size.
+        Return the scale factor that achieves a target image size.
 
         Arguments:
-            old_size (array-like): Initial image size [nx, ny]
-            new_size (array-like): Target image size [nx, ny]
+            old_size (iterable of :obj:`int`): Initial image size (nx, ny)
+            new_size (iterable of :obj:`int`): Target image size (nx, ny)
 
         Returns:
-            float: Scale factor, or `None` if target size cannot be achieved
+            :obj:`float`: Scale factor, or :obj:`None` if **new_size** cannot
+            be achieved exactly
         """
-        old_size = np.floor(np.array(old_size) + 0.5)
-        new_size = np.floor(np.array(new_size) + 0.5)
         if all(new_size == old_size):
             return 1.0
         scale_bounds = new_size / old_size
@@ -296,47 +298,72 @@ class Camera(object):
 
     def copy(self):
         """
-        Return a copy.
+        Return a copy of this camera.
 
-        The original state of the new object (`original_vector`)
-        is set to the current state of the old object.
+        The :attr:`original_vector` of the new :class:`Camera` object is set to
+        the current value of :attr:`vector`.
+
+        Returns:
+            A :class:`Camera` object
         """
         return Camera(vector=self.vector.copy(), sensorsz=self.sensorsz)
 
     def reset(self):
         """
-        Reset to original state.
+        Reset core attributes to their original values.
+
+        :attr:`vector` is reset to the value of :attr:`original_vector`.
         """
         self.vector = self.original_vector.copy()
 
     def as_dict(self, attributes=None):
         """
-        Return attributes as a dictionary.
+        Return this camera as a dictionary.
+
+        Arguments:
+            attributes (iterable of :obj:`str`): Attributes to include.
+                If :obj:`None`, defaults to the core attributes
+                (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`).
+
+        Returns:
+            :obj:`dict`: Attribute names and values
         """
         if attributes is None:
-            attributes = self.__class__.__init__.__code__.co_varnames[2:]
+            attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
         return {name: list(getattr(self, name))
             for name in attributes if hasattr(self, name)}
 
     def write(self, path=None, attributes=None, **kwargs):
         """
-        Write or return Camera as JSON.
+        Write or return this camera as JSON.
+
+        See :meth:`read` for the reverse.
 
         Arguments:
-            path (str): Path of file to write to.
-                If `None` (default), a JSON-formatted string is returned.
-            attributes (list): Camera attributes to include.
-                If `None` (default), all arguments to `Camera()` are included
-                other than `self` and `vector`.
-            **kwargs: Additional arguments to `helpers.write_json()`
+            path (:obj:`str`): Path of file to write to.
+                If :obj:`None`, a JSON-formatted string is returned.
+            attributes (:obj:`list` of :obj:`str`): Attributes to include.
+                If :obj:`None`, defaults to the core attributes
+                (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`, :attr:`k`, :attr:`p`).
+            **kwargs: Additional arguments to ``helpers.write_json()``
+
+        Returns:
+            :obj:`str`: Attribute names and values as a JSON-formatted string,
+            or :obj:`None` if **path** is specified.
         """
         obj = self.as_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
     def normal(self, sigma):
         """
-        Return a new Camera sampled from a normal distribution centered on the
-        current camera.
+        Return a new camera sampled from a normal distribution centered on this
+        camera.
+
+        Arguments:
+            sigma (:class:`Camera`, :obj:`dict`, or ):
+
+        Returns:
+            A :class:`Camera` object
         """
         if isinstance(sigma, self.__class__):
             sigma = sigma.vector
@@ -647,7 +674,7 @@ class Camera(object):
                 are named by their integer position in the stack (e.g. 0, 1, ...).
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
-                all available CPU cores are used.
+                defaults to `os.cpu_count()`.
             correction: Whether or how to apply elevation corrections (see `helpers.elevation_corrections()`)
             return_depth: Whether to return a depth map - the distance of the
                 `dem` surface measured along the camera's optical axis
@@ -1094,177 +1121,206 @@ class Camera(object):
 
 class Exif(object):
     """
-    `Exif` is a container and parser for image file metadata.
+    Container and parser for image metadata.
+
+    Provides access to the Exchangeable image file format (Exif) metadata tags
+    embedded in an image file using :doc:`piexif <piexif:index>`.
 
     Arguments:
-        path (str): Path to image file.
-            If `None` (default), an empty Exif object is returned.
+        path (str): Path to image.
+            If `None`, :attr:`tags` will be empty.
         thumbnail (bool): Whether to retain the image thumbnail
 
     Attributes:
-        tags (dict): Image file metadata, as returned by piexif.load()
-        size (array): Image size in pixels [nx, ny]
-        datetime (datetime): Capture date and time
-        fmm (float): Focal length in millimeters
-        shutter (float): Shutter speed in seconds
-        aperture (float): Aperture size as f-number
-        iso (float): Film speed
-        make (str): Camera make
-        model (str): Camera model
-    """
+        tags (dict): Exif tags returned by :func:`piexif.load`.
+            The tags are grouped by their Image File Directory (IFD):
 
+                - 'Exif' (Exif SubIFD): Image generation
+                - '0th' (IFD0): Main image
+                - '1st' (IFD1): Thumbnail image
+                - 'GPS' (GPS IFD): Position and trajectory
+                - 'Interop' (Interoperability IFD): Compatibility
+
+            The thumbnail image, if present, is stored as `bytes` in 'thumbnail'.
+
+        size (numpy.ndarray): Image size in pixels (nx, ny).
+            Parsed from 'PixelXDimension' and 'PixelYDimension'.
+        datetime (datetime.datetime): Capture date and time.
+            Parsed from 'DateTimeOriginal' and 'SubSecTimeOriginal'.
+        exposure (float): Exposure time in seconds.
+            Parsed from 'ExposureTime'.
+        aperture (float): Aperture size as the f-number
+            (https://wikipedia.org/wiki/F-number).
+            Parsed from 'FNumber'.
+        iso (float): Film speed following the ISO system
+            (https://wikipedia.org/wiki/Film_speed#ISO).
+            Parsed from 'ISOSpeedRatings'.
+        fmm (float): Focal length in millimeters.
+            Parsed from 'FocalLength'.
+        make (str): Camera make.
+            Parsed from 'Make'.
+        model (str): Camera model.
+            Parsed from 'Model'.
+    """
     def __init__(self, path=None, thumbnail=False):
         if path:
-            self.tags = piexif.load(path, key_is_name=False)
+            self.tags = piexif.load(path, key_is_name=True)
             if not thumbnail:
                 self.tags.pop('thumbnail', None)
                 self.tags.pop('1st', None)
             if self.size is None:
-                # NOTE: Is this still necessary?
-                size = np.array(PIL.Image.open(path).size, dtype=float)
-                self.set_tag('PixelXDimension', size[0])
-                self.set_tag('PixelYDimension', size[1])
+                im = gdal.Open(path)
+                self.tags['Exif']['PixelXDimension'] = im.RasterXSize
+                self.tags['Exif']['PixelYDimension'] = im.RasterYSize
         else:
             self.tags = {}
 
     @property
     def size(self):
-        width = self.get_tag('PixelXDimension')
-        height = self.get_tag('PixelYDimension')
+        width = self.parse_tag('PixelXDimension')
+        height = self.parse_tag('PixelYDimension')
         if width and height:
-            return np.array((width, height), dtype=float)
+            return np.array((width, height))
         else:
             return None
 
     @property
     def datetime(self):
-        datetime_str = self.get_tag('DateTimeOriginal')
-        subsec_str = self.get_tag('SubSecTimeOriginal')
-        if datetime_str and not subsec_str:
-            return datetime.datetime.strptime(datetime_str, '%Y:%m:%d %H:%M:%S')
-        elif datetime_str and subsec_str:
-            return datetime.datetime.strptime(datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
-        else:
+        datetime_str = self.parse_tag('DateTimeOriginal')
+        if not datetime_str:
             return None
+        subsec_str = self.parse_tag('SubSecTimeOriginal')
+        if subsec_str:
+            return datetime.datetime.strptime(
+                datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
+        else:
+            return datetime.datetime.strptime(
+                datetime_str, '%Y:%m:%d %H:%M:%S')
 
     @property
-    def shutter(self):
-        tag = self.get_tag('ExposureTime')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+    def exposure(self):
+        return self.parse_tag('ExposureTime')
 
     @property
     def aperture(self):
-        tag = self.get_tag('FNumber')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+        return self.parse_tag('FNumber')
 
     @property
     def iso(self):
-        tag = self.get_tag('ISOSpeedRatings')
-        if tag:
-            return float(tag)
-        else:
-            return None
+        return self.parse_tag('ISOSpeedRatings')
 
     @property
     def fmm(self):
-        tag = self.get_tag('FocalLength')
-        if tag:
-            return tag[0] / tag[1]
-        else:
-            return None
+        return self.parse_tag('FocalLength')
 
     @property
     def make(self):
-        return self.get_tag('Make', group='Image')
+        return self.parse_tag('Make', group='0th')
 
     @property
     def model(self):
-        return self.get_tag('Model', group='Image')
+        return self.parse_tag('Model', group='0th')
 
-    def get_tag(self, tag, group='Exif'):
+    def parse_tag(self, tag, group='Exif'):
         """
-        Return the value of a tag (or None if missing).
+        Return the parsed value of a tag.
+
+        The following strategies are applied:
+
+            - if `bytes`, decode to `str`
+            - if `tuple` of length 2 (rational), convert to `float`
+            - if `int`, convert to `float`
 
         Arguments:
             tag (str): Tag name
-            group (str): Group name ('Exif', 'Image', or 'GPS')
+            group (str): Group name ('Exif', '0th', '1st', 'GPS', or 'Interop')
+
+        Returns:
+            object: Parsed tag value, or `None` if missing
         """
-        code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group == 'Image':
-            group = '0th'
-        if group not in self.tags or code not in self.tags[group]:
+        try:
+            value = self.tags[group][tag]
+        except KeyError:
             return None
+        if isinstance(value, bytes):
+            return value.decode()
+        elif isinstance(value, tuple) and len(value) == 2:
+            return value[0] / value[1]
+        elif isinstance(value, int):
+            return float(value)
         else:
-            value = self.tags[group][code]
-            if isinstance(value, bytes):
-                value = value.decode()
             return value
-
-    def set_tag(self, tag, value, group='Exif'):
-        """
-        Set the value of a tag, adding it if missing.
-
-        Arguments:
-            tag (str): Tag name
-            value (object): Tag value
-            group (str): Group name ('Exif', 'Image', or 'GPS')
-        """
-        code = getattr(getattr(piexif, group + 'IFD'), tag)
-        if group == 'Image':
-            group = '0th'
-        if group not in self.tags:
-            self.tags[group] = {}
-        if isinstance(value, str):
-            value = value.encode()
-        self.tags[group][code] = value
 
     def dump(self):
         """
-        Return exif as bytes.
-        """
-        return piexif.dump(self.tags)
+        Return tags as bytes.
 
-    def copy(self):
+        The encoding is performed by :func:`piexif.dump`.
+        The result can be embedded into an image file, for example using
+        :func:`piexif.insert` or :meth:`PIL.Image.Image.save`.
+
+        Returns:
+            bytes: :attr:`tags` encoded as a byte string
         """
-        Return a copy.
-        """
-        exif = Exif()
-        exif.tags = self.tags
-        return exif
+        # Copy tags before modifying inplace
+        tags = copy.deepcopy(self.tags)
+        # Replace key names with codes
+        for group in self.tags.keys():
+            if group == 'thumbnail':
+                continue
+            if group not in ('0th', '1st', 'Exif', 'GPS', 'Interop'):
+                raise ValueError('Invalid group \'{0}\''.format(group))
+            ifd_name = 'ImageIFD' if group in ('0th', '1st') else group + 'IFD'
+            ifd = getattr(piexif, ifd_name)
+            for tag in self.tags[group].keys():
+                try:
+                    code = getattr(ifd, tag)
+                except AttributeError:
+                    raise ValueError('Invalid tag \'{0}\' in group \'{1}\''
+                        .format(tag, group))
+                tags[group][code] = tags[group].pop(tag)
+        # Encode to bytes
+        return piexif.dump(tags)
 
 class Image(object):
     """
-    An `Image` describes the camera settings and resulting image captured at a particular time.
+    Container for image content and the settings that gave rise to the image.
 
     Arguments:
-        cam (Camera, dict, or str): Camera object or arguments passed to `Camera()`.
-            If string, assumes a JSON file path and reads arguments from file.
-            If `imgsz` is missing, the actual size of the image is used.
-            If `f` is missing, an attempt is made to specify both `fmm` and `sensorsz`.
-            If `fmm` is missing, it is read from the metadata, and if `sensorsz` is missing,
-            `Camera.get_sensor_size()` is called with `make` and `model` read from the metadata.
+        path (str): Path to image
+        cam (:class:`Camera`, dict, or str): Camera or arguments passed to
+            Camera constructors:
+
+                - if `dict`: Arguments passed to :class:`Camera()`.
+                - if `str`: File path passed to :meth:`Camera.read`
+
+            If 'imgsz' is missing, it is read from **exif**.
+            If 'f', 'fmm', and 'sensorsz' are missing, 'fmm' is read from
+            **exif** and 'sensorsz' is gotten from :meth:`Camera.get_sensor_size`
+            with 'make' and 'model' from **exif**.
+        exif (:class:`Exif`): Image metadata.
+            If `None`, it is read from **path** with :class:`Exif()`.
+        datetime (datetime.datetime): Capture date and time.
+            If `None`, it is read from **exif.datetime**.
+        anchor (bool):
+        keypoints_path (str):
 
     Attributes:
-        path (str): Path to the image file
-        exif (Exif): Image metadata object.
-            Unless specified, it is read from `path`.
-        datetime (datetime): Capture date and time.
-            Unless specified, it is read from `exif`.
-        cam (Camera): Camera object.
+        path (str): Path to image
+        cam (:class:`Camera`): Camera
+        exif (:class:`Exif`): Image metadata
+        datetime (datetime.datetime): Capture date and time
         anchor (bool): Whether the camera parameters, especially view direction,
             are known absolutely. "Anchor" images are used as a reference for
             optimizing other images whose camera parameters are not known absolutely.
         keypoints_path (str): Path for caching image keypoints and their descriptors
             to a `pickle` file. Unless specified, defaults to `path` with a '.pkl' extension.
+        keypoints: Cached keypoints
+        I (numpy.ndarray): Cached image content
     """
 
-    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False, keypoints_path=None):
+    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False,
+        keypoints_path=None):
         self.path = path
         if exif is None:
             exif = Exif(path=path)
@@ -1403,10 +1459,10 @@ class Image(object):
         """
         Return cached keypoints.
 
-        Returns `self.keypoints` or reads them from `self.keypoints_path` with
-        `helpers.read_pickle()`.
+        Returns :attr:`keypoints` or reads them from :attr:`keypoints_path` with
+        :func:`helpers.read_pickle`.
         Keypoints are expected to be in the form produced by
-        `optimize.detect_keypoints()`.
+        :func:`optimize.detect_keypoints`.
         """
         if self.keypoints is None:
             if self.keypoints_path is None:
@@ -1423,8 +1479,8 @@ class Image(object):
         """
         Write keypoints to file.
 
-        Writes `self.keypoints` to `self.keypoints_path` with
-        `helpers.write_pickle()`.
+        Writes :attr:`keypoints` to :attr:`keypoints_path` with
+        :func:`helpers.write_pickle`.
         """
         if self.keypoints is not None and self.keypoints_path is not None:
             helpers.write_pickle(self.keypoints, path=self.keypoints_path)

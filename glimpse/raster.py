@@ -1152,13 +1152,11 @@ class RasterInterpolant(object):
         if sigmas is not None:
             # Bounds uncertainty: error propagation of z above
             # NOTE: 'a * (1 - scale) + b * scale' form underestimates uncertainty
-            z_sigma = np.sqrt(sigmas[0].Z**2 +
-                (np.sqrt(sigmas[0].Z**2 + sigmas[1].Z**2) * np.abs(scale))**2)
+            z_var = sigmas[0].Z**2 + scale**2 * (sigmas[0].Z**2 + sigmas[1].Z**2)
             # Interpolation uncertainty: nearest bound at 99.7%
             nearest_dx = np.min(np.abs(np.subtract(xi, x)))
-            zi_sigma = np.abs((1 / 3) * dz * (nearest_dx / dx))
-            # HACK: Sum uncertainties. Is this the right way?
-            sigma = raster.__class__(z_sigma + zi_sigma,
+            zi_var = ((1 / 3) * dz * (nearest_dx / dx))**2
+            sigma = raster.__class__(np.sqrt(z_var + zi_var),
                 x=means[0].xlim, y=means[0].ylim, datetime=t)
             return raster, sigma
         else:

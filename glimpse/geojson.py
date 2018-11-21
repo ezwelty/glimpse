@@ -3,7 +3,7 @@ from .backports import *
 from .imports import (np, lxml, re, warnings)
 from . import (helpers)
 
-def read(path. **kwargs):
+def read(path, **kwargs):
     obj = helpers.read_json(path, **kwargs)
     apply_geojson_coords(obj, np.atleast_2d)
     if crs:

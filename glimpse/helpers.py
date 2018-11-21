@@ -1784,6 +1784,167 @@ def angle_between_vectors(x, y):
     radians[is_nan_angle & ~is_nan_vector] = 0
     return radians
 
+def normalize_angles(x):
+    """
+    Return angles normalized between -π and π.
+    """
+    # https://stackoverflow.com/a/7869457
+    return np.mod(x + np.pi, 2 * np.pi) - np.pi
+
+# ---- Uncertainties ----
+
+def take_along_axis(a, indices, axis):
+    """
+    Return array values matching 1-d indices along axis.
+
+    Arguments:
+        a (numpy.ndarray): Source array
+        indices: Indices to take along each 1-d slice of **a**
+        axis (int): Axis to take slices along
+    """
+    # https://github.com/numpy/numpy/issues/8708
+    if axis < 0:
+       if axis >= -a.ndim:
+           axis += a.ndim
+       else:
+           raise IndexError('axis out of range')
+    ind_shape = (1,) * indices.ndim
+    ins_ndim = indices.ndim - (a.ndim - 1)   # inserted dimensions
+    dest_dims = list(range(axis)) + [None] + list(range(axis + ins_ndim, indices.ndim))
+    inds = []
+    for dim, n in zip(dest_dims, a.shape):
+        if dim is None:
+            inds.append(indices)
+        else:
+            ind_shape_dim = ind_shape[:dim] + (-1,) + ind_shape[(dim + 1):]
+            inds.append(np.arange(n).reshape(ind_shape_dim))
+    return a[tuple(inds)]
+
+def normal_weighted_mean(means, sigmas, axis=None, correlated=False):
+    """
+    Return inverse-variance weighted mean and standard deviation of
+    normal distributions.
+
+    Arguments:
+        means (array-like): Means
+        sigmas (array-like): Standard deviations
+        axis (int): Axis along wich to take the mean
+        correlated (bool): Whether variables are correlated
+    """
+    isnan_mean = np.isnan(means)
+    isnan_sigmas = np.isnan(sigmas)
+    if (isnan_mean != isnan_sigmas).any():
+        raise ValueError('mean and sigma NaNs do not match')
+    if correlated:
+        # Reorder nan to end
+        order = np.argsort(isnan_mean, axis=axis)
+        means = take_along_axis(means, order, axis=axis)
+        sigmas = take_along_axis(sigmas, order, axis=axis)
+    if (sigmas == 0).any():
+        raise ValueError('sigmas cannot be 0')
+    weights = sigmas**-2
+    weights *= np.expand_dims(1 / np.nansum(weights, axis=axis), axis)
+    wmeans = np.nansum(weights * means, axis=axis)
+    isnan = isnan_mean.all(axis=axis)
+    wmeans[isnan] = np.nan
+    variances = np.nansum(weights**2 * sigmas**2, axis=axis)
+    variances[isnan] = np.nan
+    if correlated:
+        ab = np.product(weights.take(range(2), axis), axis=axis)
+        single = np.isnan(weights.take(range(2), axis)).sum(axis=axis) == 1
+        ab[single] = 0
+        variances += 2 * np.nansum(weights.take(
+            range(2, weights.shape[axis]), axis), axis=axis) + 2 * ab
+    return wmeans, np.sqrt(variances)
+
+def circular_normal(x, weights=None, axis=None):
+    """
+    Return mean and standard deviation of circular quantities.
+
+    Missing values are ignored.
+
+    Arguments:
+        x (numpy.ndarray): Angles in radians
+        weights (numpy.ndarray): Weights, same shape as **x**
+        axis (int): Axis along which the statistics are computed
+
+    Returns:
+        numpy.ndarray: Circular means
+        numpy.ndarray: Circular standard deviations
+    """
+    if weights is None:
+        unit_yx = (
+            np.nanmean(np.sin(x), axis=axis),
+            np.nanmean(np.cos(x), axis=axis))
+    else:
+        unit_yx = (
+            weighted_nanmean(np.sin(x), weights=weights, axis=axis),
+            weighted_nanmean(np.cos(x), weights=weights, axis=axis))
+    return np.arctan2(*unit_yx), np.sqrt(-2 * np.log(np.hypot(*unit_yx)))
+
+# ---- Flotation ----
+
+def ice_flotation_thickness(bed, water, density_ice=916.7, density_water=1025):
+    """
+    Return the thickness of ice at flotation.
+
+    Arguments:
+        bed (float or numpy.ndarray): Bed elevations (m)
+        water (float or numpy.ndarray): Water elevations (m).
+            Must be scalar or same dimensions as **bed**.
+        density_ice (float): Density of ice (kg / m^3)
+        density_water (float): Density of water (kg / m^3)
+    """
+    return (water - bed) * (density_water / density_ice)
+
+def ice_thickness(ice, bed, water, density_ice=916.7, density_water=1025):
+    """
+    Return the thickness of ice, considering flotation.
+
+    Arguments:
+        ice (float or numpy.ndarray): Ice surface elevations (m)
+        bed (float or numpy.ndarray): Bed elevations (m).
+            Must be scalar or same dimensions as **ice**.
+        water (float or numpy.ndarray): Water elevations (m).
+            Must be scalar or same dimensions as **ice**.
+        density_ice (float): Density of ice (kg / m^3)
+        density_water (float): Density of water (kg / m^3)
+    """
+    hmax = ice - bed
+    hf = ice_flotation_thickness(bed, water, density_ice, density_water)
+    h = hmax
+    floating = hmax < hf
+    if np.iterable(water):
+        water = water[floating]
+    if np.iterable(ice):
+        ice = ice[floating]
+    floating_h = (ice - water) * (1 + density_ice / (density_water - density_ice))
+    if np.iterable(ice):
+        h[floating] = floating_h
+    elif floating:
+        h = floating_h
+    return h
+
+def ice_flotation_probability(ice, bed, water, density_ice=916.7, density_water=1025):
+    """
+    Return the probability of ice flotation.
+
+    Arguments:
+        ice (unumpy.uarray): Ice surface elevations (m)
+        bed (unumpy.uarray): Bed elevations (m).
+            Must be scalar or same dimensions as **ice**.
+        water (unumpy.uarray): Water elevations (m).
+            Must be scalar or same dimensions as **ice**.
+        density_ice (float): Density of ice (kg / m^3)
+        density_water (float): Density of water (kg / m^3)
+    """
+    hmax = ice - bed
+    hf = ice_flotation_thickness(bed, water, density_ice, density_water)
+    # Probability that hmax < hf
+    # https://math.stackexchange.com/a/40236
+    dh = hmax - hf
+    return scipy.stats.norm().cdf(-dh.mean / dh.sigma)
+
 # ---- Internal ----
 
 def _progress_bar(max):

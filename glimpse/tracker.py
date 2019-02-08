@@ -555,10 +555,10 @@ class Tracks(object):
             weights = np.stack(weights, axis=0)
         self.weights = weights
         self.tracker = tracker
-        self.images = np.asarray(images)
+        self.images = images if images is None else np.asarray(images)
         self.params = params
-        self.errors = np.asarray(errors)
-        self.warnings = np.asarray(warnings)
+        self.errors = errors if errors is None else np.asarray(errors)
+        self.warnings = warnings if warnings is None else np.asarray(warnings)
 
     @property
     def xyz(self):

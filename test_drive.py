@@ -14,7 +14,7 @@ os.environ['OMP_NUM_THREADS'] = '1'
 
 # ---- Constants ----
 
-DATA_DIR = 'data'
+DATA_DIR = '../../glimpse/data'
 DEM_DIR = os.path.join(DATA_DIR, 'dem')
 IMG_DIR = 'images'
 CAM_DIR = 'images_json'
@@ -75,7 +75,7 @@ motion_models = [glimpse.CartesianMotionModel(
 #     for xyi in xy]
 tracker = glimpse.Tracker(observers=observers, viewshed=viewshed)
 tracks = tracker.track(motion_models=motion_models, tile_size=(15, 15),
-    parallel=4)
+    parallel=32)
 
 # ---- Plot tracks ----
 

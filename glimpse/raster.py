@@ -769,14 +769,14 @@ class Raster(Grid):
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
 
-    def fill_crevasses(self, maximum_filter_size=5, gaussian_filter_sigma=5,
+    def fill_crevasses(self, maximum=dict(size=5), gaussian=dict(sigma=5),
         mask=None, fill=False):
         """
         Apply a maximum filter to `Z`, then perform Gaussian smoothing.
 
         Arguments:
-            maximum_filter_size (int): Kernel size of maximum filter in pixels
-            gaussian_filter_sigma (float): Standard deviation of Gaussian filter
+            maximum (dict): Further arguments to `maximum_filter()`
+            gaussian (dict): Further arguments to `gaussian_filter()`
             mask: Boolean array of cells to include (True) or exclude (False),
                 or callable that generates the mask from `self.Z`.
                 If `None`, all cells are included.
@@ -785,8 +785,8 @@ class Raster(Grid):
         if callable(mask):
             mask = mask(self.Z)
         self.Z = helpers.gaussian_filter(
-            helpers.maximum_filter(self.Z, size=maximum_filter_size, mask=mask, fill=fill),
-            sigma=gaussian_filter_sigma, mask=mask, fill=fill)
+            helpers.maximum_filter(self.Z, **maximum, mask=mask, fill=fill),
+            **gaussian, mask=mask, fill=fill)
 
     def viewshed(self, origin, correction=False):
         """

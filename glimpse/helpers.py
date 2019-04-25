@@ -1497,6 +1497,8 @@ def polygons_to_mask(polygons, size, holes=None):
     """
     Returns a boolean array of cells inside polygons.
 
+    The upper-left corner of the upper-left cell of the array is (0, 0).
+
     Arguments:
         polygons (iterable): Polygons
         size (iterable): Array size (nx, ny)

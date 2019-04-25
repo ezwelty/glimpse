@@ -696,6 +696,22 @@ class Raster(Grid):
         return helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1],
             values[is_in], self.Z.shape, fun=fun)
 
+    def rasterize_poygons(self, polygons, holes=None):
+        """
+        Convert polygons to a raster image.
+
+        Returns a boolean array of the grid cells inside the polygons.
+
+        Arguments:
+            polygons (iterable): Polygons
+            holes (iterable): Polygons representing holes in `polygons`
+        """
+        size = self.shape[0:2][::-1]
+        polygons = [self.xy_to_rowcol(xy)[:, ::-1] + 0.5 for xy in polygons]
+        if holes is not None:
+            holes = [self.xy_to_rowcol(xy)[:, ::-1] + 0.5 for xy in holes]
+        return helpers.polygons_to_mask(polygons, size=size, holes=holes)
+
     def crop(self, xlim=None, ylim=None, zlim=None):
         """
         Crop `Raster`.

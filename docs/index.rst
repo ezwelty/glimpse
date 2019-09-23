@@ -7,7 +7,7 @@ Classes
 -------
 
 .. autosummary::
-    :toctree: _autosummary
+    :toctree: autosummary
     :template: class.rst
 
     ~Camera
@@ -26,7 +26,7 @@ Modules
 -------
 
 .. autosummary::
-    :toctree: _autosummary
+    :toctree: autosummary
     :template: module.rst
 
     ~optimize

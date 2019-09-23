@@ -28,7 +28,7 @@ cd docs
 make html
 ```
 
-Open `_build/html/index.html` with a browser to check the output.
+Open `docs/build/html/index.html` with a browser to check the output.
 
 ### Docstring format
 

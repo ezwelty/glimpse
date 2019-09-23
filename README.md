@@ -17,6 +17,23 @@
   - `glimpse.Tracker`: Compute the velocity (and corresponding uncertainty) of points visible in photographs taken from one or more positions.
   - `glimpse.Raster.viewshed()`: Compute the viewshed of a position, for tracking point selection.
 
+
+## Installation
+
+One way of collecting the necessary requirements is by setting up a conda environment: requisite commands are as follows.
+
+```bash
+conda create --name glimpse
+conda activate glimpse
+conda config --env --add channels damianavila82
+conda config --env --add channels conda-forge
+conda config --env --add channels bioconda
+conda install ipython pip numpy scipy future gdal lmfit lxml matplotlib numpy opencv pandas piexif pillow pyproj scikit-learn scipy sharedmem
+pip install shapely
+pip install progress
+pip install opencv-contrib-python==3.4.2.16
+```
+
 ## Documentation
 
 ### Compilation

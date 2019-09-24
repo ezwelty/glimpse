@@ -151,7 +151,7 @@ class Grid(object):
             ylim (array-like): Crop bounds in y.
                 If `None` (default), read from file.
         """
-        raster = osgeo.gdal.Open(path, gdal.GA_ReadOnly)
+        raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         n = (raster.RasterXSize, raster.RasterYSize)
         crs = raster.GetProjection()

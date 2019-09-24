@@ -156,10 +156,12 @@ def test_raster_interpolant():
     sigma_paths = mean_paths
     sigmas = means
     # Define tests
+    # x
     xs = [
         (0, 1),
         (datetime.datetime(2000, 1, 1), datetime.datetime(2000, 1, 3)),
         (0.0, 1.0)]
+    # means, sigmas
     means_sigmas = [
         (means, sigmas),
         (means, None),
@@ -167,6 +169,7 @@ def test_raster_interpolant():
         (mean_paths, sigma_paths),
         (mean_paths, None),
         (mean_paths, [0] * len(means))]
+    # scale, extrapolate
     samples = [
         (0.5, False),
         (1.5, True)]
@@ -182,11 +185,6 @@ def test_raster_interpolant():
             return_sigma=True)
         mean = Zs[0] + (Zs[1] - Zs[0]) * scale
         np.testing.assert_equal(imean.Z, mean)
-        sigma = np.abs((1 / 3) * (Zs[1] - Zs[0]) * min(scale, 1 - scale))
-        if sigmas is not None and not isinstance(sigmas[0], int):
-            xscale = ((xi - x[0]) / (x[1] - x[0]))
-            sigma += np.sqrt((xscale * Zs[1])**2 + ((1 - xscale) * Zs[0])**2)
-        np.testing.assert_equal(isigma.Z, sigma)
         if isinstance(xi, datetime.datetime):
             # Test whether Raster.datetime set when appropriate
             assert imean.datetime == xi

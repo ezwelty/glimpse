@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (
+from .imports import (require,
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
     sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely, sharedmem,
     sys, progress, osgeo)
@@ -592,6 +592,7 @@ def match_histogram(source, template):
 
 # ---- GIS ---- #
 
+@require('osgeo')
 def crs_to_wkt(crs):
     """
     Convert coordinate reference system (CRS) to well-known text (WKT).

@@ -1,6 +1,6 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (
+from .imports import (require,
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
     osgeo, collections, pandas, sys, sharedmem)
 from . import (helpers, config)
@@ -1364,6 +1364,7 @@ class Image(object):
         """
         return Image(path=self.path, cam=self.cam.copy())
 
+    @require('osgeo')
     def read(self, box=None, cache=True):
         """
         Read image data from file.

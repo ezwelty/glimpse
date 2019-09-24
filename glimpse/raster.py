@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, scipy, osgeo, matplotlib, datetime, copy, warnings,
-    numbers)
+from .imports import (require,
+    np, scipy, osgeo, matplotlib, datetime, copy, warnings, numbers)
 from . import (helpers)
 
 class Grid(object):
@@ -139,6 +139,7 @@ class Grid(object):
         return self._Y
 
     @classmethod
+    @require('osgeo')
     def read(cls, path, d=None, xlim=None, ylim=None):
         """
         Read Grid from raster file.
@@ -501,6 +502,7 @@ class Raster(Grid):
         return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
+    @require('osgeo')
     def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None,
         nan=None):
         """
@@ -1077,6 +1079,7 @@ class Raster(Grid):
         dzdy *= 1 / self.d[1]
         return dzdx, dzdy
 
+    @require('osgeo')
     def write(self, path, nan=None, crs=None):
         """
         Write to file.

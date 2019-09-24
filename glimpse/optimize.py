@@ -1246,7 +1246,7 @@ class Cameras(object):
         """
         Return the total number of data points.
         """
-        return np.sum(control.size for control in self.controls)
+        return np.sum([control.size for control in self.controls])
 
     def observed(self, index=None):
         """

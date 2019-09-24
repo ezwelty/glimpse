@@ -2,7 +2,7 @@ from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
     np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    gdal, collections, pandas, sys, sharedmem)
+    osgeo, collections, pandas, sys, sharedmem)
 from . import (helpers, config)
 
 class Camera(object):
@@ -1171,7 +1171,7 @@ class Exif(object):
                 self.tags.pop('thumbnail', None)
                 self.tags.pop('1st', None)
             if self.size is None:
-                im = gdal.Open(path)
+                im = osgeo.gdal.Open(path)
                 self.tags['Exif']['PixelXDimension'] = im.RasterXSize
                 self.tags['Exif']['PixelYDimension'] = im.RasterYSize
         else:
@@ -1391,7 +1391,7 @@ class Image(object):
             (not has_cam_size and any(size != self.exif.size)) or
             (has_cam_size and any(size != self.cam.imgsz))):
             # Wrong size or not cached: Read image from file
-            im = gdal.Open(self.path)
+            im = osgeo.gdal.Open(self.path)
             args = dict()
             original_size = (im.RasterXSize, im.RasterYSize)
             target_size = self.cam.imgsz.astype(int) if has_cam_size else original_size

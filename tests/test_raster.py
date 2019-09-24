@@ -1,5 +1,5 @@
 from .context import *
-from glimpse.imports import (np, datetime)
+from glimpse.imports import (np, datetime, osgeo)
 import pytest
 import itertools
 
@@ -124,6 +124,27 @@ def test_raster_resize():
     rdem.resize(2)
     assert all(rdem.d == dem.d / 2)
     assert all(rdem.xlim == dem.xlim)
+
+def test_raster_io():
+    old = glimpse.Raster(
+        Z=np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
+        x=np.array((1, 2, 3), dtype=float),
+        y=np.array((3, 2, 1), dtype=float),
+        crs='+init=EPSG:4326')
+    # Write to file and read
+    tempfile = 'temp.tif'
+    old.write(tempfile)
+    new = glimpse.Raster.read(tempfile)
+    np.testing.assert_equal(old.Z, new.Z)
+    np.testing.assert_equal(old.x, new.x)
+    np.testing.assert_equal(old.y, new.y)
+    old_crs = osgeo.osr.SpatialReference()
+    old_crs.ImportFromProj4(old.crs)
+    new_crs = osgeo.osr.SpatialReference()
+    new_crs.ImportFromWkt(new.crs)
+    assert old_crs.IsSame(new_crs)
+    # Delete file
+    os.remove(tempfile)
 
 def test_raster_interpolant():
     # Read rasters

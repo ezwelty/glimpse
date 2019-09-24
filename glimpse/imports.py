@@ -41,8 +41,6 @@ import lxml.etree
 import lxml.builder
 import matplotlib
 import matplotlib.animation
-import osgeo.gdal_array
-import osgeo.osr
 import pandas
 import piexif
 import PIL.Image
@@ -57,4 +55,6 @@ import sklearn.decomposition
 
 # NOTE: Import shapely before gdal/osgeo/ogr
 # https://github.com/Toblerity/Shapely/issues/260#issue-65012660
-import gdal
+import osgeo.gdal
+import osgeo.gdal_array
+import osgeo.osr

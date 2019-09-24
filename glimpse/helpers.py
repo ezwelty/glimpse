@@ -3,7 +3,7 @@ from .backports import *
 from .imports import (
     np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
     sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely, sharedmem,
-    sys, progress)
+    sys, progress, osgeo)
 
 # ---- General ---- #
 
@@ -591,6 +591,27 @@ def match_histogram(source, template):
     return new_values[inverse_index].reshape(source.shape)
 
 # ---- GIS ---- #
+
+def crs_to_wkt(crs):
+    """
+    Convert coordinate reference system (CRS) to well-known text (WKT).
+
+    Arguments:
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
+    """
+    obj = osgeo.osr.SpatialReference()
+    if isinstance(crs, int):
+        obj.ImportFromEPSG(crs)
+    elif isinstance(crs, str):
+        if re.findall('\[', crs):
+            return crs
+        elif re.findall('=', crs):
+            obj.ImportFromProj4(crs)
+        else:
+            raise ValueError('crs string format not Proj4 or WKT')
+    else:
+        raise ValueError('crs must be int (EPSG) or str (Proj4 or WKT)')
+    return obj.ExportToWkt()
 
 def sp_transform(points, current, target):
     """

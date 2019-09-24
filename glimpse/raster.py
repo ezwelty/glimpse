@@ -1,7 +1,7 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
-from .imports import (np, scipy, gdal, matplotlib, datetime, copy, warnings,
-    numbers, osgeo)
+from .imports import (np, scipy, osgeo, matplotlib, datetime, copy, warnings,
+    numbers)
 from . import (helpers)
 
 class Grid(object):
@@ -22,12 +22,14 @@ class Grid(object):
         min (array): Minimum bounding box coordinates (x, y)
         max (array): Maximum bounding box coordinates (x, y)
         box2d (array): 2-dimensional bounding box (minx, miny, maxx, maxy)
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
     """
 
-    def __init__(self, n, x=None, y=None):
+    def __init__(self, n, x=None, y=None, crs=None):
         self.n = n
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
+        self.crs = crs
 
     def __eq__(self, other):
         return (
@@ -149,12 +151,14 @@ class Grid(object):
             ylim (array-like): Crop bounds in y.
                 If `None` (default), read from file.
         """
-        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        raster = osgeo.gdal.Open(path, gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         n = (raster.RasterXSize, raster.RasterYSize)
+        crs = raster.GetProjection()
         grid = cls(n=n,
             x=transform[0] + transform[1] * np.array([0, n[0]]),
-            y=transform[3] + transform[5] * np.array([0, n[1]]))
+            y=transform[3] + transform[5] * np.array([0, n[1]]),
+            crs=crs if crs else None)
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
         win_xsize = (cols[1] - cols[0]) + 1
         win_ysize = (rows[1] - rows[0]) + 1
@@ -456,13 +460,15 @@ class Raster(Grid):
         zlim (array): Limits of raster values (nanmin, nanmax)
         box3d (array): 3-dimensional bounding box (minx, miny, minz, maxx, maxy, maxz)
         datetime (datetime): Capture date and time
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
     """
 
-    def __init__(self, Z, x=None, y=None, datetime=None):
+    def __init__(self, Z, x=None, y=None, datetime=None, crs=None):
         self.Z = Z
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.datetime = datetime
+        self.crs = crs
         # Placeholders
         self._Zf = None
 
@@ -515,7 +521,7 @@ class Raster(Grid):
                 If `None` (default), read from file.
             datetime (datetime): Capture date and time
         """
-        raster = gdal.Open(path, gdal.GA_ReadOnly)
+        raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         grid = Grid(
             n=(raster.RasterXSize, raster.RasterYSize),
@@ -545,7 +551,8 @@ class Raster(Grid):
             if not is_float:
                 Z = Z.astype(float)
             Z[Z == nan] = np.nan
-        return cls(Z, x=xlim, y=ylim, datetime=datetime)
+        crs = raster.GetProjection()
+        return cls(Z, x=xlim, y=ylim, datetime=datetime, crs=crs if crs else None)
 
     @property
     def Z(self):
@@ -1078,24 +1085,21 @@ class Raster(Grid):
             path (str): Path to file
             nan (number): Value to interpret as missing. Any `np.nan` in `self.Z` are
                 written with this value.
-            crs: Coordinate system, either as an EPSG code (int) or Proj4 (str)
+            crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
+                If `None` (default), will use `self.crs` if set.
         """
         # top-left x, dx, rotation, top-left y, rotation, dy
         transform = (self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1])
         dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(self.Z.dtype)
-        output = gdal.GetDriverByName('Gtiff').Create(
+        output = osgeo.gdal.GetDriverByName('Gtiff').Create(
             utf8_path=path, xsize=int(self.n[0]), ysize=int(self.n[1]),
             bands=1, eType=dtype)
         output.SetGeoTransform(transform)
+        if crs is None:
+            crs = self.crs
         if crs is not None:
-            srs = osgeo.osr.SpatialReference()
-            if isinstance(crs, int):
-                srs.ImportFromEPSG(crs)
-            elif isinstance(crs, str):
-                srs.ImportFromProj4(crs)
-            else:
-                raise ValueError('crs must be an integer or string')
-            output.SetProjection(srs.ExportToWkt())
+            wkt = helpers.crs_to_wkt(crs)
+            output.SetProjection(wkt)
         if nan is not None:
             output.GetRasterBand(1).SetNoDataValue(nan)
             is_nan = np.isnan(self.Z)

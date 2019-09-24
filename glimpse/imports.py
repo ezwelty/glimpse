@@ -1,3 +1,5 @@
+# ---- Standard ----
+
 import collections
 import copy
 try:
@@ -10,25 +12,35 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
-import cv2
 import datetime
-# NOTE: Import shapely before gdal/osgeo/ogr
-# https://github.com/Toblerity/Shapely/issues/260#issue-65012660
-import shapely
-import shapely.geometry
-import shapely.ops
-import gdal
 import gzip
 import json
+import math
+import numbers
+import os
+import re
+import shutil
+import sys
+import time
+import traceback
+import warnings
+
+# ---- Required ----
+
+import numpy as np
+import scipy.interpolate
+import scipy.ndimage
+import scipy.optimize
+import scipy.spatial
+
+# ---- Optional ----
+
+import cv2
 import lmfit
 import lxml.etree
 import lxml.builder
-import math
 import matplotlib
 import matplotlib.animation
-import numbers
-import numpy as np
-import os
 import osgeo.gdal_array
 import osgeo.osr
 import pandas
@@ -37,15 +49,12 @@ import PIL.Image
 import PIL.ImageDraw
 import progress.bar
 import pyproj
-import re
-import scipy.interpolate
-import scipy.ndimage
-import scipy.optimize
-import scipy.spatial
+import shapely
+import shapely.geometry
+import shapely.ops
 import sharedmem
-import shutil
 import sklearn.decomposition
-import sys
-import time
-import traceback
-import warnings
+
+# NOTE: Import shapely before gdal/osgeo/ogr
+# https://github.com/Toblerity/Shapely/issues/260#issue-65012660
+import gdal

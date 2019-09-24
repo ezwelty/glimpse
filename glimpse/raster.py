@@ -25,9 +25,7 @@ class Grid(object):
     """
 
     def __init__(self, n, x=None, y=None):
-        self.n = np.atleast_1d(n).astype(int)
-        if len(self.n) < 2:
-            self.n = np.repeat(self.n, 2)
+        self.n = n
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
 
@@ -36,6 +34,47 @@ class Grid(object):
             (self.shape == other.shape) and
             (self.xlim == other.xlim).all() and
             (self.ylim == other.ylim).all())
+
+    # ---- Properties ---- #
+
+    @property
+    def n(self):
+        return self._n
+
+    @n.setter
+    def n(self, value):
+        value = np.atleast_1d(value)
+        if value.shape == (1, ):
+            value = np.concatenate((value, value))
+        if value.shape != (2, ):
+            raise ValueError('Grid dimensions must be scalar or (2, )')
+        if not np.issubdtype(value.dtype, np.integer):
+            raise ValueError('Grid dimensions must be integer')
+        if (value <= 0).any():
+            raise ValueError('Grid dimensions must be positive')
+        self._n = value
+
+    @property
+    def xlim(self):
+        return self._xlim
+
+    @xlim.setter
+    def xlim(self, value):
+        value = self._parse_limits(value)
+        if not hasattr(self, 'xlim') or not np.array_equal(self.xlim, value):
+            self._xlim = value
+            self._clear_cache(['x', 'X'])
+
+    @property
+    def ylim(self):
+        return self._ylim
+
+    @ylim.setter
+    def ylim(self, value):
+        value = self._parse_limits(value)
+        if not hasattr(self, 'ylim') or not np.array_equal(self.ylim, value):
+            self._ylim = value
+            self._clear_cache(['y', 'Y'])
 
     # ---- Properties (dependent) ---- #
 
@@ -131,9 +170,20 @@ class Grid(object):
 
     # ---- Methods (private) ----
 
-    def _clear_cache(self, attributes=['x', 'X', 'y', 'Y']):
+    def _clear_cache(self, attributes=('x', 'X', 'y', 'Y')):
+        attributes = tuple(attributes)
         for attr in attributes:
             setattr(self, '_' + attr, None)
+
+    def _parse_limits(self, value):
+        value = np.atleast_1d(value)
+        if value.shape != (2, ):
+            raise ValueError('Grid limits must be (2, )')
+        if not np.issubdtype(value.dtype, np.number):
+            raise ValueError('Grid limits must be numeric')
+        if value[0] == value[1]:
+            raise ValueError('Grid limits cannot be equal')
+        return value
 
     def _parse_xy(self, obj, dim):
         """
@@ -167,6 +217,20 @@ class Grid(object):
             raise ValueError('Could not parse limits from x, y inputs')
         return [xlim, x, X]
 
+    def _shift_xy(self, dx=None, dy=None):
+        if dx is not None:
+            self._xlim += dx
+            if self._x is not None:
+                self._x += dx
+            if self._X is not None:
+                self._X += dx
+        if dy is not None:
+            self._ylim += dy
+            if self._y is not None:
+                self._y += dy
+            if self._Y is not None:
+                self._Y += dy
+
     # ---- Methods ---- #
 
     def copy(self):
@@ -183,6 +247,16 @@ class Grid(object):
             scale (float): Fraction of current size
         """
         self.n = np.floor(self.n * scale + 0.5).astype(int)
+
+    def shift(self, dx=None, dy=None):
+        """
+        Shift grid position.
+
+        Arguments:
+            dx (float): Shift in x
+            dy (float): Shift in y
+        """
+        self._shift_xy(dx=dx, dy=dy)
 
     def inbounds(self, xy, grid=False):
         """
@@ -481,10 +555,9 @@ class Raster(Grid):
     def Z(self, value):
         value = np.atleast_2d(value)
         if hasattr(self, '_Z'):
+            self._clear_cache(['Zf'])
             if value.shape != self._Z.shape:
                 self._clear_cache(['x', 'X', 'y', 'Y'])
-            if value is not self._Z:
-                self._clear_cache(['Zf'])
         self._Z = value
 
     # ---- Properties (dependent) ----
@@ -744,6 +817,28 @@ class Raster(Grid):
                 (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic)
         """
         self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=order)
+
+    def shift(self, dx=None, dy=None, dz=None):
+        """
+        Shift position.
+
+        Arguments:
+            dx (float): Shift in x
+            dy (float): Shift in y
+            dz (float): Shift in z
+        """
+        self._shift_xy(dx=dx, dy=dy)
+        if dz is not None:
+            # Prevent reset of cached interpolants
+            self._Z += dz
+        if self._Zf is not None:
+            # Shift cached interpolants
+            if dx is not None:
+                self._Zf.grid[0][:] += dx
+            if dy is not None:
+                self._Zf.grid[1][:] += dy
+            if dy is not None:
+                self._Zf.values += dz
 
     def fill_circle(self, center, radius, value=np.nan):
         """

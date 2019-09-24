@@ -1188,12 +1188,12 @@ class Cameras(object):
         self.group_masks = []
         for group, idx in enumerate(self.group_indices):
             bounds = np.column_stack((
-                np.column_stack(cam_bounds[i][:, 0] for i in idx).max(axis=1),
-                np.column_stack(cam_bounds[i][:, 1] for i in idx).min(axis=1)))
+                np.column_stack([cam_bounds[i][:, 0] for i in idx]).max(axis=1),
+                np.column_stack([cam_bounds[i][:, 1] for i in idx]).min(axis=1)))
             mask, bounds = self.__class__.parse_params(self.group_params[group], default_bounds=bounds)
             labels = self.__class__._lmfit_labels(mask, cam=None, group=group)
             # NOTE: Initial group values as mean of cameras
-            values = np.nanmean(np.row_stack(self.cams[i].vector[mask] for i in idx), axis=0)
+            values = np.nanmean(np.row_stack([self.cams[i].vector[mask] for i in idx]), axis=0)
             for label, value, bound in zip(labels, values, bounds[mask]):
                 self.params.add(name=label, value=value, vary=True, min=bound[0], max=bound[1])
             self.group_masks.append(mask)

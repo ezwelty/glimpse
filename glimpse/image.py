@@ -1407,8 +1407,8 @@ class Image(object):
                 args['win_xsize'] = int(round((box[2] - box[0]) * scale[0]))
                 args['yoff'] = int(round(box[1] * scale[1]))
                 args['win_ysize'] = int(round((box[3] - box[1]) * scale[1]))
-            I = np.stack((im.GetRasterBand(i + 1).ReadAsArray(**args)
-                for i in range(im.RasterCount)), axis=2)
+            I = np.stack([im.GetRasterBand(i + 1).ReadAsArray(**args)
+                for i in range(im.RasterCount)], axis=2)
             if I.shape[2] == 1:
                 I = I.squeeze(axis=2)
             if cache:

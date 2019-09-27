@@ -3,6 +3,6 @@ python:
     - 3.6
     - 3.7
 install:
-    - pip install .[io][dev]
+    - pip install .[io,dev]
 script:
     - pytest tests

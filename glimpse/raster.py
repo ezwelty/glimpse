@@ -1074,9 +1074,7 @@ class Raster(Grid):
             array: Derivative of `self.Z` with respect to x
             array: Derivative of `self.Z` with respect to y
         """
-        dzdy, dzdx = np.gradient(self.Z)
-        dzdx *= 1 / self.d[0]
-        dzdy *= 1 / self.d[1]
+        dzdy, dzdx = np.gradient(self.Z, self.d[1], self.d[0])
         return dzdx, dzdy
 
     @require('osgeo')

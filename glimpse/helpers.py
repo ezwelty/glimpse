@@ -604,10 +604,10 @@ def crs_to_wkt(crs):
     if isinstance(crs, int):
         obj.ImportFromEPSG(crs)
     elif isinstance(crs, str):
-        if re.findall('\[', crs):
+        if re.findall(r'\[', crs):
             return crs
-        elif re.findall('=', crs):
-            obj.ImportFromProj4(crs)
+        elif re.findall(r':', crs):
+            obj.ImportFromProj4(crs.lower())
         else:
             raise ValueError('crs string format not Proj4 or WKT')
     else:

@@ -52,7 +52,7 @@ setuptools.setup(
     ],
     extras_require = {
         'io': [
-            'gdal ~= 2.2'
+            'gdal ~= 2.2, < 2.4.2'
         ],
         'dev': [
             'pytest',

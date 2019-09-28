@@ -130,7 +130,7 @@ def test_raster_io():
         Z=np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
         x=np.array((1, 2, 3), dtype=float),
         y=np.array((3, 2, 1), dtype=float),
-        crs='+init=EPSG:4326')
+        crs='+init=epsg:4326')
     # Write to file and read
     tempfile = 'temp.tif'
     old.write(tempfile)

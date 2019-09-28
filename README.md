@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.com/ezwelty/glimpse.svg?branch=master)](https://travis-ci.com/ezwelty/glimpse)
+[![codecov](https://codecov.io/gh/ezwelty/glimpse/branch/master/graph/badge.svg)](https://codecov.io/gh/ezwelty/glimpse)
+
 # `glimpse` Glacier Image Particle Sequencer
 
 `glimpse` is a Python package built for quickly and precisely analyzing time-lapse photographs of glaciers. Some useful things one can do with glimpse:

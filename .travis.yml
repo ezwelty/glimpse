@@ -15,5 +15,8 @@ before_install:
   - cd $TRAVIS_BUILD_DIR
 install:
   - pip install .[io,dev]
+  - pip install pytest-cov codecov
 script:
-  - pytest tests
+  - pytest --cov=glimpse tests
+after_success:
+  - codecov

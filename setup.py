@@ -44,7 +44,7 @@ setuptools.setup(
         'piexif ~= 1.0',
         'Pillow ~= 5.0.0',
         'progress ~= 1.5',
-        'pyproj ~= 1.9',
+        'pyproj ~= 2.4',
         'scikit-learn ~= 0.19',
         'scipy ~= 1.0',
         'shapely ~= 1.6',

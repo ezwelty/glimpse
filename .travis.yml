@@ -1,18 +1,30 @@
-language: python
-python:
-  - 3.6
-  - 3.7
+language: shell
+env:
+  - PYTHON=3.6
+  - PYTHON=3.7
+os:
+  - linux
+  - osx
+  - windows
 before_install:
-  - cd $HOME
-  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-  - bash miniconda.sh -b -p $HOME/miniconda
-  - source $HOME/miniconda/etc/profile.d/conda.sh
-  - hash -r
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then
+      choco install miniconda3
+      export PATH="/c/Tools/miniconda3:/c/Tools/miniconda3/Scripts:/c/Tools/miniconda3/Library/bin:$PATH"
+    else
+      if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $HOME/miniconda.sh;
+      elif [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O $HOME/miniconda.sh;
+      fi
+      bash $HOME/miniconda.sh -b -p $HOME/miniconda
+      source $HOME/miniconda/etc/profile.d/conda.sh
+      hash -r
+    fi
   - conda config --set always_yes yes --set changeps1 no
   - conda update -q conda
-  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION pip gdal==2.4.1
+  - conda create -q -n test-environment -c conda-forge python=$PYTHON pip gdal==2.4.1
   - conda activate test-environment
-  - cd $TRAVIS_BUILD_DIR
 install:
   - pip install .[io,dev]
   - pip install pytest-cov codecov

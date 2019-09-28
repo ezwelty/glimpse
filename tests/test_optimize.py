@@ -8,7 +8,7 @@ def test_ransac_polynomial():
     model = glimpse.optimize.Polynomial(data, deg=1)
     inliers = (0, 1, 2, 3, 6)
     rvalues, rindex = glimpse.optimize.ransac(model,
-        sample_size=2, max_error=0.5, min_inliers=2, iterations=10)
+        sample_size=2, max_error=0.5, min_inliers=2, iterations=100)
     assert set(rindex) == set(inliers)
 
 def test_ransac_camera_viewdir(tol=0.1):

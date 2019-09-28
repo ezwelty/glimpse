@@ -6,8 +6,11 @@ before_install:
   - cd $HOME
   - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
   - bash miniconda.sh -b -p $HOME/miniconda
-  - export PATH=$HOME/miniconda/bin:$PATH
-  - conda create -n test-environment -c conda-forge -y python=$TRAVIS_PYTHON_VERSION pip gdal==2.4.1
+  - source $HOME/miniconda/etc/profile.d/conda.sh
+  - hash -r
+  - conda config --set always_yes yes --set changeps1 no
+  - conda update -q conda
+  - conda create -q -n test-environment -c conda-forge python=$TRAVIS_PYTHON_VERSION pip gdal==2.4.1
   - conda activate test-environment
   - cd $TRAVIS_BUILD_DIR
 install:

@@ -42,7 +42,7 @@ setuptools.setup(
         'opencv-contrib-python ~= 3.0, < 3.4.3',
         'pandas ~= 0.22',
         'piexif ~= 1.0',
-        'Pillow ~= 5.0.0',
+        'Pillow ~= 5.0',
         'progress ~= 1.5',
         'pyproj ~= 2.4',
         'scikit-learn ~= 0.19',

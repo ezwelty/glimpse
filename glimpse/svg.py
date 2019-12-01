@@ -339,6 +339,20 @@ def _line(*args, start, end, fill='none', stroke='#ED1F24', stroke_width=0.25, *
     kwargs = helpers.merge_dicts(defaults, kwargs)
     return E.line(*args, **kwargs)
 
+def _polygon(*args, points, fill='none', stroke='#000000', stroke_width=1, stroke_miterlimit=10, **kwargs):
+    if not isinstance(points, str):
+        points = ' '.join(
+            [','.join(x) for x in points.astype(str)]
+        )
+    defaults = {
+        'fill': fill, 'stroke': stroke,
+        'stroke_width': str(stroke_width),
+        'stroke_miterlimit': str(stroke_miterlimit),
+        'points': points
+    }
+    kwargs = helpers.merge_dicts(defaults, kwargs)
+    return E.polygon(*args, **kwargs)
+
 def _write_svg(xml, path=None, pretty_print=False, xml_declaration=False, doctype=False, encoding='utf-8', **kwargs):
     if doctype is True:
         doctype = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">'

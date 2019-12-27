@@ -23,12 +23,16 @@
 
 ## Installation
 
-`glimpse` has not yet been released for distribution. To install with all optional requirements, clone the repo and run `pip` locally:
+`glimpse` has not yet been released for distribution, but can still be installed with `pip` from the source code on GitHub:
 
 ```bash
-git clone https://github.com/ezwelty/glimpse
-cd glimpse
-pip install -e .[io,dev]
+pip install https://github.com/ezwelty/glimpse/tarball/master#egg=glimpse[io]
+```
+
+To install without `gdal` support (used for reading and writing raster data), use:
+
+```bash
+pip install https://github.com/ezwelty/glimpse/tarball/master#egg=glimpse
 ```
 
 ## Documentation

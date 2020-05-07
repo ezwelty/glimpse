@@ -1,5 +1,3 @@
-from __future__ import (print_function, division, unicode_literals)
-from .backports import *
 from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
     warnings, datetime)
 from . import (helpers, config, image)

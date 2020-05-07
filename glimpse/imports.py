@@ -2,16 +2,8 @@
 
 import collections
 import copy
-try:
-    import copyreg
-except ImportError:
-    # Python 2
-    import copy_reg as copyreg
-try:
-    # Python 2
-    import cPickle as pickle
-except ImportError:
-    import pickle
+import copyreg
+import pickle
 import datetime
 import gzip
 import json

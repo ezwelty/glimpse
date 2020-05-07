@@ -1,5 +1,3 @@
-from __future__ import (print_function, division, unicode_literals)
-from .backports import *
 from .imports import (
     np, lmfit, sys, pandas, re, xml, inspect, scipy)
 from . import (helpers, Camera, optimize)

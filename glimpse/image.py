@@ -774,7 +774,7 @@ class Camera(object):
 
     def _radial_distortion(self, r2):
         """
-        Compute the radial distortion multipler `dr`.
+        Compute the radial distortion multiplier `dr`.
 
         Arguments:
             r2 (array): Squared radius of camera coordinates (Nx1)

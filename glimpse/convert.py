@@ -1,10 +1,177 @@
 from __future__ import (print_function, division, unicode_literals)
 from .backports import *
 from .imports import (
-    np, lmfit, sys, lxml, pandas, re)
+    np, lmfit, sys, pandas, re, xml, inspect, scipy)
 from . import (helpers, Camera, optimize)
 
-class MatlabCamera(object):
+class _IncomingPoints(object):
+    """
+    Points control for external cameras with camera-to-image distortion models.
+
+    Projects normalized camera coordinates into `xcam` (observed) and `cam`
+    (predicted) image coordinates. The normalized camera coordinates are
+    generated from `cam`, so it is important that it have reasonable initial
+    parameters.
+
+    Attributes:
+        xcam (_IncomingCamera): External camera model
+        cam (Camera): Camera model (initial guess)
+        step (int): Pixel grid spacing for control points
+    """
+
+    def __init__(self, xcam, cam, step=10):
+        self.xcam = xcam
+        self.cam = cam
+        # Cache grid in normalized camera coordinates to avoid inversion errors
+        # NOTE: Requires that xcam and cam have the same image size
+        self.xy = cam._image2camera(cam.grid(step=step, mode='points'))
+
+    @property
+    # HACK: Required for optimize.Cameras
+    def size(self):
+        return len(self.xy)
+
+    @property
+    # HACK: Required for optimize.Cameras
+    def cams(self):
+        return [self.cam]
+
+    # HACK: index required for optimize.Cameras
+    def observed(self, index=None):
+        if index is None:
+            index = slice(None)
+        return self.xcam._camera2image(self.xy[index])
+
+    # HACK: index required for optimize.Cameras
+    def predicted(self, index=None):
+        if index is None:
+            index = slice(None)
+        return self.cam._camera2image(self.xy[index])
+
+class _OutgoingPoints(_IncomingPoints):
+    """
+    Points control for external cameras with image-to-camera distortion models.
+
+    Projects image coordinates from `xcam` (observed) to normalized camera
+    coordinates, then into `cam` image coordinates (predicted).
+
+    Attributes:
+        xcam (_ExternalCamera): External camera model
+        cam (Camera): Camera model (initial guess)
+        step (int): Pixel grid spacing for control points
+    """
+
+    def __init__(self, xcam, cam, step=10):
+        self.xcam = xcam
+        self.cam = cam
+        # NOTE: Requires that xcam and cam have the same image size
+        self.uv = cam.grid(step=step, mode='points')
+        self.xy = xcam._image2camera(self.uv)
+
+    # HACK: index required for optimize.Cameras
+    def observed(self, index=None):
+        if index is None:
+            index = slice(None)
+        return self.uv[index]
+
+class _ExternalCamera(object):
+    """
+    Template for an external camera model.
+    """
+
+    def __init__(self):
+        pass
+
+    @property
+    def _points(self):
+        pass
+
+    def _as_camera_initial(self):
+        """
+        Return initial camera model.
+        """
+        pass
+
+    def _as_camera_estimate(self, params, step=10):
+        cam = self._as_camera_initial()
+        points = self._points(self, cam, step=step)
+        mask, _ = optimize.Cameras.parse_params(params)
+        def fun(x):
+            cam.vector[mask] = x
+            return (points.predicted() - points.observed()).ravel()
+        fit = scipy.optimize.least_squares(fun=fun, x0=cam.vector[mask])
+        cam.vector[mask] = fit.x
+        return cam
+
+    def _cameras(self, params, step=10):
+        """
+        Get Cameras model for optimization.
+
+        Arguments:
+            params (dict): Camera parameters to optimize
+            step (int): Pixel grid spacing for control points
+        """
+        cam = self._as_camera_initial()
+        control = self._points(self, cam, step)
+        return optimize.Cameras([cam], [control], [params])
+
+    def as_camera(self, step=10):
+        """
+        Return equivalent camera model.
+
+        Arguments:
+            step (int): Pixel grid spacing for control points
+        """
+        pass
+
+class _IncomingCamera(_ExternalCamera):
+    """
+    Template for an external camera with a camera-to-image distortion model.
+    """
+
+    def __init__(self):
+        pass
+
+    @property
+    def _points(self):
+        return _IncomingPoints
+
+    def _camera2image(self, xy):
+        """
+        Project camera to image coordinates.
+
+        Arguments:
+            xy (array): Camera coordinates (Nx2)
+        
+        Returns:
+            array: Image coordinates (Nx2), in a system where the top left
+                corner of the top left pixel is (0, 0).
+        """
+        pass
+
+class _OutgoingCamera(_ExternalCamera):
+    """
+    Template for an external camera with a image-to-camera distortion model.
+    """
+
+    @property
+    def _points(self):
+        return _OutgoingPoints
+
+    def _image2camera(self, uv):
+        """
+        Project image to camera coordinates.
+
+        Arguments:
+            uv (array): Image coordinates (Nx2), in a system where the top left
+                corner of the top left pixel is (0, 0).
+        
+        Returns:
+            array: Normalized camera coordinates (Nx2)
+        """
+        pass
+
+class MatlabCamera(_IncomingCamera):
     """
     Camera model used by the Camera Calibration Toolbox for Matlab.
 
@@ -14,53 +181,54 @@ class MatlabCamera(object):
         nx (float): Image size in pixels (x)
         ny (float): Image size in pixels (y)
         fc (iterable): Focal length in pixels (x, y)
-        cc (iterable): Principal point in pixels (x, y),
-            in an image coordinate system where the center of the top left pixel
-            is (0, 0)
+        cc (iterable): Principal point in pixels (x, y), in an image coordinate 
+            system where the center of the top left pixel is (0, 0)
         kc (iterable): Image distortion coefficients (k1, k2, p1, p2, k3)
         alpha_c (float): Skew coefficient defining the angle between the x and y
             pixel axes
     """
 
-    def __init__(self, nx, ny, fc, cc=None, kc=[0, 0, 0, 0, 0], alpha_c=0):
+    def __init__(self, nx, ny, fc, cc=None, kc=(0, 0, 0, 0, 0), alpha_c=0):
         self.nx, self.ny = nx, ny
         self.fc = fc
         if cc is None:
-            cc = (np.asarray((nx, ny)) - 1) / 2
+            cc = (nx - 1) / 2, (ny - 1) / 2
         self.cc = cc
         self.kc = kc
         self.alpha_c = alpha_c
 
     @classmethod
-    def read_report(cls, path, std=False):
+    def from_report(cls, path, sigmas=False):
         """
-        Read from calibration report.
+        Read from calibration report (Calib_Result.m).
 
         Arguments:
             path (str): Path to report
-            std (bool): Whether to read parameter means (False)
+            sigmas (bool): Whether to read parameter means (False)
                 or standard deviations (True)
         """
         with open(path, mode='r') as fp:
             txt = fp.read()
         def parse_param(param, length):
             if length == 1:
-                pattern = '^' + param + ' = (.*)' + ';'
+                pattern = r'^{param} = (.*);'.format(param=param)
             else:
-                pattern = '^' + param + ' = \[ ' + ' ; '.join(['(.*)'] * length) + ' \];'
+                pattern = r'^{param} = \[ {groups} \];'.format(
+                    param=param, groups=' ; '.join(['(.*)'] * length))
             values = re.findall(pattern, txt, flags=re.MULTILINE)[0]
             # Error bounds are ~3 times standard deviations
-            scale = 1 / 3 if std else 1
+            scale = 1 / 3 if sigmas else 1
             if length == 1:
                 return float(values) * scale
             else:
-                return [float(values) * scale for value in values]
-        if std:
+                return [float(value) * scale for value in values]
+        if sigmas:
             lengths = dict(fc_error=2, cc_error=2, alpha_c_error=1, kc_error=5)
         else:
             lengths = dict(fc=2, cc=2, alpha_c=1, kc=5, nx=1, ny=1)
-        kwargs = {param: parse_param(param, length) for param, length in lengths.items()}
-        if std:
+        kwargs = {param: parse_param(param, length)
+            for param, length in lengths.items()}
+        if sigmas:
             kwargs = {key.split('_error')[0]: kwargs[key] for key in kwargs}
             kwargs = helpers.merge_dicts(kwargs, dict(nx=None, ny=None))
         return cls(**kwargs)
@@ -68,7 +236,7 @@ class MatlabCamera(object):
     def _camera2image(self, xy):
         # Compute lens distortion
         r2 = np.sum(xy**2, axis=1)
-        dr = self.kc[0] * r2 + self.kc[1] * r2 * r2 + self.k[4] * r2 * r2 * r2
+        dr = self.kc[0] * r2 + self.kc[1] * r2**2 + self.kc[4] * r2**3
         xty = xy[:, 0] * xy[:, 1]
         dtx = 2 * self.kc[2] * xty + self.kc[3] * (r2 + 2 * xy[:, 0]**2)
         dty = self.kc[2] * (r2 + 2 * xy[:, 1]**2) + 2 * self.kc[3] * xty
@@ -77,37 +245,43 @@ class MatlabCamera(object):
         dxy[:, 0] += dxy[:, 0] * dr + dtx
         dxy[:, 1] += dxy[:, 1] * dr + dty
         # Project to image
-        return np.column_stack((
-            self.fc[0] * (dxy[:, 0] + self.alpha_d * dxy[:, 1]) + self.cc[0],
+        uv = np.column_stack((
+            self.fc[0] * (dxy[:, 0] + self.alpha_c * dxy[:, 1]) + self.cc[0],
             self.fc[0] * dxy[:, 1] + self.cc[1]))
+        # Top left corner of top left pixel is (-0.5, -0.5)
+        uv += (0.5, 0.5)
+        return uv
 
-    def residuals(self, cam, uv=None):
-        if uv is None:
-            uv = cam.grid(step=10, mode='points')
-        xy = cam._image2camera(uv)
-        return self._camera2image(xy) - uv
+    def _as_camera_initial(self):
+        return Camera(
+            imgsz=(self.nx, self.ny),
+            f=self.fc,
+            c=(
+                (self.cc[0] + 0.5) - self.nx / 2,
+                (self.cc[1] + 0.5) - self.ny / 2
+            ),
+            k=(self.kc[0], self.kc[1], self.kc[4]),
+            p=(self.kc[2], self.kc[3])
+        )
 
-    def as_camera(self):
+    def as_camera(self, step=10):
         """
         Return equivalent `Camera` object.
 
-        A non-zero `alpha_c` is not currently supported.
+        If `alpha_c` is non-zero, the conversion is estimated numerically.
+        Otherwise, the conversion is exact.
         """
-        # Initialize camera
-        cam = Camera(
-            imgsz=(self.nx, self.ny), f=self.fc,
-            c=np.asarray(self.cc) + 0.5 - np.asarray((self.nx, self.ny)) / 2,
-            k=(self.kc[0], self.kc[1], self.kc[4]), p=(self.kc[2], self.kc[3]))
-        # Convert camera
         if self.alpha_c:
-            raise ValueError('Fitting with non-zero alpha_c not supported')
-        return cam
+            params = {'f': True, 'c': True, 'k': True}
+            return self._as_camera_estimate(params=params, step=step)
+        else:
+            return self._as_camera_initial()
 
-class PhotoScanCamera(object):
+class AgisoftCamera(_IncomingCamera):
     """
-    Frame camera model used by Agisoft Photoscan.
+    Frame camera model used by Agisoft software (PhotoScan, Metashape, Lens).
 
-    See http://www.agisoft.com/pdf/photoscan-pro_1_4_en.pdf (Appendix C).
+    See https://www.agisoft.com/pdf/metashape-pro_1_6_en.pdf (Appendix C).
 
     Attributes:
         width (float): Image size in pixels (x)
@@ -118,96 +292,93 @@ class PhotoScanCamera(object):
         k1 (float): Radial distortion coefficient #1
         k2 (float): Radial distortion coefficient #2
         k3 (float): Radial distortion coefficient #3
+        k4 (float): Radial distortion coefficient #4
         p1 (float): Tangential distortion coefficient #1
         p2 (float): Tangential distortion coefficient #2
         b1 (float): Affinity coefficient
         b2 (float): Non-orthogonality (skew) coefficient
     """
 
-    def __init__(self, width, height, f, cx, cy, k1=0, k2=0, k3=0, k4=0, b1=0, b2=0, p1=0, p2=0, p3=0, p4=0):
+    def __init__(self, width, height, f, cx, cy, k1=0, k2=0, k3=0, k4=0, p1=0,
+        p2=0, b1=0, b2=0):
         self.width, self.height = width, height
         self.f = f
         self.cx, self.cy = cx, cy
         self.k1, self.k2, self.k3, self.k4 = k1, k2, k3, k4
+        self.p1, self.p2 = p1, p2
         self.b1, self.b2 = b1, b2
-        self.p1, self.p2, self.p3, self.p4 = p1, p2, p3, p4
+
+    @classmethod
+    def from_xml(cls, path):
+        tree = xml.etree.ElementTree.parse(path)
+        calibration = next((e for e in tree.iter('calibration')), None)
+        if not calibration:
+            raise ValueError('No camera model found')
+        params = {}
+        for child in calibration:
+            params[child.tag] = child.text
+        if params['projection'] != 'frame':
+            raise ValueError(
+                'Found unsupported camera model type: ' + params['projection'])
+        kwargs = { key: float(params[key])
+            for key in inspect.getfullargspec(cls).args[1:] if key in params }
+        return cls(**kwargs) 
 
     def _camera2image(self, xy):
         # Compute lens distortion
         r2 = np.sum(xy**2, axis=1)
-        dr = self.k1 * r2 + self.k2 * r2 * r2 + self.k3 * r2 * r2 * r2 + self.k4 * r2 * r2 * r2 * r2
+        dr = self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3 + self.k4 * r2**4
         xty = xy[:, 0] * xy[:, 1]
-        p34 = 1 + self.p3 * r2 + self.p4 * r2 * r2
-        dtx = (self.p1 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p2 * xty) * p34
-        dty = (self.p2 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p1 * xty) * p34
+        dtx = self.p1 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p2 * xty
+        dty = self.p2 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p1 * xty
         # Apply lens distortion
         dxy = xy.copy()
         dxy[:, 0] += dxy[:, 0] * dr + dtx
         dxy[:, 1] += dxy[:, 1] * dr + dty
         # Project to image
         return np.column_stack((
-            self.imgsz[0] * 0.5 + self.cx + dxy[:, 0] * (self.f + self.b1) + dxy[:, 1] * self.b2,
-            self.imgsz[1] * 0.5 + self.cy + dxy[:, 1] * self.f))
+            (self.width * 0.5 + self.cx + dxy[:, 0] * (self.f + self.b1) + 
+                dxy[:, 1] * self.b2),
+            self.height * 0.5 + self.cy + dxy[:, 1] * self.f))
 
-    def residuals(self, cam, uv=None):
-        if uv is None:
-            uv = cam.grid(step=10, mode='points')
-        xy = cam._image2camera(uv)
-        return self._camera2image(xy) - uv
+    def _as_camera_initial(self):
+        return Camera(
+            imgsz=(self.width, self.height),
+            f=(self.f + self.b1, self.f),
+            c=(self.cx, self.cy),
+            k=(self.k1, self.k2, self.k3),
+            p=(self.p2, self.p1))
 
-    def as_camera(self, step=10, return_fit=False):
+    def as_camera(self, step=10):
         """
         Return equivalent `Camera` object.
 
-        If either `k4`, `p3`, `p4` or `b2` is non-zero, the conversion is
-        estimated numerically. A non-zero `b2` is not currently supported.
+        If either `k4` or `b2` is non-zero, the conversion is estimated
+        numerically. Otherwise, the conversion is exact.
 
         Arguments:
             step: Sample grid spacing for all (float) or each (iterable) dimension
-            return_fit (bool): Whether to also return the `lmfit.MinimizerResult`
         """
-        # Initialize camera
-        cam = Camera(
-            imgsz=(self.width, self.height),
-            f=(self.f - self.b1, self.f), c=(self.cx, self.cy),
-            k=(self.k1, self.k2, self.k3), p=(self.p2, self.p1))
-        # Convert camera
-        if any((self.k4, self.p3, self.p4, self.b2)):
-            # Initialize image coordinates
-            uv = cam.grid(step=step, mode='points')
-            # Fit Camera
-            params = dict()
+        if any((self.k4, self.b2)):
+            params = {}
             if self.k4:
-                params['k'] = [3, 4, 5]
-            if self.p3 or self.p4:
-                params['p'] = True
+                params['k'] = True
             if self.b2:
-                raise ValueError('Fitting with non-zero b2 not supported')
-            lmfit_params, apply_params = optimize.build_lmfit_params([cam], [params])
-            def residuals(params):
-                apply_params(params)
-                return self.residuals(cam=cam, uv=uv)
-            def callback(params, iter, resid, *args, **kwargs):
-                err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
-                sys.stdout.write('\r' + str(err))
-                sys.stdout.flush()
-            fit = lmfit.minimize(params=lmfit_params, fcn=residuals, iter_cb=callback)
-            sys.stdout.write('\n')
-            apply_params(fit.params)
+                params['f'] = True
+                params['c'] = True
+                params['k'] = True
+            return self._as_camera_estimate(params=params, step=step)
         else:
-            fit = None
-        if return_fit:
-            return cam, fit
-        else:
-            return cam
+            return self._as_camera_initial()
 
-class PhotoModelerCamera(object):
+class PhotoModelerCamera(_OutgoingCamera):
     """
     Camera model used by EOS Systems PhotoModeler.
 
     See "Lens Distortion Formulation" in the software help.
 
     Attributes:
+        imgsz (iterable): Desired image size (nx, ny)
         focal (float): Focal length in mm
         xp (float): Principal point in mm (x)
         yp (float): Principal point in mm (y)
@@ -220,7 +391,9 @@ class PhotoModelerCamera(object):
         p2 (float): Decentering distortion coefficient #2
     """
 
-    def __init__(self, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0, p2=0):
+    def __init__(self, imgsz, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0,
+        p2=0):
+        self.imgsz = imgsz
         self.focal = focal
         self.xp, self.yp = xp, yp
         self.fw, self.fh = fw, fh
@@ -228,35 +401,49 @@ class PhotoModelerCamera(object):
         self.p1, self.p2 = p1, p2
 
     @classmethod
-    def read_report(cls, path, std=False):
+    def from_report(cls, path, imgsz, sigmas=False):
         """
         Read from camera calibration project report.
 
         Arguments:
             path (str): Path to report
-            std (bool): Whether to read parameter means (False)
-                or standard deviations (True)
+            imgsz (iterable): Desired image size (nx, ny)
+            sigmas (bool): Whether to read parameter means (False) or
+                standard deviations (True)
         """
-        args = ('focal', 'xp', 'yp', 'fw', 'fh', 'k1', 'k2', 'k3', 'p1', 'p2')
-        labels = ('Focal Length', 'Xp', 'Yp', 'Fw', 'Fh', 'K1', 'K2', 'K3', 'P1', 'P2')
+        params = dict(
+            focal='Focal Length',
+            xp='Xp', yp='Yp',
+            fw='Fw', fh='Fh',
+            k1='K1', k2='K2', k3='K3',
+            p1='P1', p2='P2'
+        )
         with open(path, mode='r') as fp:
             txt = fp.read()
-        if std:
-            matches = [re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt) for label in labels]
-            kwargs = {arg: float(match[0]) if match else None for arg, match in zip(args, matches)}
+        if sigmas:
+            matches = [
+            re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt)
+                for label in params.values()]
+            kwargs = {arg: float(match[0]) if match else None
+                for arg, match in zip(params.keys(), matches)}
         else:
-            matches = [re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt) for label in labels]
-            kwargs = {arg: float(match[0]) for arg, match in zip(args, matches)}
-        return cls(**kwargs)
+            matches = [re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt)
+                for label in params.values()]
+            kwargs = {arg: float(match[0])
+                for arg, match in zip(params.keys(), matches)}
+        return cls(imgsz=imgsz, **kwargs)
 
-    def _image2camera(self, uv, imgsz):
+    def _image2camera(self, uv):
         # Convert image coordinates to mm relative to principal point
-        xy = uv * (self.fw, self.fh) * (1 / imgsz) - (self.xp, self.yp)
+        xy = np.column_stack((
+            uv[:, 0] * self.fw / self.imgsz[0] - self.xp,
+            uv[:, 1] * self.fh / self.imgsz[1] - self.yp,
+        ))
         # Flip y (+y is down in image, but up in PM "photo space")
         xy[:, 1] *= -1
         # Remove lens distortion
         r2 = np.sum(xy**2, axis=1)
-        dr = self.k1 * r2 + self.k2 * r2 * r2 + self.k3 * r2 * r2 * r2
+        dr = self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3
         xty = xy[:, 0] * xy[:, 1]
         # NOTE: p1 and p2 are reversed
         dtx = self.p1 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p2 * xty
@@ -268,125 +455,61 @@ class PhotoModelerCamera(object):
         # Normalize
         xy *= (1 / self.focal)
         return xy
+    
+    def _as_camera_initial(self):
+        return Camera(
+            imgsz=self.imgsz,
+            sensorsz=(self.fw, self.fh),
+            fmm=self.focal,
+            cmm=(self.xp - self.fw / 2, self.yp - self.fh / 2)
+        )
 
-    def residuals(self, cam, uv=None):
-        if uv is None:
-            uv = cam.grid(step=10, mode='points')
-        xy = self._image2camera(uv, cam.imgsz)
-        return cam._camera2image(xy) - uv
-
-    def as_camera(self, imgsz, step=10, return_fit=False):
+    def as_camera(self, step=10):
         """
         Return equivalent `Camera` object.
 
         If either `k1`, `k2`, `k3`, `p1`, or `p2` is non-zero, the conversion is
-        estimated numerically.
+        estimated numerically. Otherwise, the conversion is exact.
 
         Arguments:
-            imgsz (iterable): Image size in pixels (x, y)
             step: Sample grid spacing for all (float) or each (iterable) dimension
-            return_fit (bool): Whether to also return the `lmfit.MinimizerResult`
         """
-        imgsz = np.asarray(imgsz)
-        sensorsz = np.array((self.fw, self.fh))
-        # Initialize camera
-        cam = Camera(
-            imgsz=imgsz, sensorsz=sensorsz,
-            fmm=self.focal, cmm=(self.xp, self.yp) - sensorsz / 2)
-        # Convert camera
-        k = (self.k1, self.k2, self.k3)
-        p = (self.p1, self.p2)
+        k = self.k1, self.k2, self.k3
+        p = self.p1, self.p2
         if any(k + p):
-            # Initialize image coordinates
-            uv = cam.grid(step=step, mode='points')
-            # Fit Camera
-            params = dict()
+            params = {}
             if any(k):
-                params['k'] = [i for i, k in enumerate((self.k1, self.k2, self.k3)) if k]
+                params['k'] = True
             if any(p):
                 params['p'] = True
-            lmfit_params, apply_params = optimize.build_lmfit_params([cam], [params])
-            def residuals(params):
-                apply_params(params)
-                return self.residuals(cam=cam, uv=uv)
-            def callback(params, iter, resid, *args, **kwargs):
-                err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
-                sys.stdout.write('\r' + str(err))
-                sys.stdout.flush()
-            fit = lmfit.minimize(params=lmfit_params, fcn=residuals, iter_cb=callback)
-            sys.stdout.write('\n')
-            apply_params(fit.params)
+            return self._as_camera_estimate(params=params, step=step)
         else:
-            fit = None
-        if return_fit:
-            return cam, fit
-        else:
-            return cam
+            return self._as_camera_initial()
 
-def as_camera_stderr(mean, std, n=100, return_vectors=False, **kwargs):
+def as_camera_sigma(mean, sigma, n=100, **kwargs):
     """
     Convert to `Camera` and propagate uncertainties.
 
     Arguments:
         mean: `glimpse.convert` camera object with parameter means
-        std: `glimpse.convert` camera object (same type as `mean`) with
+        sigma: `glimpse.convert` camera object (same type as `mean`) with
             parameter standard deviations
         n (int): Number of iterations to use for estimating uncertainties
-        return_vectors (bool): Whether to return results of all iterations
         **kwargs: Arguments to `mean.as_camera()`
 
     Returns:
         `glimpse.Camera`: Parameter means
         `glimpse.Camera`: Parameter standard deviations
-        array (optional): `glimpse.Camera.vector` for each iteration (n, 20).
-            Only provided if `return_vectors` is True.
     """
     mean_args = mean.__dict__.copy()
-    std_args = std.__dict__.copy()
+    sigma_args = sigma.__dict__.copy()
     mean_cam = mean.as_camera(**kwargs)
     vectors = []
-    for i in range(n):
-        args = {key: mean_args[key] + (np.random.normal(scale=std_args[key]) if std_args[key] else 0) for key in mean_args}
+    for _ in range(n):
+        args = { key: mean_args[key] + (np.random.normal(scale=sigma_args[key])
+            if sigma_args[key] else 0) for key in mean_args }
         new_mean = type(mean)(**args)
         vectors.append(new_mean.as_camera(**kwargs).vector)
     vectors = np.array(vectors)
-    std_cam = Camera(vector=np.std(vectors, axis=0))
-    if return_vectors:
-        return mean_cam, std_cam, vectors
-    else:
-        return mean_cam, std_cam
-
-def pm_points_to_ps_markers(points_path, camera_labels, imgsz, markers_path=None):
-    pm = pandas.read_csv(points_path, skiprows=3).loc[:, ('Object Point ID', 'Photo #', 'X (pixels)', 'Y (pixels)')]
-    pm.columns = ('point_id', 'photo_id', 'x', 'y')
-    pm['camera_id'] = pm.photo_id - 1
-    point_ids = list(pm.point_id.unique())
-    pm['marker_id'] = [point_ids.index(id) for id in pm.point_id]
-    from lxml.builder import E as e
-    cameras = [e.camera(id=str(id), sensor_id='0', label=label, enabled='1')
-        for id, label in zip(pm.camera_id.unique(), camera_labels)]
-    markers = [e.marker(id=str(row.marker_id), label=str(row.point_id))
-        for i, row in pm.loc[:, ('marker_id', 'point_id')].drop_duplicates().iterrows()]
-    frame_markers = list()
-    for id in pm.marker_id.unique():
-        locations = [e.location(camera_id=str(int(row.camera_id)), pinned='1', x=str(row.x), y=str(row.y))
-            for i, row in pm[pm.marker_id == id].iterrows()]
-        frame_markers.append(e.marker(marker_id=str(id), *locations))
-    xml = e.document(
-        e.chunk(
-            e.sensors(
-                e.sensor(
-                    e.resolution(width=str(imgsz[0]), height=str(imgsz[1])),
-                    id='0')),
-            e.cameras(*cameras),
-            e.markers(*markers),
-            e.frames(
-                e.frame(
-                    e.markers(*frame_markers),
-                    id='0'))))
-    txt = lxml.etree.tostring(xml, pretty_print=True, xml_declaration=True, encoding='UTF-8').decode()
-    if markers_path:
-        with open(markers_path, mode='w') as fp:
-            fp.write(txt)
-    else:
-        return txt
+    sigma_cam = Camera(vector=np.std(vectors, axis=0))
+    return mean_cam, sigma_cam

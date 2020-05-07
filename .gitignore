@@ -6,12 +6,14 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vscode/
 
 # Python generated files
 *.pyc
 __pycache__/
 .cache/
 .pytest_cache/
+.mypy_cache/
 
 # Pyenv
 .python-version

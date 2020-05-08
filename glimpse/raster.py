@@ -1,6 +1,6 @@
-from .imports import (require,
-    np, scipy, osgeo, matplotlib, datetime, copy, warnings, numbers)
-from . import (helpers)
+from .imports import (require, np, scipy, osgeo, matplotlib, datetime, copy,
+    warnings, numbers)
+from . import helpers
 
 class Grid(object):
     """
@@ -213,7 +213,7 @@ class Grid(object):
             # TODO: Check if equally spaced monotonic
             dx = np.diff(obj[0:2])
             xlim = np.append(obj[0] - dx / 2, obj[-1] + dx / 2)
-        else:
+        else: 
             x = None
             xlim = obj
         if len(xlim) != 2:
@@ -237,7 +237,7 @@ class Grid(object):
     # ---- Methods ---- #
 
     def copy(self):
-        return Grid(n=self.n.copy(), xlim=self.xlim.copy(), y=self.ylim.copy())
+        return Grid(n=self.n.copy(), x=self.xlim.copy(), y=self.ylim.copy())
 
     def resize(self, scale):
         """
@@ -282,7 +282,7 @@ class Grid(object):
                 (xy[0] >= self.min[0]) & (xy[0] <= self.max[0]),
                 (xy[1] >= self.min[1]) & (xy[1] <= self.max[1]))
         else:
-            return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis = 1)
+            return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis=1)
 
     def snap_xy(self, xy, centers=False, edges=False, inbounds=True):
         """
@@ -393,10 +393,10 @@ class Grid(object):
         )))
         xlim = box[0::2]
         if self.xlim[0] > self.xlim[1]:
-             xlim = xlim[::-1]
+            xlim = xlim[::-1]
         ylim = box[1::2]
         if self.ylim[0] > self.ylim[1]:
-             ylim = ylim[::-1]
+            ylim = ylim[::-1]
         # Convert xy limits to grid indices
         xy = np.column_stack((xlim, ylim))
         rowcol = self.xy_to_rowcol(xy, snap=True)
@@ -962,7 +962,7 @@ class Raster(Grid):
         dxy[first_ring[is_zero]] = np.nan
         elevation = dz / dxy
         # Compute max number of points on most distant ring
-        N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
+        # N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
         # Initialize result raster
         vis = np.zeros(self.Z.size, dtype=bool)
         # Loop through rings

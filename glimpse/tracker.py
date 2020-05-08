@@ -1,6 +1,7 @@
 from .imports import (np, cv2, warnings, datetime, scipy, matplotlib, sys,
-    traceback, collections)
-from . import (helpers, raster, config)
+    traceback)
+from .raster import Raster
+from . import helpers, config
 
 class Tracker(object):
     """
@@ -244,8 +245,8 @@ class Tracker(object):
             else:
                 sigmas = np.full((ntimes, 6), np.nan)
             if return_particles:
-                particles = np.full((ntimes, n, 6), np.nan)
-                weights = np.full((ntimes, n), np.nan)
+                particles = np.full((ntimes, ntracks, 6), np.nan)
+                weights = np.full((ntimes, ntracks), np.nan)
             error = None
             all_warnings = None
             try:
@@ -1038,7 +1039,7 @@ class CartesianMotionModel(MotionModel):
             xy (array-like): Points (x, y)
         """
         obj = self.dem_sigma if sigma else self.dem
-        if isinstance(obj, raster.Raster):
+        if isinstance(obj, Raster):
             return obj.sample(xy)
         else:
             return np.full(len(xy), obj)

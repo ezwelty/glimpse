@@ -1,6 +1,6 @@
-from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, copy, pickle,
-    warnings, datetime)
-from . import (helpers, config, image)
+from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, warnings,
+    datetime)
+from . import helpers, config, image
 
 # ---- Controls ----
 
@@ -103,13 +103,13 @@ class Points(object):
         defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
         if unselected is not None:
             if not isinstance(unselected, dict):
-                unselected=dict(color=unselected)
+                unselected = dict(color=unselected)
             unselected = helpers.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
                 uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
         if selected is not None:
             if not isinstance(selected, dict):
-                selected=dict(color=selected)
+                selected = dict(color=selected)
             selected = helpers.merge_dicts(defaults, selected)
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
@@ -203,7 +203,7 @@ class Lines(object):
         if self.directions and not self.is_static():
             raise ValueError('Camera has changed position (xyz) and `directions=True`')
         xy_step = 1 / self.cam.f.mean()
-        uv_edges = self.cam.edges(step = self.cam.imgsz / 2)
+        uv_edges = self.cam.edges(step=self.cam.imgsz / 2)
         xy_edges = self.cam._image2camera(uv_edges)
         xy_box = np.hstack((np.min(xy_edges, axis=0), np.max(xy_edges, axis=0)))
         puvs = []
@@ -269,14 +269,14 @@ class Lines(object):
         # Plot image lines
         if observed is not None:
             if not isinstance(observed, dict):
-                observed=dict(color=observed)
+                observed = dict(color=observed)
             observed = helpers.merge_dicts(dict(color='green'), observed)
             for uv in self.uvs:
                 matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
         # Plot world lines
         if predicted is not None:
             if not isinstance(predicted, dict):
-                predicted=dict(color=predicted)
+                predicted = dict(color=predicted)
             predicted = helpers.merge_dicts(dict(color='yellow'), predicted)
             puvs = self.project()
             for puv in puvs:
@@ -285,9 +285,6 @@ class Lines(object):
         if selected is not None or unselected is not None:
             if index is None:
                 index = slice(None)
-                other_index = slice(0)
-            else:
-                other_index = np.delete(np.arange(self.size), index)
             uv = self.observed()
             if not predicted:
                 puvs = self.project()
@@ -298,13 +295,13 @@ class Lines(object):
             defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
             if unselected is not None:
                 if not isinstance(unselected, dict):
-                    unselected=dict(color=unselected)
+                    unselected = dict(color=unselected)
                 unselected = helpers.merge_dicts(defaults, unselected)
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **unselected)
             if selected is not None:
                 if not isinstance(selected, dict):
-                    selected=dict(color=selected)
+                    selected = dict(color=selected)
                 selected = helpers.merge_dicts(defaults, selected)
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
@@ -328,7 +325,7 @@ class Lines(object):
         scale = self.cam.imgsz / self.imgsz
         if any(scale != 1):
             for i, uv in enumerate(self.uvs):
-                self.uvs[i] = self.uvs[i] * scale
+                self.uvs[i] = uv * scale
             self.uvi *= scale
             self.imgsz = self.cam.imgsz.copy()
 
@@ -444,13 +441,13 @@ class Matches(object):
         defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
         if unselected is not None:
             if not isinstance(unselected, dict):
-                unselected=dict(color=unselected)
+                unselected = dict(color=unselected)
             unselected = helpers.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
                 uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
         if selected is not None:
             if not isinstance(selected, dict):
-                selected=dict(color=selected)
+                selected = dict(color=selected)
             selected = helpers.merge_dicts(defaults, selected)
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
@@ -1481,7 +1478,8 @@ class ObserverCameras(object):
 
     def build_matches(self, *args, **kwargs):
         self.matcher.build_matches(*args, **kwargs)
-        self.matches = self.matcher.matches_as_type(RotationMatchesXYZ, copy=False)
+        self.matcher.convert_matches(RotationMatchesXYZ)
+        self.matches = self.matcher.matches
 
     def fit(self, anchor_weight=1e6, method='bfgs', **params):
         """
@@ -1863,7 +1861,6 @@ class KeypointMatcher(object):
                 matching_images[i] = np.unique(np.concatenate((m, iseq)))
         # Filter matched image pairs
         if imgs is not None:
-            empty = np.array([])
             for i, m in enumerate(matching_images):
                 matching_images[i] = m[np.isin(m, imgs)]
         # Define parallel process
@@ -2002,9 +1999,9 @@ class KeypointMatcher(object):
         keep = np.union1d(self.matches.row, self.matches.col)
         drop = np.setdiff1d(all, keep)
         # Remove row and column of each dropped image
-        kept_rows, new_row = np.unique(np.concatenate((self.matches.row, keep)), return_inverse=True)
+        _, new_row = np.unique(np.concatenate((self.matches.row, keep)), return_inverse=True)
         self.matches.row = new_row[:-len(keep)]
-        kept_cols, new_col = np.unique(np.concatenate((self.matches.col, keep)), return_inverse=True)
+        _, new_col = np.unique(np.concatenate((self.matches.col, keep)), return_inverse=True)
         self.matches.col = new_col[:-len(keep)]
         # Resize matches matrix
         n = len(self.images) - len(drop)

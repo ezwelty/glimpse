@@ -1,5 +1,6 @@
-from .imports import (np, scipy, datetime, matplotlib, os)
-from . import (helpers, raster)
+from .imports import np, scipy, datetime, matplotlib
+from .raster import Grid
+from . import helpers
 
 class Observer(object):
     """
@@ -39,12 +40,12 @@ class Observer(object):
         n = self.images[0].cam.imgsz.astype(int)
         if (n != self.images[0].cam.imgsz).any():
             raise ValueError('Image sizes (imgsz) are not integer')
-        self.grid = raster.Grid(n=n, x=(0, n[0]), y=(0, n[1]))
+        self.grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
     def test_images(images,cam_tol=1e-3):
         for img in images[1:]:
-            if np.linalg.norm(img.cam.xyz-images[0].cam.xyz)>cam_tol:
+            if np.linalg.norm(img.cam.xyz-images[0].cam.xyz) > cam_tol:
                 raise ValueError('Positions (xyz) are not equal')
             if any(img.cam.f != images[0].cam.f):
                 raise ValueError('Focal lengths (f) are not equal')

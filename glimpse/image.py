@@ -1,7 +1,6 @@
-from .imports import (require,
-    np, warnings, datetime, piexif, PIL, scipy, shutil, os, matplotlib, copy,
-    osgeo, collections, pandas, sys, sharedmem)
-from . import (helpers, config)
+from .imports import (require, np, warnings, datetime, piexif, PIL, scipy,
+    shutil, os, matplotlib, copy, osgeo, pandas, sharedmem)
+from . import helpers, config
 
 class Camera(object):
     """
@@ -634,7 +633,7 @@ class Camera(object):
 
     def xyz_to_spherical(self, xyz, directions=False):
         if not directions:
-            xyz = xyz - self.cam.xyz
+            xyz = xyz - self.xyz
         r = np.sqrt(np.sum(xyz ** 2, axis=1))
         azimuth_iso = np.arctan2(xyz[:, 1], xyz[:, 0])
         altitude_iso = np.arccos(xyz[:, 2] / r)
@@ -872,15 +871,15 @@ class Camera(object):
         has_three_roots = R**2 < Q**3
         r = np.full(len(xy), np.nan)
         if np.any(has_three_roots):
-          th = np.arccos(R[has_three_roots] * Q**-1.5)
-          r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
+            th = np.arccos(R[has_three_roots] * Q**-1.5)
+            r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
         has_one_root = ~has_three_roots
         if np.any(has_one_root):
-          A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
-          B = np.zeros(A.shape)
-          not_zero = A != 0
-          B[not_zero] = Q / A[not_zero]
-          r[has_one_root] = A + B
+            A = - np.sign(R[has_one_root]) * (np.abs(R[has_one_root]) + np.sqrt(R[has_one_root]**2 - Q**3))**(1.0 / 3)
+            B = np.zeros(A.shape)
+            not_zero = A != 0
+            B[not_zero] = Q / A[not_zero]
+            r[has_one_root] = A + B
         return np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
 
     def _undistort_lookup(self, xy, density=1):
@@ -937,7 +936,7 @@ class Camera(object):
                 to exit early, or `0` to disable early exit
         """
         uxy = xy # initial guess
-        for n in range(iterations):
+        for _ in range(iterations):
             r2 = np.sum(uxy**2, axis=1)
             if any(self.p) and not any(self.k):
                 uxy = xy - self._tangential_distortion(uxy, r2)
@@ -1503,7 +1502,7 @@ class Image(object):
         """
         I = self.read()
         if extent is None:
-            extent=(0, I.shape[1], I.shape[0], 0)
+            extent = (0, I.shape[1], I.shape[0], 0)
         matplotlib.pyplot.imshow(I, origin=origin, extent=extent, **params)
 
     def set_plot_limits(self):

@@ -1,5 +1,5 @@
-from .imports import (np, lxml, re, warnings)
-from . import (helpers)
+from .imports import np, lxml, re, warnings
+from . import helpers
 
 # ---- Parse SVG file ----
 
@@ -99,7 +99,7 @@ def _parse_nodes(nodes, scale=None):
     """
     branch = {}
     tags = [node.tag for node in nodes]
-    for i in range(len(nodes)):
+    for i, _ in enumerate(nodes):
         tag = tags[i]
         # Use @id, tag-<counter>, or tag
         if 'id' in nodes[i].attrib:
@@ -108,7 +108,7 @@ def _parse_nodes(nodes, scale=None):
             id = tag + '-' + str(i)
         else:
             id = tag
-        if len(nodes[i]):
+        if nodes[i]:
             # Iterage on parent node
             branch[id] = _parse_nodes(nodes[i], scale=scale)
         else:

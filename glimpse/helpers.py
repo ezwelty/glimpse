@@ -581,7 +581,7 @@ def match_histogram(source, template):
     Returns:
         array: Transformed `source` array
     """
-    s_values, s_quantiles, inverse_index = compute_cdf(source, return_inverse=True)
+    _, s_quantiles, inverse_index = compute_cdf(source, return_inverse=True)
     if isinstance(template, np.ndarray):
         template = compute_cdf(template, return_inverse=False)
     # Interpolate new values based on source and template quantiles

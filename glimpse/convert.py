@@ -1,6 +1,5 @@
-from .imports import (
-    np, lmfit, sys, pandas, re, xml, inspect, scipy)
-from . import (helpers, Camera, optimize)
+from .imports import np, re, xml, inspect, scipy
+from . import Camera, optimize
 
 class _IncomingPoints(object):
     """
@@ -88,7 +87,7 @@ class _ExternalCamera(object):
         """
         Return initial camera model.
         """
-        pass
+        return Camera()
 
     def _as_camera_estimate(self, params, step=10):
         cam = self._as_camera_initial()
@@ -228,7 +227,7 @@ class MatlabCamera(_IncomingCamera):
             for param, length in lengths.items()}
         if sigmas:
             kwargs = {key.split('_error')[0]: kwargs[key] for key in kwargs}
-            kwargs = helpers.merge_dicts(kwargs, dict(nx=None, ny=None))
+            kwargs['nx'], kwargs['ny'] = None, None
         return cls(**kwargs)
 
     def _camera2image(self, xy):

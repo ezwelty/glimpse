@@ -1,13 +1,15 @@
-from .imports import (np, lxml, re, warnings)
-from . import (helpers)
+from .imports import np
+from . import helpers
 
-def read(path, **kwargs):
+def read(path, crs=None, key=None, **kwargs):
     obj = helpers.read_json(path, **kwargs)
-    apply_geojson_coords(obj, np.atleast_2d)
+    helpers.apply_geojson_coords(obj, np.atleast_2d)
     if crs:
-        apply_geojson_coords(obj, sp_transform, current=4326, target=crs)
+        helpers.apply_geojson_coords(
+            obj, helpers.sp_transform, current=4326, target=crs)
     if key:
-        obj['features'] = dict((feature['properties'][key], feature) for feature in obj['features'])
+        obj['features'] = dict((feature['properties'][key], feature)
+            for feature in obj['features'])
     return obj
 
 def items(obj):
@@ -139,7 +141,7 @@ def coordinates_apply(obj, fun, depth=None, pad=False, **kwargs):
                     coords = [coords]
         if n <= 0:
             # Apply function
-            return fun(x, **kwargs)
+            return fun(coords, **kwargs)
         else:
             return apply_level(coords, level=n)
     # Apply to all coordinates

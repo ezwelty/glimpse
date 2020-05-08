@@ -483,6 +483,136 @@ class PhotoModelerCamera(_OutgoingCamera):
         else:
             return self._as_camera_initial()
 
+class OpenCVCamera(_IncomingCamera):
+    """
+    Frame camera model used by OpenCV.
+
+    See https://docs.opencv.org/master/d9/d0c/group__calib3d.html#details.
+    Distortion coefficients τx and τy are not supported.
+
+    Attributes:
+        imgsz (iterable): Image size in pixels (nx, ny)
+        fx (float): Focal length in pixels (x)
+        fy (float): Focal length in pixels (y)
+        cx (float): Principal point in pixels (x). Defaults to the image center.
+        cy (float): Principal point in pixels (y). Defaults to the image center.
+        k1 (float): Radial distortion coefficient #1
+        k2 (float): Radial distortion coefficient #2
+        k3 (float): Radial distortion coefficient #3
+        k4 (float): Radial distortion coefficient #4
+        k5 (float): Radial distortion coefficient #5
+        k6 (float): Radial distortion coefficient #6
+        p1 (float): Tangential distortion coefficient #1
+        p2 (float): Tangential distortion coefficient #2
+        s1 (float): Thin prism distortion coefficient #1
+        s2 (float): Thin prism distortion coefficient #2
+        s3 (float): Thin prism distortion coefficient #3
+        s4 (float): Thin prism distortion coefficient #4
+    """
+
+    def __init__(self, imgsz, fx, fy, cx=None, cy=None, k1=0, k2=0, k3=0, k4=0,
+        k5=0, k6=0, p1=0, p2=0, s1=0, s2=0, s3=0, s4=0):
+        self.imgsz = imgsz
+        self.fx, self.fy = fx, fy
+        self.cx = cx = imgsz[0] / 2 if cx is None else cx
+        self.cy = cy = imgsz[1] / 2 if cy is None else cy
+        self.k1, self.k2, self.k3 = k1, k2, k3
+        self.k4, self.k5, self.k6 = k4, k5, k6
+        self.p1, self.p2 = p1, p2
+        self.s1, self.s2, self.s3, self.s4 = s1, s2, s3, s4
+    
+    @staticmethod
+    def parse_camera_matrix(x):
+        """
+        Return fx, fy, cx, and cy from camera matrix.
+
+        Arguments:
+            x (array-like): Camera matrix [[fx 0 cx], [0 fy cy], [0 0 1]]
+        
+        Returns:
+            dict: fx, fy, cx, and cy
+        """
+        x = np.asarray(x)
+        return {'fx': x[0, 0], 'fy': x[1, 1], 'cx': x[0, 2], 'cy': x[1, 2]}
+
+    @staticmethod
+    def parse_distortion_coefficients(x):
+        """
+        Return k*, p*, s*, and τ* from distortion coefficients vector.
+
+        Arguments:
+            x (iterable): Distortion coefficients
+                [k1, k2, p1, p2, k3, k4, k5, k6, s1, s2, s3, s4, τx, τy]
+        """
+        x = np.asarray(x)
+        labels = ('k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6', 's1', 's2',
+            's3', 's4', 'τx', 'τy')
+        return {key: x[i] if i < len(x) else 0 for i, key in enumerate(labels)}
+
+    @classmethod
+    def from_xml(cls, path, imgsz):
+        tree = xml.etree.ElementTree.parse(path)
+        params = {'imgsz': imgsz}
+        matrix = next((e for e in tree.iter('camera_matrix')), None)
+        if matrix:
+            txt = matrix.find('data').text
+            x = np.asarray([float(xi)
+                for xi in re.findall(r'([0-9\-\.e\+]+)', txt)]).reshape(3, 3)
+            params = {**params, **cls.parse_camera_matrix(x)}
+        else:
+            raise ValueError('No camera matrix found')
+        coeffs = next((e for e in tree.iter('distortion_coefficients')), None)
+        if coeffs:
+            txt = coeffs.find('data').text
+            x = np.asarray([float(xi)
+                for xi in re.findall(r'([0-9\-\.e\+]+)', txt)])
+            params = {**params, **cls.parse_distortion_coefficients(x)}
+        kwargs = {key: params[key]
+            for key in inspect.getfullargspec(cls).args[1:] if key in params}
+        return cls(**kwargs)
+
+    def _camera2image(self, xy):
+        # Compute lens distortion
+        r2 = np.sum(xy**2, axis=1)
+        dr = ((1 + self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3) /
+            (1 + self.k4 * r2 + self.k5 * r2**2 + self.k6 * r2**2))
+        xty = xy[:, 0] * xy[:, 1]
+        dtx = self.p2 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p1 * xty
+        dty = self.p1 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p2 * xty
+        # Apply lens distortion
+        dxy = np.column_stack((
+            dr * xy[:, 0] + dtx + self.s1 * r2 + self.s2 * r2**2,
+            dr * xy[:, 1] + dty + self.s3 * r2 + self.s4 * r2**2))
+        # Project to image
+        return np.column_stack((
+            (self.fx * dxy[:, 0] + self.cx),
+            (self.fy * dxy[:, 1] + self.cy)))
+
+    def _as_camera_initial(self):
+        return Camera(
+            imgsz=self.imgsz,
+            f=(self.fx, self.fy),
+            c=(self.cx - self.imgsz[0] / 2, self.cy - self.imgsz[1] / 2),
+            k=(self.k1, self.k2, self.k3, self.k4, self.k5, self.k6),
+            p=(self.p1, self.p2))
+
+    def as_camera(self, step=10):
+        """
+        Return equivalent `Camera` object.
+
+        If either `s1`, `s2`, `s3`, or `s4` is non-zero (`τx` and `τy` are not
+        supported), the conversion is estimated numerically. Otherwise, the
+        conversion is exact.
+
+        Arguments:
+            step: Sample grid spacing for all (float) or each (iterable) dimension
+        """
+        if any((self.s1, self.s2, self.s3, self.s4)):
+            params = {'k': True, 'p': True}
+            return self._as_camera_estimate(params=params, step=step)
+        else:
+            return self._as_camera_initial()
+
 def as_camera_sigma(mean, sigma, n=100, **kwargs):
     """
     Convert to `Camera` and propagate uncertainties.

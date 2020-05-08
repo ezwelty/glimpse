@@ -168,6 +168,58 @@ def test_photomodeler_camera_estimate():
     residuals = control.predicted() - control.observed()
     np.testing.assert_allclose(residuals, 0, atol=1e-2, rtol=0)
 
+# ---- Matlab ----
+
+opencv_imgsz = (4288, 2848)
+
+opencv_xml = {
+    'fx': 3.57e+03,
+    'fy': 3.58e+03,
+    'cx': 2.15e+03,
+    'cy': 1.43e+03,
+    'k1': 1.1e-01,
+    'k2': -1.2e-01,
+    'k3': 1.0e-02,
+    'k4': 1.1e-03,
+    'k5': 1.2e-03,
+    'k6': 1.3e-03,
+    'p1': -9.98e-03,
+    'p2': 9.99e-03,
+    's1': 1.0e-05,
+    's2': 1.1e-05,
+    's3': 1.2e-05,
+    's4': 1.3e-05
+}
+
+def test_opencv_xml():
+    path = os.path.join(test_dir, 'opencv.xml')
+    xcam_auto = glimpse.convert.OpenCVCamera.from_xml(path, imgsz=opencv_imgsz)
+    xcam_manual = glimpse.convert.OpenCVCamera(imgsz=opencv_imgsz, **opencv_xml)
+    assert xcam_auto.__dict__ == xcam_manual.__dict__
+
+def test_opencv_camera_exact():
+    # s* must be zero
+    xcam = glimpse.convert.OpenCVCamera(
+        imgsz=(200, 200), fx=200, fy=200, cx=105, cy=95,
+        k1=0.1, k2=-0.1, p1=0.01, p2=0.01, k3=-0.01
+    )
+    cam = xcam.as_camera()
+    control = xcam._points(xcam, cam, step=10)
+    residuals = control.predicted() - control.observed()
+    np.testing.assert_allclose(residuals, 0, atol=1e-13, rtol=0)
+
+def test_opencv_camera_estimate():
+    # s* should be small
+    xcam = glimpse.convert.OpenCVCamera(
+        imgsz=(200, 200), fx=200, fy=200, cx=105, cy=95,
+        k1=0.1, k2=-0.1, p1=0.01, p2=0.01, k3=-0.01,
+        s1=1e-5
+    )
+    cam = xcam.as_camera()
+    control = xcam._points(xcam, cam, step=10)
+    residuals = control.predicted() - control.observed()
+    np.testing.assert_allclose(residuals, 0, atol=1e-3, rtol=0)
+
 # ---- General ----
 
 def test_as_camera_sigma():

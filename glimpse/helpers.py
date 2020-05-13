@@ -1985,7 +1985,7 @@ def _parse_parallel(parallel):
     else:
         n = parallel
     return n
-    
+
 def save_observercams(observer,directory,print_path=False):
     """
     Saves each camera model for the respective Image objects in an Observer object as a .JSON file
@@ -2008,4 +2008,4 @@ def save_observercams(observer,directory,print_path=False):
         try:
             images.cam.write(path)
         except:
-            print("Image {} Has Undefined Camera".format(image.path))
+            print("Image {} Has Undefined Camera".format(images.path))

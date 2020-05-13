@@ -1985,3 +1985,27 @@ def _parse_parallel(parallel):
     else:
         n = parallel
     return n
+    
+def save_observercams(observer,directory,print_path=False):
+    """
+    Saves each camera model for the respective Image objects in an Observer object as a .JSON file
+    
+    Arguments:
+        observer (glimpse.Observer(): Observer object with Images
+
+        directory (path) : Path to the directory used to save camera models
+
+        print_path (bool) : Print the respective path of each camera model saved
+    """
+    if not os.path.isdir(directory):
+        raise Exception("Directory {} Not Found".format(directory))
+    for images in observer.images:
+        filename = images.path.split("/")[-1]
+        filename = filename.split(".")[0]
+        path = os.path.join(directory,filename)
+        path += ".JSON"
+        if print_path: print("Path: {}\n".format(path))
+        try:
+            images.cam.write(path)
+        except:
+            print("Image {} Has Undefined Camera".format(image.path))

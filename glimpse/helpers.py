@@ -2009,3 +2009,22 @@ def save_observercams(observer,directory,print_path=False):
             images.cam.write(path)
         except:
             print("Image {} Has Undefined Camera".format(images.path))
+def change_extenstion(infile,extension):
+    """
+    Changes a given file path to an identical file path but with a different extension
+    ex: image_01.JPG to image_01.JSON
+
+    Arguments:
+
+        infile (str): Input file path to be changed
+        extension (str): output file extension
+    
+    Return:
+        outfile (str) file with new extension
+    """
+    if not os.isfile(infile):
+        rase Exception("File {} Not Found".format(infile))
+    token = infile.split(".")[-1] #get old extension
+    outfile = infile.split(token)[0] # check for redundent extensions
+    outfile += token
+    return outfile

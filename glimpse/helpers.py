@@ -1986,15 +1986,34 @@ def _parse_parallel(parallel):
         n = parallel
     return n
 
+def change_extenstion(infile,extension):
+    """
+    Changes a given file path to an identical file path but with a different extension
+    ex: image_01.JPG to image_01.JSON
+
+    Arguments:
+
+        infile (str): Input file path to be changed
+        extension (str): output file extension
+    
+    Return:
+        outfile (str) file with new extension
+    """
+    if not os.path.isfile(infile):
+        raise Exception("File {} Not Found".format(infile))
+    token = infile.split(".")[-1] #get old extension
+    outfile = infile.split(token)[0] # check for redundent extensions
+    outfile = outfile.split("/")[-1]
+    outfile += extension
+    return outfile
+
 def save_observercams(observer,directory,print_path=False):
     """
     Saves each camera model for the respective Image objects in an Observer object as a .JSON file
     
     Arguments:
         observer (glimpse.Observer(): Observer object with Images
-
         directory (path) : Path to the directory used to save camera models
-
         print_path (bool) : Print the respective path of each camera model saved
     """
     if not os.path.isdir(directory):
@@ -2009,22 +2028,3 @@ def save_observercams(observer,directory,print_path=False):
             images.cam.write(path)
         except:
             print("Image {} Has Undefined Camera".format(images.path))
-def change_extenstion(infile,extension):
-    """
-    Changes a given file path to an identical file path but with a different extension
-    ex: image_01.JPG to image_01.JSON
-
-    Arguments:
-
-        infile (str): Input file path to be changed
-        extension (str): output file extension
-    
-    Return:
-        outfile (str) file with new extension
-    """
-    if not os.isfile(infile):
-        rase Exception("File {} Not Found".format(infile))
-    token = infile.split(".")[-1] #get old extension
-    outfile = infile.split(token)[0] # check for redundent extensions
-    outfile += token
-    return outfile

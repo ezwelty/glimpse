@@ -1,9 +1,9 @@
 """
-Read image annotations from scalable vector graphics (svg) files.
+Read and write image annotations in scalable vector graphics (svg) files.
 """
 import re
 import inspect
-import xml.etree.ElementTree
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 import warnings
 
@@ -58,7 +58,7 @@ def get_image_coordinates(path, key=None, imgsz=None):
             same tag, their values are given in a list (e.g. 'path': [[(x, y), ...],
             [(x, y), ...]]).
     """
-    tree = xml.etree.ElementTree.parse(path)
+    tree = ET.parse(path)
     _strip_etree_namespaces(tree)
     # Find <svg> tags
     svgs = list(tree.iter('svg'))
@@ -657,3 +657,101 @@ class Points:
         if not method:
             raise ValueError('Unsupported (or invalid) element tag:', tag)
         return method()
+
+def svg(*children, width, height, **attrib):
+    """
+    Create `svg` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/svg.
+
+    Arguments:
+        *children (iterable): Children elements
+        width,height (float): Width and height of the canvas
+        **attrib (dict): Additional element attributes
+    
+    Returns:
+        Element
+    """
+    attrib = {
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+        'width': str(width), 'height': str(height),
+        **attrib
+    }
+    e = ET.Element('svg', attrib=attrib)
+    e.extend(children)
+    return e
+
+def g(*children, **attrib):
+    """
+    Create `g` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/g.
+
+    Arguments:
+        *children (iterable): Children elements
+        **attrib (dict): Element attributes
+
+    Returns:
+        Element
+    """
+    e = ET.Element('g', attrib=attrib)
+    e.extend(children)
+    return e
+
+def image(href, width, height, **attrib):
+    """
+    Create `image` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/image.
+
+    Arguments:
+        href (str): Path to image file
+        width,height (float): Display width and height of the image
+        **attrib (dict): Additional element attributes
+
+    Returns:
+        Element
+    """
+    attrib = {
+        'xlink:href': href,
+        'width': str(width), 'height': str(height),
+        **attrib
+    }
+    return ET.Element('image', attrib=attrib)
+
+def path(d='', **attrib):
+    """
+    Create `path` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path.
+
+    Arguments:
+        d: Shape of the path. Either pre-formatted as a str (e.g. 'M 0,0 L 1,1')
+            or an iterable of point coordinates (e.g. [(0, 0), (1, 1)]). See
+            https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/d.
+        **attrib (dict): Additional element attributes
+
+    Returns:
+        Element
+    """
+    if not isinstance(d, str):
+        d = Points(d).to_element('path')['d']
+    attrib = {'d': d, **attrib}
+    return ET.Element('path', attrib=attrib)
+
+def write(e, path=None):
+    """
+    Returns XML as a string or writes it to file.
+
+    Arguments:
+        e (Element)
+        path: Path to file
+
+    Returns:
+        str: If path is None
+    """
+    if path is None:
+        return ET.tostring(e, encoding='unicode')
+    else:
+        ET.ElementTree(e).write(path, encoding='unicode')

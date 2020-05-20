@@ -1,4 +1,5 @@
 import os
+import tempfile
 import glimpse.svg
 from .context import test_dir
 
@@ -21,3 +22,20 @@ def test_sets_element_attribute_as_tag():
     xyid = glimpse.svg.get_image_coordinates(path, key='id')
     assert xy['path'] == xyid['land']
     assert xy['polygon'] == xyid['glacier']
+
+def test_writes_and_reads_coordinates():
+    xy = [(0, 0), (100, 100), (200, 200)]
+    e = glimpse.svg.svg(
+        glimpse.svg.image(
+            href='tests/AK10b_20141013_020336.JPG', width=800, height=536),
+        glimpse.svg.g(
+            glimpse.svg.path(id='horizon', d=xy, stroke="red"),
+            id='control'
+        ),
+        width=800, height=536
+    )
+    _, new = tempfile.mkstemp()
+    glimpse.svg.write(e, new)
+    coords = glimpse.svg.get_image_coordinates(path=new, key='id')
+    assert xy == coords['control']['horizon']
+    os.remove(new)

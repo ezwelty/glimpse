@@ -84,7 +84,7 @@ def get_image_coordinates(path, key=None, imgsz=None):
         transform += e.get('transform', '')
         # Parse coordinates
         if e.tag in ('image', 'path', 'polyline', 'polygon', 'line', 'circle', 'rect'):
-            points = Points.from_element(e.tag, **e.attrib)
+            points = _Points.from_element(e.tag, **e.attrib)
             bbox = points.bbox()
             points.transform(transform)
             d[tag] = points.xy
@@ -119,7 +119,7 @@ def get_image_coordinates(path, key=None, imgsz=None):
             if not e[key]:
                 pass
             elif isinstance(e[key], list) and isinstance(e[key][0], tuple):
-                e[key] = Points(e[key]).translate(*translate).scale(*scale).xy
+                e[key] = _Points(e[key]).translate(*translate).scale(*scale).xy
             else:
                 transform(e[key])
     transform(points)
@@ -151,7 +151,105 @@ def _num(string):
     except ValueError:
         return float(string)
 
-class Points:
+def svg(*children, width, height, **attrib):
+    """
+    Create `svg` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/svg.
+
+    Arguments:
+        *children (iterable): Children elements
+        width,height (float): Width and height of the canvas
+        **attrib (dict): Additional element attributes
+    
+    Returns:
+        Element
+    """
+    attrib = {
+        'xmlns': 'http://www.w3.org/2000/svg',
+        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
+        'width': str(width), 'height': str(height),
+        **attrib
+    }
+    e = ET.Element('svg', attrib=attrib)
+    e.extend(children)
+    return e
+
+def g(*children, **attrib):
+    """
+    Create `g` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/g.
+
+    Arguments:
+        *children (iterable): Children elements
+        **attrib (dict): Element attributes
+
+    Returns:
+        Element
+    """
+    e = ET.Element('g', attrib=attrib)
+    e.extend(children)
+    return e
+
+def image(href, width, height, **attrib):
+    """
+    Create `image` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/image.
+
+    Arguments:
+        href (str): Path to image file
+        width,height (float): Display width and height of the image
+        **attrib (dict): Additional element attributes
+
+    Returns:
+        Element
+    """
+    attrib = {
+        'xlink:href': href,
+        'width': str(width), 'height': str(height),
+        **attrib
+    }
+    return ET.Element('image', attrib=attrib)
+
+def path(d='', **attrib):
+    """
+    Create `path` element.
+
+    See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path.
+
+    Arguments:
+        d: Shape of the path. Either pre-formatted as a str (e.g. 'M 0,0 L 1,1')
+            or an iterable of point coordinates (e.g. [(0, 0), (1, 1)]). See
+            https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/d.
+        **attrib (dict): Additional element attributes
+
+    Returns:
+        Element
+    """
+    if not isinstance(d, str):
+        d = _Points(d).to_element('path')['d']
+    attrib = {'d': d, **attrib}
+    return ET.Element('path', attrib=attrib)
+
+def write(e, path=None):
+    """
+    Returns XML as a string or writes it to file.
+
+    Arguments:
+        e (Element)
+        path: Path to file
+
+    Returns:
+        str: If path is None
+    """
+    if path is None:
+        return ET.tostring(e, encoding='unicode')
+    else:
+        ET.ElementTree(e).write(path, encoding='unicode')
+
+class _Points:
     """
     Reader and writer of SVG element point coordinates.
 
@@ -250,11 +348,6 @@ class Points:
 
         Returns:
             Points: Points with transformed coordinates.
-
-        >>> Points([(3, 1)]).transform('translate(-1 1) scale(1,0.5)').xy
-        [(2, 1.0)]
-        >>> Points([(3, 1)]).transform('matrix(1 0 0 0.5 -1 0.5)').xy
-        [(2, 1.0)]
         """
         for func, params in re.findall(r'([A-Za-z]+)\(([^\)]+)\)', transform):
             method = getattr(self, func, None)
@@ -275,46 +368,29 @@ class Points:
         return ' '.join(['{0},{1}'.format(x, y) for x, y in xy])
 
     @classmethod
-    def from_polyline(cls, points=''):
+    def _from_polyline(cls, points=''):
         """
         From `polyline` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-
-        Arguments:
-            points (str): `polyline.points` attribute
-
-        >>> Points.from_polyline('0,10 5,2.5 5,7.5 10,0').xy
-        [(0, 10), (5, 2.5), (5, 7.5), (10, 0)]
-        >>> Points.from_polyline('0,10 5').xy
-        [(0, 10)]
         """
         xy = cls._points_to_xy(points)
         return cls(xy)
 
-    def to_polyline(self):
+    def _to_polyline(self):
         """
         To `polyline` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-
-        >>> Points.from_polyline('0,10 5,2.5 5,7.5 10,0').to_polyline()
-        {'points': '0,10 5,2.5 5,7.5 10,0'}
         """
         return {'points': self._xy_to_points(self.xy)}
 
     @classmethod
-    def from_polygon(cls, points=''):
+    def _from_polygon(cls, points=''):
         """
         From `polygon` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-
-        Arguments:
-            points (str): `polygon.points` attribute
-
-        >>> Points.from_polygon('0,10 5,2.5 5,7.5 10,0').xy
-        [(0, 10), (5, 2.5), (5, 7.5), (10, 0), (0, 10)]
         """
         xy = cls._points_to_xy(points)
         pts = cls(xy)
@@ -322,138 +398,92 @@ class Points:
             pts.xy.append(xy[0])
         return pts
 
-    def to_polygon(self):
+    def _to_polygon(self):
         """
         To `polygon` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-
-        >>> Points.from_polygon('0,10 5,2.5 5,7.5 10,0').to_polygon()
-        {'points': '0,10 5,2.5 5,7.5 10,0'}
         """
         xy = self.xy[:-1] if self.closed() else self.xy
         return {'points': self._xy_to_points(xy)}
 
     @classmethod
-    def from_line(cls, x1=0, y1=0, x2=0, y2=0):
+    def _from_line(cls, x1=0, y1=0, x2=0, y2=0):
         """
         From `line` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line
-
-        Arguments:
-            x1 (str): `line.x1` attribute
-            y1 (str): `line.y1` attribute
-            x2 (str): `line.x2` attribute
-            y2 (str): `line.y2` attribute
-
-        >>> Points.from_line(0, 0, 1, 1).xy
-        [(0, 0), (1, 1)]
         """
         xy = [(_num(x1), _num(y1)), (_num(x2), _num(y2))]
         return cls(xy)
 
-    def to_line(self):
+    def _to_line(self):
         """
         To `line` attributes.
 
         Uses the first and last points as the line endpoints.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line
-
-        >>> Points.from_line(0, 0, 1, 1).to_line()
-        {'x1': '0', 'y1': '0', 'x2': '1', 'y2': '1'}
-        >>> Points([(0, 0), (2, 2), (1, 1)]).to_line()
-        {'x1': '0', 'y1': '0', 'x2': '1', 'y2': '1'}
         """
         x1, y1 = [str(i) for i in (self.xy[0] if self.xy else (0, 0))]
         x2, y2 = [str(i) for i in (self.xy[-1] if self.xy else (0, 0))]
         return {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2}
 
     @classmethod
-    def from_circle(cls, cx=0, cy=0):
+    def _from_circle(cls, cx=0, cy=0):
         """
         From `circle` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/circle
-
-        Arguments:
-            cx (str): `circle.cx` attribute
-            cy (str): `circle.cy` attribute
-
-        >>> Points.from_circle(1, 1).xy
-        [(1, 1)]
         """
         xy = [(_num(cx), _num(cy))]
         return cls(xy)
 
-    def to_circle(self):
+    def _to_circle(self):
         """
         To `circle` attributes.
 
         Uses the first point as the circle center.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/circle
-
-        >>> Points.from_circle(1, 1).to_circle()
-        {'cx': '1', 'cy': '1'}
-        >>> Points([(0, 0), (1, 1)]).to_circle()
-        {'cx': '0', 'cy': '0'}
         """
         cx, cy = [str(i) for i in (self.xy[0] if self.xy else (0, 0))]
         return {'cx': cx, 'cy': cy}
 
     @classmethod
-    def from_rect(cls, width, height, x=0, y=0):
+    def _from_rect(cls, width, height, x=0, y=0):
         """
         From `rect` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect
-
-        Arguments:
-            width (str): `rect.width` attribute
-            height (str): `rect.height` attribute
-            x (str): `rect.x` attribute
-            y (str): `rect.y` attribute
-
-        >>> Points.from_rect(1, 1).xy
-        [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]
-        >>> Points.from_rect(1, 1, 1, 1).xy
-        [(1, 1), (2, 1), (2, 2), (1, 2), (1, 1)]
         """
         x, y, width, height = [_num(arg) for arg in (x, y, width, height)]
         xy = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
         xy.append(xy[0])
         return cls(xy)
 
-    def to_rect(self):
+    def _to_rect(self):
         """
         To `rect` attributes.
 
         Returns the bounding box of all points.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect
-
-        >>> Points.from_rect(1, 1, 1, 1).to_rect()
-        {'x': '1', 'y': '1', 'width': '1', 'height': '1'}
         """
         box = self.bbox()
         return {key: str(box[key]) for key in box}
 
     @classmethod
-    def from_svg(cls, viewBox=None):
+    def _from_svg(cls, viewBox=None):
         """
         From `svg` attributes.
 
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/svg
-
-        Arguments:
-            viewBox (str): `svg.viewBox` attribute
         """
         if viewBox:
             x, y, w, h = re.split(r'[\s,]+', viewBox)
-            return cls.from_rect(w, h, x, y)
+            return cls._from_rect(w, h, x, y)
         else:
             return cls([])
 
-    def to_svg(self):
+    def _to_svg(self):
         """
         To `svg` attributes.
 
@@ -467,51 +497,29 @@ class Points:
             return {}
 
     @classmethod
-    def from_image(cls, width, height, x=0, y=0):
+    def _from_image(cls, width, height, x=0, y=0):
         """
         From `image` attributes.
 
-        Identical to `from_rect`.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image
-
-        Arguments:
-            width (str): `image.width` attribute
-            height (str): `image.height` attribute
-            x (str): `image.x` attribute
-            y (str): `image.y` attribute
         """
-        return cls.from_rect(width, height, x, y)
+        return cls._from_rect(width, height, x, y)
 
-    def to_image(self):
+    def _to_image(self):
         """
         To `image` attributes.
 
-        Identical to `to_rect`.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image
         """
-        return self.to_rect()
+        return self._to_rect()
 
     @classmethod
-    def from_path(cls, d=''):
+    def _from_path(cls, d=''):
         """
         From `path` attributes.
 
         Only vertices are preserved, so all curvature information is discarded.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path
-
-        Arguments:
-            d (str): `path.d` attribute
-
-        >>> Points.from_path('M 0,0 l 1,0 0,1 -1,-1').xy
-        [(0, 0), (1, 0), (1, 1), (0, 0)]
-        >>> Points.from_path('M 0,0 l 1,0 0,1 z').xy
-        [(0, 0), (1, 0), (1, 1), (0, 0)]
-        >>> Points.from_path('M 0,0 L 1,1 v 1 h 1 l -2,-2').xy
-        [(0, 0), (1, 1), (1, 2), (2, 2), (0, 0)]
-        >>> Points.from_path('M 0,0 m 1,1 c 0,0 0,0 1,1 s 0,0 1,1 t 1,1').xy
-        [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)]
-        >>> Points.from_path('M 0,0 A 0 0 0 0 0 1,1 Z').xy
-        [(0, 0), (1, 1), (0, 0)]
         """
         commands = re.findall(r'[a-zA-Z]+', d)
         parameters = [
@@ -576,20 +584,13 @@ class Points:
                 raise ValueError('Invalid command encountered:', cmd)
         return cls(xy)
 
-    def to_path(self):
+    def _to_path(self):
         """
         To `path` attributes.
 
         Uses only absolute moveTo (`M`) and lineTo (`L`) commands, as well as
         closePath (`Z`) if closed.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path
-
-        >>> Points.from_path('M 0,0 L 1,1').to_path()
-        {'d': 'M 0,0 L 1,1'}
-        >>> Points.from_path('M 0,0 L 1,1 0,0').to_path()
-        {'d': 'M 0,0 L 1,1 Z'}
-        >>> Points.from_path('M 0,0 L 1,1 0,0 2,2').to_path()
-        {'d': 'M 0,0 L 1,1 0,0 2,2'}
         """
         commands = []
         for i, xy in enumerate(self.xy[:-1] if self.closed() else self.xy):
@@ -614,19 +615,8 @@ class Points:
         Arguments:
             tag (str): Element tag (e.g. 'path')
             **attrs (dict): Element attributes
-
-        >>> Points.from_element('path', d='M 0,0 L 1,1').xy
-        [(0, 0), (1, 1)]
-        >>> Points.from_element('polyline', points='0,0 1,1').xy
-        [(0, 0), (1, 1)]
-        >>> Points.from_element('polygon', points='0,0 1,1').xy
-        [(0, 0), (1, 1), (0, 0)]
-        >>> Points.from_element('line', x1=0, y1=0, x2=1, y2=1).xy
-        [(0, 0), (1, 1)]
-        >>> Points.from_element('circle', cx=1, cy=1, r=1).xy
-        [(1, 1)]
         """
-        method = getattr(cls, 'from_' + tag, None)
+        method = getattr(cls, '_from_' + tag, None)
         if not method:
             raise ValueError('Unsupported (or invalid) element tag:', tag)
         args = inspect.getfullargspec(method).args[1:]
@@ -641,117 +631,8 @@ class Points:
 
         Arguments:
             tag (str): Element tag (e.g. 'path')
-
-        >>> Points.from_element('path', d='M 0,0 L 1,1').to_element('path')
-        {'d': 'M 0,0 L 1,1'}
-        >>> Points.from_element('polyline', points='0,0 1,1').to_element('polyline')
-        {'points': '0,0 1,1'}
-        >>> Points.from_element('polygon', points='0,0 1,1').to_element('polygon')
-        {'points': '0,0 1,1'}
-        >>> Points.from_element('line', x1=0, y1=0, x2=1, y2=1).to_element('line')
-        {'x1': '0', 'y1': '0', 'x2': '1', 'y2': '1'}
-        >>> Points.from_element('circle', cx=1, cy=1, r=1).to_element('circle')
-        {'cx': '1', 'cy': '1'}
         """
-        method = getattr(self, 'to_' + tag, None)
+        method = getattr(self, '_to_' + tag, None)
         if not method:
             raise ValueError('Unsupported (or invalid) element tag:', tag)
         return method()
-
-def svg(*children, width, height, **attrib):
-    """
-    Create `svg` element.
-
-    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/svg.
-
-    Arguments:
-        *children (iterable): Children elements
-        width,height (float): Width and height of the canvas
-        **attrib (dict): Additional element attributes
-    
-    Returns:
-        Element
-    """
-    attrib = {
-        'xmlns': 'http://www.w3.org/2000/svg',
-        'xmlns:xlink': 'http://www.w3.org/1999/xlink',
-        'width': str(width), 'height': str(height),
-        **attrib
-    }
-    e = ET.Element('svg', attrib=attrib)
-    e.extend(children)
-    return e
-
-def g(*children, **attrib):
-    """
-    Create `g` element.
-
-    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/g.
-
-    Arguments:
-        *children (iterable): Children elements
-        **attrib (dict): Element attributes
-
-    Returns:
-        Element
-    """
-    e = ET.Element('g', attrib=attrib)
-    e.extend(children)
-    return e
-
-def image(href, width, height, **attrib):
-    """
-    Create `image` element.
-
-    See https://developer.mozilla.org/en-US/docs/Web/SVG/element/image.
-
-    Arguments:
-        href (str): Path to image file
-        width,height (float): Display width and height of the image
-        **attrib (dict): Additional element attributes
-
-    Returns:
-        Element
-    """
-    attrib = {
-        'xlink:href': href,
-        'width': str(width), 'height': str(height),
-        **attrib
-    }
-    return ET.Element('image', attrib=attrib)
-
-def path(d='', **attrib):
-    """
-    Create `path` element.
-
-    See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path.
-
-    Arguments:
-        d: Shape of the path. Either pre-formatted as a str (e.g. 'M 0,0 L 1,1')
-            or an iterable of point coordinates (e.g. [(0, 0), (1, 1)]). See
-            https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/d.
-        **attrib (dict): Additional element attributes
-
-    Returns:
-        Element
-    """
-    if not isinstance(d, str):
-        d = Points(d).to_element('path')['d']
-    attrib = {'d': d, **attrib}
-    return ET.Element('path', attrib=attrib)
-
-def write(e, path=None):
-    """
-    Returns XML as a string or writes it to file.
-
-    Arguments:
-        e (Element)
-        path: Path to file
-
-    Returns:
-        str: If path is None
-    """
-    if path is None:
-        return ET.tostring(e, encoding='unicode')
-    else:
-        ET.ElementTree(e).write(path, encoding='unicode')

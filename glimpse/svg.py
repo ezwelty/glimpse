@@ -22,7 +22,7 @@ def _strip_etree_namespaces(tree):
             new_value = regex.sub('', e.attrib.pop(key))
             e.attrib[new_key] = new_value
 
-def get_image_coordinates(path, key=None, imgsz=None):
+def read(path, key=None, imgsz=None):
     """
     Get SVG element vertices as image coordinates.
 

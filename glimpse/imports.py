@@ -32,8 +32,6 @@ import scipy.spatial
 
 import cv2
 import lmfit
-import lxml.etree
-import lxml.builder
 import matplotlib
 import matplotlib.animation
 import pandas

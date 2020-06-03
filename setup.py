@@ -36,7 +36,6 @@ setuptools.setup(
     python_requires='~=3.6',
     install_requires=[
         'lmfit ~= 0.9, < 0.9.12',
-        'lxml ~= 4.2',
         'matplotlib ~= 2.2',
         'numpy ~= 1.14',
         'opencv-contrib-python ~= 3.0, < 3.4.3',

@@ -5,6 +5,15 @@ import copy
 import datetime
 import piexif
 
+SENSOR_SIZES = {
+    'NIKON CORPORATION NIKON D2X': (23.7, 15.7), # https://www.dpreview.com/reviews/nikond2x/2
+    'NIKON CORPORATION NIKON D200': (23.6, 15.8), # https://www.dpreview.com/reviews/nikond200/2
+    'NIKON CORPORATION NIKON D300S': (23.6, 15.8), # https://www.dpreview.com/reviews/nikond300s/2
+    'NIKON E8700': (8.8, 6.6), # https://www.dpreview.com/reviews/nikoncp8700/2
+    'Canon Canon EOS 20D': (22.5, 15.0), # https://www.dpreview.com/reviews/canoneos20d/2
+    'Canon Canon EOS 40D': (22.2, 14.8), # https://www.dpreview.com/reviews/canoneos40d/2
+}
+
 class Exif:
     """
     Container and parser of image metadata.
@@ -28,7 +37,7 @@ class Exif:
 
             The thumbnail image, if present, is stored as `bytes` in 'thumbnail'.
 
-        size (tuple of int): Image size in pixels (nx, ny).
+        imgsz (tuple of int): Image size in pixels (nx, ny).
             Parsed from 'PixelXDimension' and 'PixelYDimension'.
         datetime (datetime.datetime): Capture date and time.
             Parsed from 'DateTimeOriginal' and 'SubSecTimeOriginal'.
@@ -46,6 +55,9 @@ class Exif:
             Parsed from 'Make'.
         model (str): Camera model.
             Parsed from 'Model'.
+        sensorsz (tuple of float): Sensor size in millimeters (nx, ny).
+            Data is from Digital Photography Review (https://dpreview.com) reviews
+            and their article https://dpreview.com/articles/8095816568/sensorsizes.
     """
     def __init__(self, path, thumbnail=False):
         self.tags = piexif.load(path, key_is_name=True)
@@ -54,7 +66,7 @@ class Exif:
             self.tags.pop('1st', None)
 
     @property
-    def size(self):
+    def imgsz(self):
         width = self.parse_tag('PixelXDimension')
         height = self.parse_tag('PixelYDimension')
         if width and height:
@@ -96,6 +108,13 @@ class Exif:
     @property
     def model(self):
         return self.parse_tag('Model', group='0th')
+
+    @property
+    def sensorsz(self):
+        if self.make and self.model:
+            make_model = self.make.strip() + ' ' + self.model.strip()
+            return SENSOR_SIZES.get(make_model)
+        return None
 
     def parse_tag(self, tag, group='Exif'):
         """

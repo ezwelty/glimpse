@@ -59,12 +59,9 @@ class Image(object):
             exif = Exif(path=path)
         self.exif = exif
         self.anchor = anchor
-        # NOTE: Namespace conflict with datetime (package)
-        if datetime:
-            self.datetime = datetime
-        else:
-            self.datetime = self.exif.datetime
-        # TODO: Throw warning if `imgsz` has different aspect ratio than file size.
+        if datetime is None:
+          datetime = self.exif.datetime
+        self.datetime = datetime
         if isinstance(cam, Camera):
             self.cam = cam
         else:

@@ -29,8 +29,7 @@ class Exif:
             The thumbnail image, if present, is stored as `bytes` in 'thumbnail'.
 
         size (tuple): Image size in pixels (nx, ny).
-            Parsed from 'PixelXDimension' and 'PixelYDimension', if present,
-            or read by GDAL.
+            Parsed from 'PixelXDimension' and 'PixelYDimension'.
         datetime (datetime.datetime): Capture date and time.
             Parsed from 'DateTimeOriginal' and 'SubSecTimeOriginal'.
         exposure (float): Exposure time in seconds.
@@ -60,8 +59,7 @@ class Exif:
         height = self.parse_tag('PixelYDimension')
         if width and height:
             return width, height
-        else:
-            return None
+        return None
 
     @property
     def datetime(self):
@@ -72,9 +70,8 @@ class Exif:
         if subsec_str:
             return datetime.datetime.strptime(
                 datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
-        else:
-            return datetime.datetime.strptime(
-                datetime_str, '%Y:%m:%d %H:%M:%S')
+        return datetime.datetime.strptime(
+            datetime_str, '%Y:%m:%d %H:%M:%S')
 
     @property
     def exposure(self):
@@ -123,12 +120,11 @@ class Exif:
             return None
         if isinstance(value, bytes):
             return value.decode()
-        elif isinstance(value, tuple) and len(value) == 2:
+        if isinstance(value, tuple) and len(value) == 2:
             return value[0] / value[1]
-        elif isinstance(value, int):
+        if isinstance(value, int):
             return float(value)
-        else:
-            return value
+        return value
 
     def dump(self):
         """

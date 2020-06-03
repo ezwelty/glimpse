@@ -28,7 +28,7 @@ class Exif:
 
             The thumbnail image, if present, is stored as `bytes` in 'thumbnail'.
 
-        size (tuple): Image size in pixels (nx, ny).
+        size (tuple of int): Image size in pixels (nx, ny).
             Parsed from 'PixelXDimension' and 'PixelYDimension'.
         datetime (datetime.datetime): Capture date and time.
             Parsed from 'DateTimeOriginal' and 'SubSecTimeOriginal'.
@@ -37,7 +37,7 @@ class Exif:
         aperture (float): Aperture size as the f-number
             (https://wikipedia.org/wiki/F-number).
             Parsed from 'FNumber'.
-        iso (float): Film speed following the ISO system
+        iso (int): Film speed following the ISO system
             (https://wikipedia.org/wiki/Film_speed#ISO).
             Parsed from 'ISOSpeedRatings'.
         fmm (float): Focal length in millimeters.
@@ -105,7 +105,6 @@ class Exif:
 
             - if `bytes`, decode to `str`
             - if `tuple` of length 2 (rational), convert to `float`
-            - if `int`, convert to `float`
 
         Arguments:
             tag (str): Tag name
@@ -122,8 +121,6 @@ class Exif:
             return value.decode()
         if isinstance(value, tuple) and len(value) == 2:
             return value[0] / value[1]
-        if isinstance(value, int):
-            return float(value)
         return value
 
     def dump(self):

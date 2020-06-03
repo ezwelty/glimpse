@@ -128,8 +128,6 @@ class Exif:
         Return tags as bytes.
 
         The encoding is performed by :func:`piexif.dump`.
-        The result can be embedded into an image file, for example using
-        :func:`piexif.insert` or :meth:`PIL.Image.Image.save`.
 
         Returns:
             bytes: :attr:`tags` encoded as a byte string

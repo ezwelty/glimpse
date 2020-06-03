@@ -1,15 +1,12 @@
 """
 Read, write, and manipulate photographic images.
 """
-import shutil
-import os
 import copy
 import warnings
 import numpy as np
 import scipy.interpolate
 import matplotlib.pyplot
 import osgeo.gdal
-import PIL
 import sharedmem
 from . import helpers
 from .exif import Exif
@@ -148,42 +145,19 @@ class Image(object):
             # Caching and cropping: Subset cached array
             I = I[box[1]:box[3], box[0]:box[2]]
         return I
-
-    def write(self, path, I=None, **params):
+    
+    def write(self, path, I=None, driver=None):
         """
         Write image data to file.
 
         Arguments:
-            path (str): File or directory path to write to.
-                If the latter, the original basename is used.
-                If the extension is unchanged and `I=None`, the original file is copied.
+            path (str): File path to write to.
             I (array): Image data.
                 If `None` (default), the original image data is read.
-            **params: Additional arguments passed to `PIL.Image.save()`.
-                See http://pillow.readthedocs.io/en/3.1.x/reference/Image.html#PIL.Image.Image.save
         """
-        if os.path.isdir(path):
-            # Use original basename
-            path = os.path.join(path, os.path.basename(self.path))
-        old_ext = os.path.splitext(self.path)[1].lower()
-        ext = os.path.splitext(path)[1].lower()
-        if ext == old_ext and I is None:
-            # Copy original file
-            shutil.copyfile(self.path, path)
-        else:
-            if I is None:
-                im = PIL.Image.fromarray(self.read())
-            else:
-                im = PIL.Image.fromarray(I)
-            # For JPEG file extensions, see https://stackoverflow.com/a/23424597/8161503
-            if ext in ('.jpg', '.jpeg', '.jpe', '.jif', '.jfif', '.jfi'):
-                exif = self.exif.copy()
-                exif.set_tag('PixelXDimension', im.size[0])
-                exif.set_tag('PixelYDimension', im.size[1])
-                im.save(path, exif=exif.dump(), **params)
-            else:
-                warnings.warn('Writing EXIF to non-JPEG file is not supported')
-                im.save(path, **params)
+        if I is None:
+            I = self.read()
+        helpers.write_raster(a=I, path=path, driver=driver)
 
     def read_keypoints(self):
         """

@@ -1076,7 +1076,7 @@ class Raster(Grid):
         return dzdx, dzdy
 
     @require('osgeo')
-    def write(self, path, nan=None, crs=None):
+    def write(self, path, driver=None, nan=None, crs=None):
         """
         Write to file.
 
@@ -1087,30 +1087,13 @@ class Raster(Grid):
             crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
                 If `None` (default), will use `self.crs` if set.
         """
-        # top-left x, dx, rotation, top-left y, rotation, dy
-        transform = (self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1])
-        dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(self.Z.dtype)
-        output = osgeo.gdal.GetDriverByName('Gtiff').Create(
-            utf8_path=path, xsize=int(self.n[0]), ysize=int(self.n[1]),
-            bands=1, eType=dtype)
-        output.SetGeoTransform(transform)
-        if crs is None:
+        if not crs:
             crs = self.crs
-        if crs is not None:
-            wkt = helpers.crs_to_wkt(crs)
-            output.SetProjection(wkt)
-        if nan is not None:
-            output.GetRasterBand(1).SetNoDataValue(nan)
-            is_nan = np.isnan(self.Z)
-            if np.any(is_nan):
-                Z = self.Z.copy()
-                Z[is_nan] = nan
-            else:
-                Z = self.Z
-        else:
-            Z = self.Z
-        output.GetRasterBand(1).WriteArray(Z)
-        output.FlushCache()
+        helpers.write_raster(
+            a=self.Z, path=path, driver=driver, nan=nan, crs=crs,
+            # top-left x, dx, rotation, top-left y, rotation, dy
+            transform=(self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1])
+        )
 
     def data_extent(self):
         """

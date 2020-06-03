@@ -106,6 +106,12 @@ def numpy_dtype_minmax(dtype):
     else:
         raise ValueError('Cannot determine min, max for ' + str(dtype))
 
+def split_extension(path):
+    parts = path.split('.')
+    if len(parts) == 1:
+        return path, ''
+    return '.'.join(parts[:-1]), parts[-1]
+
 def strip_path(path, extensions=True):
     """
     Return the final component of a path with file extensions removed.
@@ -808,6 +814,59 @@ def ordered_geojson(obj, properties=None,
             return d
     obj = copy.deepcopy(obj)
     return order_item(obj)
+
+def gdal_driver_from_path(path, raster=True, vector=True):
+    ext = split_extension(path)[1].lower()
+    for i in range(osgeo.gdal.GetDriverCount()):
+        driver = osgeo.gdal.GetDriver(i)
+        meta = driver.GetMetadata()
+        is_raster = raster and meta.get(osgeo.gdal.DCAP_RASTER)
+        is_vector = vector and meta.get(osgeo.gdal.DCAP_VECTOR)
+        if is_raster or is_vector:
+            extensions = meta.get(osgeo.gdal.DMD_EXTENSIONS)
+            if extensions and ext in extensions.split(' '):
+                return driver
+    return None
+
+def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
+    a = np.atleast_3d(a)
+    dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(a.dtype)
+    if not dtype:
+        dtypes = ', '.join([x.__name__ for x in osgeo.gdal_array.codes.values()])
+        raise ValueError(f'Unsupported array data type: {a.dtype}.\nSupported: {dtypes}')
+    if driver:
+        msg = f'Unrecognized GDAL driver: {driver}'
+        driver = osgeo.gdal.GetDriverByName(driver)
+        if not driver:
+            raise ValueError(msg)
+    else:
+        driver = gdal_driver_from_path(path, vector=False)
+        if not driver:
+            raise ValueError(f'Could not guess GDAL driver from path: {path}')
+    meta = driver.GetMetadata()
+    can_create = meta.get(osgeo.gdal.DCAP_CREATE)
+    can_copy = meta.get(osgeo.gdal.DCAP_CREATECOPY)
+    if not can_create and not can_copy:
+        raise ValueError(f'Driver {driver.ShortName} cannot create files')
+    create_driver = driver if can_create else osgeo.gdal.GetDriverByName('mem')
+    output = create_driver.Create(
+        utf8_path=path if can_create else '',
+        xsize=a.shape[1],
+        ysize=a.shape[0],
+        bands=a.shape[2],
+        eType=dtype)
+    if transform:
+        output.SetGeoTransform(transform)
+    if crs:
+        wkt = crs_to_wkt(crs)
+        output.SetProjection(wkt)
+    for i in range(output.RasterCount):
+        if nan is not None:
+            output.GetRasterBand(i + 1).SetNoDataValue(nan)
+        output.GetRasterBand(i + 1).WriteArray(a[:, :, i])
+    if not can_create:
+        output = driver.CreateCopy(path, output, 0)
+    output.FlushCache()
 
 # ---- Geometry ---- #
 

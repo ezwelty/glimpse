@@ -1,31 +1,50 @@
-from .context import *
-from glimpse.imports import (np, datetime)
+import os
+import datetime
+import numpy as np
+from .context import glimpse, test_dir
 
 def test_image_init_defaults():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')
     img = glimpse.Image(path)
     assert img.path == path
     assert img.datetime == img.exif.datetime
-    assert all(img.cam.imgsz == img.exif.size)
-    sensorsz = glimpse.Camera.get_sensor_size(img.exif.make, img.exif.model)
-    assert all(img.cam.f == img.exif.fmm * img.exif.size / sensorsz)
+    np.testing.assert_array_equal(img.cam.imgsz, img.exif.imgsz)
+    np.testing.assert_allclose(
+        img.cam.f,
+        img.exif.fmm * np.divide(img.exif.imgsz, img.exif.sensorsz)
+    )
 
 def test_image_init_custom():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')
-    img_datetime = datetime.datetime(2010, 1, 1, 0, 0, 0)
-    cam_args = dict(imgsz=(100, 100), sensorsz=(10, 10))
-    img = glimpse.Image(path, cam=cam_args, datetime=img_datetime)
-    assert img.datetime == img_datetime
-    assert all(img.cam.imgsz == cam_args['imgsz'])
-    assert all(img.cam.f == img.exif.fmm * np.divide(cam_args['imgsz'], cam_args['sensorsz']))
+    args = {
+        'cam': {'imgsz': (100, 100), 'sensorsz': (10, 10)},
+        'datetime': datetime.datetime(2010, 1, 1)
+    }
+    img = glimpse.Image(path, **args)
+    assert img.datetime == args['datetime']
+    np.testing.assert_array_equal(img.cam.imgsz, args['cam']['imgsz'])
+    np.testing.assert_allclose(
+        img.cam.f,
+        img.exif.fmm * np.divide(args['cam']['imgsz'], args['cam']['sensorsz'])
+    )
 
 def test_image_read():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')
     # Default size
     img = glimpse.Image(path)
     I = img.read()
-    assert all(I.shape[0:2][::-1] == img.cam.imgsz)
+    np.testing.assert_array_equal(I.shape[0:2][::-1], img.cam.imgsz)
+    # Subset (cached)
+    x, y, w, h = 0, 5, 100, 94
+    box = x, y, x + w, y + h
+    i = img.read(box, cache=True)
+    assert i.shape[0:2][::-1] == (w, h)
+    np.testing.assert_array_equal(i, I[y:(y + h), x:(x + w)])
+    # Subset (not cached)
+    img.I = None
+    inc = img.read(box, cache=False)
+    np.testing.assert_array_equal(i, inc)
     # Resize camera
     img.cam.resize(0.5)
     I = img.read()
-    assert all(I.shape[0:2][::-1] == img.cam.imgsz)
+    np.testing.assert_array_equal(I.shape[0:2][::-1], img.cam.imgsz)

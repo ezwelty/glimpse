@@ -1,7 +1,8 @@
+import os
 import datetime
 import shutil
 import tempfile
-from .context import glimpse, test_dir, os
+from .context import glimpse, test_dir
 
 def test_parses_file_exif():
     path = os.path.join(test_dir, 'AK10b_20141013_020336.JPG')

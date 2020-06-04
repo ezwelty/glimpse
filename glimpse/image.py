@@ -1,8 +1,6 @@
 """
 Read, write, and manipulate photographic images.
 """
-import copy
-import warnings
 import numpy as np
 import scipy.interpolate
 import matplotlib.pyplot
@@ -18,86 +16,64 @@ class Image(object):
 
     Arguments:
         path (str): Path to image
-        cam (:class:`Camera`, dict, or str): Camera or arguments passed to
-            Camera constructors:
-
-                - if `dict`: Arguments passed to :class:`Camera()`.
-                - if `str`: File path passed to :meth:`Camera.read`
-
-            If 'imgsz' is missing, it is read from **exif**.
-            If 'f', 'fmm', and 'sensorsz' are missing, 'fmm' is read from
-            **exif** and 'sensorsz' is gotten from :meth:`Camera.get_sensor_size`
-            with 'make' and 'model' from **exif**.
-        exif (:class:`Exif`): Image metadata.
-            If `None`, it is read from **path** with :class:`Exif()`.
+        cam (:class:`Camera` or dict): Camera or arguments passed to :class:`Camera()`.
+            If missing, 'imgsz', 'fmm', and 'sensorsz' are read from **exif**.
+        exif (:class:`Exif`): Image metadata. If `None`, read from **path**.
         datetime (datetime.datetime): Capture date and time.
-            If `None`, it is read from **exif.datetime**.
-        anchor (bool):
-        keypoints_path (str):
+            If `None`, read from **exif**.
 
     Attributes:
-        path (str): Path to image
-        cam (:class:`Camera`): Camera
+        path (str): Image path
+        cam (:class:`Camera`): Camera model
         exif (:class:`Exif`): Image metadata
-        datetime (datetime.datetime): Capture date and time
-        anchor (bool): Whether the camera parameters, especially view direction,
-            are known absolutely. "Anchor" images are used as a reference for
-            optimizing other images whose camera parameters are not known absolutely.
-        keypoints_path (str): Path for caching image keypoints and their descriptors
-            to a `pickle` file. Unless specified, defaults to `path` with a '.pkl' extension.
-        keypoints: Cached keypoints
+        datetime (datetime.datetime): Image capture date and time
         I (numpy.ndarray): Cached image content
     """
 
-    def __init__(self, path, cam=None, exif=None, datetime=None, anchor=False,
-        keypoints_path=None):
+    def __init__(self, path, cam=None, exif=None, datetime=None):
         self.path = path
-        if exif is None:
-            exif = Exif(path=path)
-        self.exif = exif
-        self.anchor = anchor
-        if datetime is None:
-          datetime = self.exif.datetime
+        if not cam:
+            cam = {}
+        if isinstance(cam, dict):
+            if not ('imgsz' in cam and 'f' in cam or ('fmm' in cam and 'sensorsz' in cam)):
+                exif = exif or Exif(path)
+                cam = {
+                    'imgsz': exif.imgsz,
+                    'fmm': exif.fmm,
+                    'sensorsz': exif.sensorsz,
+                    **cam
+                }
+            cam = Camera(**cam)
+        self.cam = cam
+        if not datetime:
+            exif = exif or Exif(path)
+            datetime = exif.datetime
         self.datetime = datetime
-        if isinstance(cam, Camera):
-            self.cam = cam
-        else:
-            if isinstance(cam, (bytes, str)):
-                cam = helpers.read_json(cam)
-            elif isinstance(cam, dict):
-                cam = copy.deepcopy(cam)
-            elif cam is None:
-                cam = dict()
-            if 'vector' not in cam:
-                if 'imgsz' not in cam:
-                    cam['imgsz'] = self.exif.size
-                if 'f' not in cam:
-                    if 'fmm' not in cam:
-                        cam['fmm'] = self.exif.fmm
-                    if 'sensorsz' not in cam and self.exif.make and self.exif.model:
-                        cam['sensorsz'] = Camera.get_sensor_size(self.exif.make, self.exif.model)
-            self.cam = Camera(**cam)
+        self.exif = exif
         self.I = None
-        self.keypoints = None
-        self.keypoints_path = keypoints_path
 
-    def copy(self):
-        """
-        Return a copy.
+    @property
+    def _path_imgsz(self):
+        ds = osgeo.gdal.Open(self.path)
+        return ds.RasterXSize, ds.RasterYSize
 
-        Copies camera, rereads exif from file, and does not copy cached image data (self.I).
-        """
-        return Image(path=self.path, cam=self.cam.copy())
+    @property
+    def _cache_imgsz(self):
+        if self.I is not None:
+            return self.I.shape[1], self.I.shape[0]
+
+    @property
+    def _cam_imgsz(self):
+        return int(self.cam.imgsz[0]), int(self.cam.imgsz[1])
 
     def read(self, box=None, cache=True):
         """
         Read image data from file.
 
-        If the camera image size (self.cam.imgsz) differs from the original image size (self.exif.size),
-        the image is resized to fit the camera image size.
-        The result is cached (`self.I`) and reused only if it matches the camera image size, or,
-        if not set, the original image size.
-        To clear the cache, set `self.I` to `None`.
+        The image is resized as needed to the camera image size
+        (`self.cam.imgsz`). The result is cached (`self.I`) and reused only if
+        it matches the camera image size. To clear the cache, set `self.I` to
+        `None`.
 
         Arguments:
             box (array-like): Crop extent in image coordinates (left, top, right, bottom)
@@ -107,45 +83,38 @@ class Image(object):
                 (faster than reading the entire image).
             cache (bool): Whether to save image in `self.I`
         """
-        I = self.I
-        if I is not None:
-            size = np.flipud(I.shape[0:2])
-        has_cam_size = all(~np.isnan(self.cam.imgsz))
-        new_I = False
-        if ((I is None) or
-            (not has_cam_size and any(size != self.exif.size)) or
-            (has_cam_size and any(size != self.cam.imgsz))):
-            # Wrong size or not cached: Read image from file
-            im = osgeo.gdal.Open(self.path)
-            args = dict()
-            original_size = (im.RasterXSize, im.RasterYSize)
-            target_size = self.cam.imgsz.astype(int) if has_cam_size else original_size
-            if any(target_size != original_size):
-                # Read image into target-sized buffer
-                args['buf_xsize'] = target_size[0]
-                args['buf_ysize'] = target_size[1]
-            if box is not None and not cache:
-                # Resize box to image actual size
-                scale = np.divide(original_size, target_size)
+        size = self._cache_imgsz or self._path_imgsz
+        cam_size = self._cam_imgsz
+        resize = cam_size != size
+        new_I = True
+        if self.I is not None and not resize:
+            I = self.I
+            new_I = False
+        else:
+            ds = osgeo.gdal.Open(self.path)
+            args = {}
+            if resize:
+                args['buf_xsize'], args['buf_ysize'] = cam_size
+            if box and not cache:
+                # Resize box to actual image size
+                xscale, yscale = size[0] / cam_size[0], size[1] / cam_size[1]
                 # Read image subset
-                args['xoff'] = int(round(box[0] * scale[0]))
-                args['win_xsize'] = int(round((box[2] - box[0]) * scale[0]))
-                args['yoff'] = int(round(box[1] * scale[1]))
-                args['win_ysize'] = int(round((box[3] - box[1]) * scale[1]))
-            I = np.stack([im.GetRasterBand(i + 1).ReadAsArray(**args)
-                for i in range(im.RasterCount)], axis=2)
+                args['xoff'] = int(round(box[0] * xscale))
+                args['win_xsize'] = int(round((box[2] - box[0]) * xscale))
+                args['yoff'] = int(round(box[1] * yscale))
+                args['win_ysize'] = int(round((box[3] - box[1]) * yscale))
+            I = np.dstack([ds.GetRasterBand(i + 1).ReadAsArray(**args)
+                for i in range(ds.RasterCount)])
             if I.shape[2] == 1:
                 I = I.squeeze(axis=2)
             if cache:
-                # Caching: Cache result
                 I = sharedmem.copy(I)
                 self.I = I
-            new_I = True
         if box is not None and (cache or not new_I):
             # Caching and cropping: Subset cached array
             I = I[box[1]:box[3], box[0]:box[2]]
         return I
-    
+
     def write(self, path, I=None, driver=None):
         """
         Write image data to file.
@@ -159,57 +128,28 @@ class Image(object):
             I = self.read()
         helpers.write_raster(a=I, path=path, driver=driver)
 
-    def read_keypoints(self):
-        """
-        Return cached keypoints.
-
-        Returns :attr:`keypoints` or reads them from :attr:`keypoints_path` with
-        :func:`helpers.read_pickle`.
-        Keypoints are expected to be in the form produced by
-        :func:`optimize.detect_keypoints`.
-        """
-        if self.keypoints is None:
-            if self.keypoints_path is None:
-                warnings.warn('Keypoints path not specified')
-                return None
-            else:
-                try:
-                    self.keypoints = helpers.read_pickle(self.keypoints_path)
-                except IOError:
-                    warnings.warn('No keypoints found at keypoints path')
-        return self.keypoints
-
-    def write_keypoints(self):
-        """
-        Write keypoints to file.
-
-        Writes :attr:`keypoints` to :attr:`keypoints_path` with
-        :func:`helpers.write_pickle`.
-        """
-        if self.keypoints is not None and self.keypoints_path is not None:
-            helpers.write_pickle(self.keypoints, path=self.keypoints_path)
-        else:
-            raise ValueError('No keypoints, or keypoints path not specified')
-
-    def plot(self, origin='upper', extent=None, **params):
+    def plot(self, **kwargs):
         """
         Plot image data.
 
-        By default, the image is plotted with the upper-left corner of the upper-left pixel at (0,0).
+        By default, the image is plotted with the upper-left corner of the
+        upper-left pixel at (0, 0).
 
         Arguments:
-            origin (str): Place the [0, 0] index of the array in either the 'upper' left (default)
-                or 'lower' left corner of the axes.
-            extent (scalars): Location of the lower-left and upper-right corners (left, right, bottom, top).
-                If `None` (default), the corners are positioned at (0, nx, ny, 0).
-            **params: Additional arguments passed to `matplotlib.pyplot.imshow`.
+            **kwargs: Arguments passed to `matplotlib.pyplot.imshow`.
         """
         I = self.read()
-        if extent is None:
-            extent = (0, I.shape[1], I.shape[0], 0)
-        matplotlib.pyplot.imshow(I, origin=origin, extent=extent, **params)
+        kwargs = {
+            'origin': 'upper',
+            'extent': (0, I.shape[1], I.shape[0], 0),
+            **kwargs
+        }
+        matplotlib.pyplot.imshow(I, **kwargs)
 
     def set_plot_limits(self):
+        """
+        Set limits of current plot to image extent.
+        """
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
@@ -221,8 +161,8 @@ class Image(object):
             cam (Camera): Target `Camera`
             method (str): Interpolation method, either 'linear' or 'nearest'
         """
-        if not np.all(cam.xyz == self.cam.xyz):
-            raise ValueError("Source and target cameras must have the same position ('xyz')")
+        if not all(cam.xyz == self.cam.xyz):
+            raise ValueError("Source and target cameras have different positions ('xyz')")
         # Construct grid in target image
         u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
         v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))

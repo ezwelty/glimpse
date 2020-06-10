@@ -25,7 +25,8 @@ class Grid(object):
         xlim, ylim (array): Outer bounds of the grid (left, right), (top, bottom)
         n (array): Grid dimensions (nx|cols, ny|rows)
         d (array): Grid cell size (dx, dy)
-        x, y (array): Cell center coordinates as row vectors (left to right), (top to bottom)
+        x, y (array): Cell center coordinates as row vectors
+            (left to right), (top to bottom)
         X, Y (array): Cell center coordinates as matrices with dimensions `n`
         min (array): Minimum bounding box coordinates (x, y)
         max (array): Maximum bounding box coordinates (x, y)
@@ -290,7 +291,8 @@ class Grid(object):
 
         Returns:
             array (`grid` is False): Whether each point is inbounds (n, 1)
-            tuple (`grid` is True): Whether each grid column or row is inbounds (n, ), (m, )
+            tuple (`grid` is True): Whether each grid column or row is inbounds
+                (n, ), (m, )
         """
         if grid:
             return (
@@ -646,7 +648,8 @@ class Raster(Grid):
 
         If `grid` is False:
 
-            - Uses a cached `scipy.interpolate.RegularGridInterpolator` object (`self._Zf`)
+            - Uses a cached `scipy.interpolate.RegularGridInterpolator` object
+                (`self._Zf`)
             - Supports interpolation `order` 0 and 1
             - Faster for small sets of points
 
@@ -856,7 +859,7 @@ class Raster(Grid):
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
-            self.Z = self.Z[rows[0] : rows[1] + 1, cols[0] : cols[1] + 1]
+            self.Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
             self.xlim = xlim
             self.ylim = ylim
         if zlim is not None:
@@ -936,7 +939,8 @@ class Raster(Grid):
                 (0-360, degrees clockwise from North)
             altitude (number): Altitude angle of the light source
                 (0-90, degrees up from horizontal)
-            kwargs (dict): Arguments passed to `matplotlib.colors.LightSource.hillshade()`
+            kwargs (dict): Arguments passed to
+                `matplotlib.colors.LightSource.hillshade()`
         """
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
@@ -953,7 +957,8 @@ class Raster(Grid):
             mask: Boolean array of cells to include (True) or exclude (False),
                 or callable that generates the mask from `self.Z`.
                 If `None`, all cells are included.
-            fill (bool): Whether to fill cells excluded by `mask` with interpolated values
+            fill (bool): Whether to fill cells excluded by `mask`
+                with interpolated values
         """
         if callable(mask):
             mask = mask(self.Z)
@@ -970,8 +975,9 @@ class Raster(Grid):
 
         Arguments:
             origin (iterable): World coordinates of viewing position (x, y, z)
-            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
-                `True` for default arguments, or `None` or `False` to skip.
+            correction (dict or bool): Either arguments to
+                `helpers.elevation_corrections()`, `True` for default arguments,
+                or `None` or `False` to skip.
 
         Returns:
             array: Boolean array of the same shape as `self.Z`
@@ -1017,7 +1023,7 @@ class Raster(Grid):
                 return np.ones(self.Z.shape, dtype=bool)
         rings = np.append(rings, len(ix))
         # Compute elevation ratio
-        first_ring = ix[rings[0] : rings[1]]
+        first_ring = ix[rings[0]:rings[1]]
         is_zero = np.where(dxy[first_ring] == 0)[0]
         dxy[first_ring[is_zero]] = np.nan
         elevation = dz / dxy
@@ -1027,8 +1033,11 @@ class Raster(Grid):
         vis = np.zeros(self.Z.size, dtype=bool)
         # Loop through rings
         period = 2 * np.pi
+        previous_headings = None
+        max_elevations = False
+        max_elevations_has_nan = False
         for k in range(len(rings) - 1):
-            rix = ix[rings[k] : rings[k + 1]]
+            rix = ix[rings[k]:rings[k + 1]]
             rheading = heading[rix]
             relev = elevation[rix]
             # Test visibility
@@ -1067,8 +1076,9 @@ class Raster(Grid):
         Arguments:
             origin (iterable): World coordinates of viewing position (x, y, z)
             headings (iterable):
-            correction (dict or bool): Either arguments to `helpers.elevation_corrections()`,
-                `True` for default arguments, or `None` or `False` to skip.
+            correction (dict or bool): Either arguments to
+                `helpers.elevation_corrections()`, `True` for default arguments,
+                or `None` or `False` to skip.
 
         Returns:
             list: List of world coordinate arrays (n, 3) each tracing an unbroken
@@ -1115,7 +1125,7 @@ class Raster(Grid):
             else:
                 maxi = np.nanargmax(dz / np.sqrt(dxy))
             # Save point if not last non-nan value
-            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1 :])):
+            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1:])):
                 hxyz[i, 0:2] = xy[maxi, :]
                 hxyz[i, 2] = dz[maxi]
         hxyz[:, 2] += origin[2]

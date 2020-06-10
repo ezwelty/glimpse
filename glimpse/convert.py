@@ -1,6 +1,7 @@
 from .imports import np, re, xml, inspect, scipy
 from . import Camera, optimize
 
+
 class _IncomingPoints(object):
     """
     Points control for external cameras with camera-to-image distortion models.
@@ -45,6 +46,7 @@ class _IncomingPoints(object):
             index = slice(None)
         return self.cam._camera2image(self.xy[index])
 
+
 class _OutgoingPoints(_IncomingPoints):
     """
     Points control for external cameras with image-to-camera distortion models.
@@ -71,6 +73,7 @@ class _OutgoingPoints(_IncomingPoints):
             index = slice(None)
         return self.uv[index]
 
+
 class _ExternalCamera(object):
     """
     Template for an external camera model.
@@ -93,6 +96,7 @@ class _ExternalCamera(object):
         cam = self._as_camera_initial()
         points = self._points(self, cam, step=step)
         mask, _ = optimize.Cameras.parse_params(params)
+
         def fun(x):
             cam.vector[mask] = x
             return (points.predicted() - points.observed()).ravel()
@@ -121,6 +125,7 @@ class _ExternalCamera(object):
         """
         pass
 
+
 class _IncomingCamera(_ExternalCamera):
     """
     Template for an external camera with a camera-to-image distortion model.
@@ -139,12 +144,13 @@ class _IncomingCamera(_ExternalCamera):
 
         Arguments:
             xy (array): Camera coordinates (Nx2)
-        
+
         Returns:
             array: Image coordinates (Nx2), in a system where the top left
                 corner of the top left pixel is (0, 0).
         """
         pass
+
 
 class _OutgoingCamera(_ExternalCamera):
     """
@@ -162,11 +168,12 @@ class _OutgoingCamera(_ExternalCamera):
         Arguments:
             uv (array): Image coordinates (Nx2), in a system where the top left
                 corner of the top left pixel is (0, 0).
-        
+
         Returns:
             array: Normalized camera coordinates (Nx2)
         """
         pass
+
 
 class MatlabCamera(_IncomingCamera):
     """
@@ -178,7 +185,7 @@ class MatlabCamera(_IncomingCamera):
         nx (float): Image size in pixels (x)
         ny (float): Image size in pixels (y)
         fc (iterable): Focal length in pixels (x, y)
-        cc (iterable): Principal point in pixels (x, y), in an image coordinate 
+        cc (iterable): Principal point in pixels (x, y), in an image coordinate
             system where the center of the top left pixel is (0, 0)
         kc (iterable): Image distortion coefficients (k1, k2, p1, p2, k3)
         alpha_c (float): Skew coefficient defining the angle between the x and y
@@ -206,6 +213,7 @@ class MatlabCamera(_IncomingCamera):
         """
         with open(path, mode='r') as fp:
             txt = fp.read()
+
         def parse_param(param, length):
             if length == 1:
                 pattern = r'^{param} = (.*);'.format(param=param)
@@ -223,8 +231,9 @@ class MatlabCamera(_IncomingCamera):
             lengths = dict(fc_error=2, cc_error=2, alpha_c_error=1, kc_error=5)
         else:
             lengths = dict(fc=2, cc=2, alpha_c=1, kc=5, nx=1, ny=1)
-        kwargs = {param: parse_param(param, length)
-            for param, length in lengths.items()}
+        kwargs = {
+            param: parse_param(param, length) for param, length in lengths.items()
+        }
         if sigmas:
             kwargs = {key.split('_error')[0]: kwargs[key] for key in kwargs}
             kwargs['nx'], kwargs['ny'] = None, None
@@ -274,6 +283,7 @@ class MatlabCamera(_IncomingCamera):
         else:
             return self._as_camera_initial()
 
+
 class AgisoftCamera(_IncomingCamera):
     """
     Frame camera model used by Agisoft software (PhotoScan, Metashape, Lens).
@@ -296,8 +306,9 @@ class AgisoftCamera(_IncomingCamera):
         b2 (float): Non-orthogonality (skew) coefficient
     """
 
-    def __init__(self, width, height, f, cx, cy, k1=0, k2=0, k3=0, k4=0, p1=0,
-        p2=0, b1=0, b2=0):
+    def __init__(
+        self, width, height, f, cx, cy, k1=0, k2=0, k3=0, k4=0, p1=0, p2=0, b1=0, b2=0
+    ):
         self.width, self.height = width, height
         self.f = f
         self.cx, self.cy = cx, cy
@@ -317,9 +328,11 @@ class AgisoftCamera(_IncomingCamera):
         if params['projection'] != 'frame':
             raise ValueError(
                 'Found unsupported camera model type: ' + params['projection'])
-        kwargs = { key: float(params[key])
-            for key in inspect.getfullargspec(cls).args[1:] if key in params }
-        return cls(**kwargs) 
+        kwargs = {
+            key: float(params[key])
+            for key in inspect.getfullargspec(cls).args[1:] if key in params
+        }
+        return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
@@ -334,7 +347,7 @@ class AgisoftCamera(_IncomingCamera):
         dxy[:, 1] += dxy[:, 1] * dr + dty
         # Project to image
         return np.column_stack((
-            (self.width * 0.5 + self.cx + dxy[:, 0] * (self.f + self.b1) + 
+            (self.width * 0.5 + self.cx + dxy[:, 0] * (self.f + self.b1) +
                 dxy[:, 1] * self.b2),
             self.height * 0.5 + self.cy + dxy[:, 1] * self.f))
 
@@ -368,6 +381,7 @@ class AgisoftCamera(_IncomingCamera):
         else:
             return self._as_camera_initial()
 
+
 class PhotoModelerCamera(_OutgoingCamera):
     """
     Camera model used by EOS Systems PhotoModeler.
@@ -388,8 +402,9 @@ class PhotoModelerCamera(_OutgoingCamera):
         p2 (float): Decentering distortion coefficient #2
     """
 
-    def __init__(self, imgsz, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0,
-        p2=0):
+    def __init__(
+        self, imgsz, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0, p2=0
+    ):
         self.imgsz = imgsz
         self.focal = focal
         self.xp, self.yp = xp, yp
@@ -419,15 +434,21 @@ class PhotoModelerCamera(_OutgoingCamera):
             txt = fp.read()
         if sigmas:
             matches = [
-            re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt)
-                for label in params.values()]
-            kwargs = {arg: float(match[0]) if match else None
-                for arg, match in zip(params.keys(), matches)}
+                re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt)
+                for label in params.values()
+            ]
+            kwargs = {
+                arg: float(match[0]) if match else None
+                for arg, match in zip(params.keys(), matches)
+            }
         else:
-            matches = [re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt)
-                for label in params.values()]
-            kwargs = {arg: float(match[0])
-                for arg, match in zip(params.keys(), matches)}
+            matches = [
+                re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt)
+                for label in params.values()
+            ]
+            kwargs = {
+                arg: float(match[0]) for arg, match in zip(params.keys(), matches)
+            }
         return cls(imgsz=imgsz, **kwargs)
 
     def _image2camera(self, uv):
@@ -452,7 +473,7 @@ class PhotoModelerCamera(_OutgoingCamera):
         # Normalize
         xy *= (1 / self.focal)
         return xy
-    
+
     def _as_camera_initial(self):
         return Camera(
             imgsz=self.imgsz,
@@ -483,6 +504,7 @@ class PhotoModelerCamera(_OutgoingCamera):
         else:
             return self._as_camera_initial()
 
+
 class OpenCVCamera(_IncomingCamera):
     """
     Frame camera model used by OpenCV.
@@ -510,8 +532,10 @@ class OpenCVCamera(_IncomingCamera):
         s4 (float): Thin prism distortion coefficient #4
     """
 
-    def __init__(self, imgsz, fx, fy, cx=None, cy=None, k1=0, k2=0, k3=0, k4=0,
-        k5=0, k6=0, p1=0, p2=0, s1=0, s2=0, s3=0, s4=0):
+    def __init__(
+        self, imgsz, fx, fy, cx=None, cy=None, k1=0, k2=0, k3=0, k4=0,
+        k5=0, k6=0, p1=0, p2=0, s1=0, s2=0, s3=0, s4=0
+    ):
         self.imgsz = imgsz
         self.fx, self.fy = fx, fy
         self.cx = cx = imgsz[0] / 2 if cx is None else cx
@@ -520,7 +544,7 @@ class OpenCVCamera(_IncomingCamera):
         self.k4, self.k5, self.k6 = k4, k5, k6
         self.p1, self.p2 = p1, p2
         self.s1, self.s2, self.s3, self.s4 = s1, s2, s3, s4
-    
+
     @staticmethod
     def parse_camera_matrix(x):
         """
@@ -528,7 +552,7 @@ class OpenCVCamera(_IncomingCamera):
 
         Arguments:
             x (array-like): Camera matrix [[fx 0 cx], [0 fy cy], [0 0 1]]
-        
+
         Returns:
             dict: fx, fy, cx, and cy
         """
@@ -545,8 +569,10 @@ class OpenCVCamera(_IncomingCamera):
                 [k1, k2, p1, p2, k3, k4, k5, k6, s1, s2, s3, s4, τx, τy]
         """
         x = np.asarray(x)
-        labels = ('k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6', 's1', 's2',
-            's3', 's4', 'τx', 'τy')
+        labels = (
+            'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6', 's1', 's2', 's3', 's4',
+            'τx', 'τy'
+        )
         return {key: x[i] if i < len(x) else 0 for i, key in enumerate(labels)}
 
     @classmethod
@@ -556,26 +582,30 @@ class OpenCVCamera(_IncomingCamera):
         matrix = next((e for e in tree.iter('camera_matrix')), None)
         if matrix:
             txt = matrix.find('data').text
-            x = np.asarray([float(xi)
-                for xi in re.findall(r'([0-9\-\.e\+]+)', txt)]).reshape(3, 3)
+            x = np.asarray([
+                float(xi) for xi in re.findall(r'([0-9\-\.e\+]+)', txt)
+            ]).reshape(3, 3)
             params = {**params, **cls.parse_camera_matrix(x)}
         else:
             raise ValueError('No camera matrix found')
         coeffs = next((e for e in tree.iter('distortion_coefficients')), None)
         if coeffs:
             txt = coeffs.find('data').text
-            x = np.asarray([float(xi)
-                for xi in re.findall(r'([0-9\-\.e\+]+)', txt)])
+            x = np.asarray([float(xi) for xi in re.findall(r'([0-9\-\.e\+]+)', txt)])
             params = {**params, **cls.parse_distortion_coefficients(x)}
-        kwargs = {key: params[key]
-            for key in inspect.getfullargspec(cls).args[1:] if key in params}
+        kwargs = {
+            key: params[key]
+            for key in inspect.getfullargspec(cls).args[1:] if key in params
+        }
         return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
         r2 = np.sum(xy**2, axis=1)
-        dr = ((1 + self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3) /
-            (1 + self.k4 * r2 + self.k5 * r2**2 + self.k6 * r2**2))
+        dr = (
+            (1 + self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3) /
+            (1 + self.k4 * r2 + self.k5 * r2**2 + self.k6 * r2**2)
+        )
         xty = xy[:, 0] * xy[:, 1]
         dtx = self.p2 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p1 * xty
         dty = self.p1 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p2 * xty
@@ -613,6 +643,7 @@ class OpenCVCamera(_IncomingCamera):
         else:
             return self._as_camera_initial()
 
+
 def as_camera_sigma(mean, sigma, n=100, **kwargs):
     """
     Convert to `Camera` and propagate uncertainties.
@@ -633,8 +664,11 @@ def as_camera_sigma(mean, sigma, n=100, **kwargs):
     mean_cam = mean.as_camera(**kwargs)
     vectors = []
     for _ in range(n):
-        args = { key: mean_args[key] + (np.random.normal(scale=sigma_args[key])
-            if sigma_args[key] else 0) for key in mean_args }
+        args = {
+            key: mean_args[key] + (
+                np.random.normal(scale=sigma_args[key]) if sigma_args[key] else 0
+            ) for key in mean_args
+        }
         new_mean = type(mean)(**args)
         vectors.append(new_mean.as_camera(**kwargs).vector)
     vectors = np.array(vectors)

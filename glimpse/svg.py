@@ -18,10 +18,12 @@ def _strip_etree_namespaces(tree):
     regex = re.compile(r"\{.*\}")
     for e in tree.iter():
         e.tag = regex.sub("", e.tag)
+        attrib = {}
         for key in e.attrib.keys():
             new_key = regex.sub("", key)
-            new_value = regex.sub("", e.attrib.pop(key))
-            e.attrib[new_key] = new_value
+            new_value = regex.sub("", e.attrib[key])
+            attrib[new_key] = new_value
+        e.attrib = attrib
 
 
 def read(path, key=None, imgsz=None):

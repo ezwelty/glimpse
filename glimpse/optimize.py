@@ -20,7 +20,8 @@ class Points(object):
         cam (Camera): Camera object
         uv (array): Image coordinates (Nx2)
         xyz (array): World coordinates (Nx3)
-        directions (bool): Whether `xyz` are absolute coordinates (False) or ray directions (True)
+        directions (bool): Whether `xyz` are absolute coordinates (False)
+            or ray directions (True)
         correction (dict or bool): See `cam.project()`
         size (int): Number of point pairs
         xyz (array): Initial camera position (`cam.xyz`)
@@ -61,11 +62,13 @@ class Points(object):
         """
         Predict image coordinates from world coordinates.
 
-        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions (`directions=True`),
-        the point correspondences are invalid and an error is raised.
+        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions
+        (`directions=True`), the point correspondences are invalid and an error is
+        raised.
 
         Arguments:
-            index (array_like or slice): Indices of world points to project, or all if `None`
+            index (array_like or slice): Indices of world points to project,
+                or all if `None`
         """
         if index is None:
             index = slice(None)
@@ -91,8 +94,10 @@ class Points(object):
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
             width (float): Width of quivers
-            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            selected: For selected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
         """
         if index is None:
             index = slice(None)
@@ -159,9 +164,11 @@ class Lines(object):
         uvs (iterable): Image line vertices (n, 2)
         uvi (array): Image coordinates interpolated from `uvs` by `step`
         xyzs (iterable): World line vertices (n, 3)
-        directions (bool): Whether `xyzs` are absolute coordinates (False) or ray directions (True)
+        directions (bool): Whether `xyzs` are absolute coordinates (False)
+            or ray directions (True)
         correction (dict or bool): See `cam.project()`
-        step (float): Along-line distance between image points interpolated from lines `uvs`
+        step (float): Along-line distance between image points
+            interpolated from lines `uvs`
         size (int): Number of image points
         xyz (array): Initial camera position (`cam.xyz`)
         imgsz (array): Initial image size (`cam.imgsz`)
@@ -207,8 +214,9 @@ class Lines(object):
         """
         Project world lines onto the image.
 
-        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions (`directions=True`),
-        the point correspondences are invalid and an error is raised.
+        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions
+        (`directions=True`), the point correspondences are invalid and an error is
+        raised.
 
         Returns:
             list: Arrays of image coordinates (Nx2)
@@ -251,8 +259,8 @@ class Lines(object):
         Return the points on the projected world lines nearest the image coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of image points to include in nearest-neighbor search,
-                or all if `None`
+            index (array_like or slice): Indices of image points to include in
+                nearest-neighbor search, or all if `None`
 
         Returns:
             array: Image coordinates (Nx2)
@@ -287,10 +295,14 @@ class Lines(object):
             index (array_like or slice): Indices of points to select, or all if `None`
             scale (float): Scale of quivers
             width (float): Width of quivers
-            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            observed: For image lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
-            predicted: For world lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
+            selected: For selected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            observed: For image lines, further arguments to
+                matplotlib.pyplot.plot (dict), `None` to hide, or color
+            predicted: For world lines, further arguments to
+                matplotlib.pyplot.plot (dict), `None` to hide, or color
         """
         # Plot image lines
         if observed is not None:
@@ -373,8 +385,9 @@ class Matches(object):
     """
     `Matches` store image-image point correspondences.
 
-    The image coordinates (`uvs[i]`) of one camera (`cams[i]`) are projected into the other camera (`cams[j]`),
-    then compared to the expected image coordinates for that camera (`uvs[j]`).
+    The image coordinates (`uvs[i]`) of one camera (`cams[i]`) are projected into the
+    other camera (`cams[j]`), then compared to the expected image coordinates for that
+    camera (`uvs[j]`).
 
     Attributes:
         cams (list): Pair of Camera objects
@@ -469,8 +482,10 @@ class Matches(object):
             cam (Camera or int): Camera to plot
             scale (float): Scale of quivers
             width (float): Width of quivers
-            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            selected: For selected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
         """
         if index is None:
             index = slice(None)
@@ -838,7 +853,8 @@ class Polynomial(object):
         Predict the values of a polynomial.
 
         Arguments:
-            params (array): Values of the polynomial, from highest to lowest degree component
+            params (array): Values of the polynomial,
+                from highest to lowest degree component
             index (array_like or slice): Indices of points for which to predict y from x
         """
         return np.polyval(params, self.data[index, 0])
@@ -848,7 +864,8 @@ class Polynomial(object):
         Compute the errors of a polynomial prediction.
 
         Arguments:
-            params (array): Values of the polynomial, from highest to lowest degree component
+            params (array): Values of the polynomial,
+                from highest to lowest degree component
             index (array_like or slice): Indices of points for which to predict y from x
         """
         prediction = self.predict(params, index)
@@ -878,11 +895,12 @@ class Polynomial(object):
         Plot the points and the polynomial fit.
 
         Arguments:
-            params (array): Values of the polynomial, from highest to lowest degree component,
-                or computed if `None`
+            params (array): Values of the polynomial,
+                from highest to lowest degree component, or computed if `None`
             index (array_like or slice): Indices of points to select
             selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points, or `None` to hide
+            unselected (color): Matplotlib color for unselected points,
+                or `None` to hide
             polynomial (color): Matplotlib color for polynomial fit, or `None` to hide
         """
         if params is None:
@@ -904,7 +922,8 @@ class Cameras(object):
     """
     Multi-camera optimization.
 
-    Finds the camera parameter values that minimize the reprojection errors of camera control:
+    Finds the camera parameter values that minimize the reprojection errors of camera
+    control:
 
         - image-world point coordinates (Points)
         - image-world line coordinates (Lines)
@@ -1067,7 +1086,7 @@ class Cameras(object):
         # https://math.stackexchange.com/questions/15580/what-is-average-distance-from-center-of-square-to-some-point
         mean_r_uv = (cam.imgsz.mean() / 6) * (np.sqrt(2) + np.log(1 + np.sqrt(2)))
         mean_r_xy = mean_r_uv / cam.f.mean()
-        ## xyz (if f is not descaled)
+        # xyz (if f is not descaled)
         # Compute mean distance to world features
         if controls:
             means = []
@@ -1089,22 +1108,22 @@ class Cameras(object):
                         )
             if means:
                 dpixels[0:3] = cam.f.mean() / np.average(means, weights=weights)
-        ## viewdir[0, 1]
+        # viewdir[0, 1]
         # First angle rotates camera left-right
         # Second angle rotates camera up-down
         imgsz_degrees = (2 * np.arctan(cam.imgsz / (2 * cam.f))) * (180 / np.pi)
         dpixels[3:5] = cam.imgsz / imgsz_degrees  # pixels per degree
-        ## viewdir[2]
+        # viewdir[2]
         # Third angle rotates camera around image center
         theta = np.pi / 180
         dpixels[5] = 2 * mean_r_uv * np.sin(theta / 2)  # pixels per degree
-        ## imgsz
+        # imgsz
         dpixels[6:8] = 0.5
-        ## f (if not descaled)
+        # f (if not descaled)
         dpixels[8:10] = mean_r_xy
-        ## c
+        # c
         dpixels[10:12] = 1
-        ## k (if f is not descaled)
+        # k (if f is not descaled)
         # Approximate at mean radius
         # NOTE: Not clear why '2**power' terms are needed
         dpixels[12:18] = [
@@ -1226,12 +1245,12 @@ class Cameras(object):
                         max_bounds = np.repeat(max_bounds, len(positions))
                     bounds[positions] = np.column_stack((min_bounds, max_bounds))
         if default_bounds is not None:
-            missing_min = (bounds[:, 0] == None) | (np.isnan(bounds[:, 0]))
-            missing_max = (bounds[:, 1] == None) | (np.isnan(bounds[:, 1]))
+            missing_min = (bounds[:, 0] is None) | (np.isnan(bounds[:, 0]))
+            missing_max = (bounds[:, 1] is None) | (np.isnan(bounds[:, 1]))
             bounds[missing_min, 0] = default_bounds[missing_min, 0]
             bounds[missing_max, 1] = default_bounds[missing_max, 1]
-        missing_min = (bounds[:, 0] == None) | (np.isnan(bounds[:, 0]))
-        missing_max = (bounds[:, 1] == None) | (np.isnan(bounds[:, 1]))
+        missing_min = (bounds[:, 0] is None) | (np.isnan(bounds[:, 0]))
+        missing_max = (bounds[:, 1] is None) | (np.isnan(bounds[:, 1]))
         bounds[missing_min, 0] = -np.inf
         bounds[missing_max, 1] = np.inf
         return mask, bounds
@@ -1400,10 +1419,10 @@ class Cameras(object):
         for i, idx in enumerate(self.group_indices):
             for j in idx:
                 self.cams[j].vector[self.group_masks[i]] = params[
-                    self.group_breaks[i] : self.group_breaks[i + 1]
+                    self.group_breaks[i]:self.group_breaks[i + 1]
                 ]
                 self.cams[j].vector[self.cam_masks[j]] = params[
-                    self.cam_breaks[j] : self.cam_breaks[j + 1]
+                    self.cam_breaks[j]:self.cam_breaks[j + 1]
                 ]
 
     def reset_cameras(self, vectors=None, save=False):
@@ -1453,8 +1472,10 @@ class Cameras(object):
         See control `predicted()` method for more details.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
-            index (array or slice): Indices of points to return, or all if `None` (default)
+            params (array or `lmfit.Parameters`): Parameter values
+                (see `.set_cameras()`)
+            index (array or slice): Indices of points to return,
+                or all if `None` (default)
         """
         if params is not None:
             vectors = [cam.vector.copy() for cam in self.cams]
@@ -1479,7 +1500,8 @@ class Cameras(object):
         Residuals are the difference between `.predicted()` and `.observed()`.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
+            params (array or `lmfit.Parameters`): Parameter values
+                (see `.set_cameras()`)
             index (array_like or slice): Indices of points to include, or all if `None`
         """
         d = self.predicted(params=params, index=index) - self.observed(index=index)
@@ -1497,7 +1519,8 @@ class Cameras(object):
         Errors are the Euclidean distance between `.predicted()` and `.observed()`.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values (see `.set_cameras()`)
+            params (array or `lmfit.Parameters`): Parameter values
+                (see `.set_cameras()`)
             index (array or slice): Indices of points to include, or all if `None`
         """
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
@@ -1629,15 +1652,21 @@ class Cameras(object):
         Arguments:
             params (array): Parameter values [group | cam0 | cam1 | ...].
                 If `None` (default), cameras are used unchanged.
-            cam (Camera or int): Camera to plot in (as object or position in `self.cams`)
-            index (array or slice): Indices of points to plot. If `None` (default), all points are plotted.
+            cam (Camera or int): Camera to plot in
+                (as object or position in `self.cams`)
+            index (array or slice): Indices of points to plot.
+                If `None` (default), all points are plotted.
                 Other values require `self.test_ransac()` to be True.
             scale (float): Scale of quivers
             width (float): Width of quivers
-            selected: For selected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            lines_observed: For image lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
-            lines_predicted: For world lines, further arguments to matplotlib.pyplot.plot (dict), `None` to hide, or color
+            selected: For selected points,further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            unselected: For unselected points, further arguments to
+                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            lines_observed: For image lines, further arguments to
+                matplotlib.pyplot.plot (dict), `None` to hide, or color
+            lines_predicted: For world lines, further arguments to
+                matplotlib.pyplot.plot (dict), `None` to hide, or color
         """
         if index is not None and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
@@ -1758,6 +1787,7 @@ class ObserverCameras(object):
             matches = self.matches
         else:
             matches = scipy.sparse.coo_matrix(matches)
+
         # Define combined objective, jacobian function
         def fun(viewdirs):
             viewdirs = viewdirs.reshape(-1, 3)
@@ -1812,11 +1842,14 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
 
             - `data_size()`: Returns maximum sample size
             - `fit(index)`: Accepts sample indices and returns model parameters
-            - `errors(params, index)`: Accepts sample indices and model parameters and returns an error for each sample
+            - `errors(params, index)`: Accepts sample indices and model parameters and
+                returns an error for each sample
 
         sample_size (int): Size of sample used to fit the model in each iteration
-        max_error (float): Error below which a sample element is considered a model inlier
-        min_inliers (int): Number of inliers (in addition to `sample_size`) for a model to be considered valid
+        max_error (float): Error below which a sample element is considered
+            a model inlier
+        min_inliers (int): Number of inliers (in addition to `sample_size`) for a model
+            to be considered valid
         iterations (int): Number of iterations
         **fit_kws: Additional arguments to `model.fit()`
 
@@ -1887,8 +1920,9 @@ def detect_keypoints(array, mask=None, method="sift", root=True, **params):
         array (array): 2 or 3-dimensional image array (uint8)
         mask (array): Regions in which to detect keypoints (uint8)
         root (bool): Whether to return square root L1-normalized descriptors.
-            See https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf.
-        **params: Additional arguments passed to `cv2.xfeatures2d.SIFT()` or `cv2.xfeatures2d.SURF()`.
+            See https://doi.org/10.1109/CVPR.2012.6248018.
+        **params: Additional arguments passed to `cv2.xfeatures2d.SIFT()` or
+            `cv2.xfeatures2d.SURF()`.
             See https://docs.opencv.org/master/d2/dca/group__xfeatures2d__nonfree.html.
 
     Returns:
@@ -1932,8 +1966,9 @@ def match_keypoints(
         ka (tuple): Keypoints of image A (keypoints, descriptors)
         kb (tuple): Keypoints of image B (keypoints, descriptors)
         mask (array): Region in which to retain keypoints (uint8)
-        max_ratio (float): Maximum descriptor-distance ratio between the best
-            and second best match. See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20.
+        max_ratio (float): Maximum descriptor-distance ratio between the best and
+            second best match.
+            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20.
         max_distance (float): Maximum coordinate-distance of matched keypoints
         indexParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
         searchParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
@@ -1984,13 +2019,14 @@ class KeypointMatcher(object):
     """
     `KeypointMatcher` detects and matches image keypoints.
 
-        - Build (and save to file) keypoint descriptors for each image with `self.build_keypoints()`.
-        - Build (and save to file) keypoints matches between image pairs with `self.build_matches()`.
+        - Build (and save to file) keypoint descriptors for each image with
+            `self.build_keypoints()`.
+        - Build (and save to file) keypoints matches between image pairs with
+            `self.build_matches()`.
 
     Arguments:
         clahe: Arguments to `cv2.createCLAHE()` (dict: clipLimit, tileGridSize)
             or whether to use CLAHE (bool).
-            See https://docs.opencv.org/master/d7/dbd/group__imgproc.html#gad689d2607b7b3889453804f414ab1018.
 
     Attributes:
         images (array): Image objects in ascending temporal order
@@ -2040,10 +2076,13 @@ class KeypointMatcher(object):
         so `Image.keypoints_path` must be set for all images.
 
         Arguments:
-            masks (iterable): Boolean array(s) (uint8) indicating regions in which to detect keypoints
+            masks (iterable): Boolean array(s) (uint8) indicating regions in which to
+                detect keypoints
             overwrite (bool): Whether to recompute and overwrite existing keypoints
-            clear_images (bool): Whether to clear cached image data (`self.observer.images[i].I`)
-            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`).
+            clear_images (bool): Whether to clear cached image data
+                (`self.observer.images[i].I`)
+            clear_keypoints (bool): Whether to clear cached keypoints
+                (`Image.keypoints`).
                 Ignored if `Image.keypoints_path` is `None`.
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
@@ -2056,6 +2095,7 @@ class KeypointMatcher(object):
         parallel = helpers._parse_parallel(parallel)
         if parallel and any((img.keypoints_path is None for img in self.images)):
             raise ValueError("Image.keypoints_path must be set for parallel processing")
+
         # Define parallel process
         def process(img, mask):
             print(img.path)
@@ -2096,10 +2136,11 @@ class KeypointMatcher(object):
         """
         Build matches between each image and its nearest neighbors.
 
-        Results are stored in `self.matches` as an (n, n) upper-triangular sparse matrix of `Matches`,
-        and the result for each `Image` pair (i, j) optionally written to a binary `pickle`
-        file with name `basenames[i]-basenames[j].pkl`. If `clear_matches` is `True`,
-        missing files are written but results are not stored in memory.
+        Results are stored in `self.matches` as an (n, n) upper-triangular sparse matrix
+        of `Matches`, and the result for each `Image` pair (i, j) optionally written to
+        a binary `pickle` file with name `basenames[i]-basenames[j].pkl`. If
+        `clear_matches` is `True`, missing files are written but results are not stored
+        in memory.
 
         Arguments:
             maxdt (`datetime.timedelta`): Maximum time separation between
@@ -2116,7 +2157,8 @@ class KeypointMatcher(object):
             overwrite (bool): Whether to recompute and overwrite existing match files
             skip_missing (bool): Whether to skip building and writing a match if
                 file is missing
-            clear_keypoints (bool): Whether to clear cached keypoints (`Image.keypoints`)
+            clear_keypoints (bool): Whether to clear cached keypoints
+                (`Image.keypoints`)
             clear_matches (bool): Whether to clear matches rather than return them
                 (requires `path`). Useful for avoiding memory overruns when
                 processing very large image sets.
@@ -2163,6 +2205,7 @@ class KeypointMatcher(object):
         if imgs is not None:
             for i, m in enumerate(matching_images):
                 matching_images[i] = m[np.isin(m, imgs)]
+
         # Define parallel process
         def process(i, js):
             if len(js) > 0:
@@ -2307,7 +2350,9 @@ class KeypointMatcher(object):
     def matches_per_image(self):
         self._test_matches()
         image_matches = [self._images_matches(i) for i in range(len(self.images))]
-        # n_images = np.array([np.sum([mi.size > 0 for mi in m]) for m in image_matches])
+        # n_images = np.array([
+        #   np.sum([mi.size > 0 for mi in m]) for m in image_matches
+        # ])
         return np.array([np.sum([mi.size for mi in m]) for m in image_matches])
 
     def images_per_image(self):

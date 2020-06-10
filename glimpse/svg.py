@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 import warnings
 
+
 def _strip_etree_namespaces(tree):
     """
     Strip namespaces from tags and attributes.
@@ -21,6 +22,7 @@ def _strip_etree_namespaces(tree):
             new_key = regex.sub('', key)
             new_value = regex.sub('', e.attrib.pop(key))
             e.attrib[new_key] = new_value
+
 
 def read(path, key=None, imgsz=None):
     """
@@ -75,6 +77,7 @@ def read(path, key=None, imgsz=None):
         warnings.warn('Transforming coordinates to first of multiple <image>')
     # Iterate over tree
     img = {}
+
     def parse_elements(e, key=None, transform=''):
         nonlocal img
         # Choose element name for dictionary
@@ -92,8 +95,7 @@ def read(path, key=None, imgsz=None):
                 img = {'o': bbox, 't': points.bbox()}
         elif e.tag in ('svg', 'g') and e:
             dd = defaultdict(list)
-            for dc in [parse_elements(ee, key=key, transform=transform)
-                for ee in e]:
+            for dc in [parse_elements(ee, key=key, transform=transform) for ee in e]:
                 for k, v in dc.items():
                     dd[k].append(v)
             for k, v in dd.items():
@@ -113,6 +115,7 @@ def read(path, key=None, imgsz=None):
     if imgsz and img:
         if imgsz != (img['t']['width'], img['t']['height']):
             scale = imgsz[0] / img['t']['width'], imgsz[1] / img['t']['height']
+
     def transform(e):
         keys = e.keys() if isinstance(e, dict) else range(len(e))
         for key in keys:
@@ -124,6 +127,7 @@ def read(path, key=None, imgsz=None):
                 transform(e[key])
     transform(points)
     return points['svg']
+
 
 def _chunks(x, n):
     """
@@ -142,6 +146,7 @@ def _chunks(x, n):
     each = iter(x)
     return zip(*([each] * n))
 
+
 def _num(string):
     """
     Cast string to integer or float.
@@ -150,6 +155,7 @@ def _num(string):
         return int(string)
     except ValueError:
         return float(string)
+
 
 def svg(*children, width, height, **attrib):
     """
@@ -161,7 +167,7 @@ def svg(*children, width, height, **attrib):
         *children (iterable): Children elements
         width,height (float): Width and height of the canvas
         **attrib (dict): Additional element attributes
-    
+
     Returns:
         Element
     """
@@ -174,6 +180,7 @@ def svg(*children, width, height, **attrib):
     e = ET.Element('svg', attrib=attrib)
     e.extend(children)
     return e
+
 
 def g(*children, **attrib):
     """
@@ -191,6 +198,7 @@ def g(*children, **attrib):
     e = ET.Element('g', attrib=attrib)
     e.extend(children)
     return e
+
 
 def image(href, width, height, **attrib):
     """
@@ -213,6 +221,7 @@ def image(href, width, height, **attrib):
     }
     return ET.Element('image', attrib=attrib)
 
+
 def path(d='', **attrib):
     """
     Create `path` element.
@@ -233,6 +242,7 @@ def path(d='', **attrib):
     attrib = {'d': d, **attrib}
     return ET.Element('path', attrib=attrib)
 
+
 def write(e, path=None):
     """
     Returns XML as a string or writes it to file.
@@ -248,6 +258,7 @@ def write(e, path=None):
         return ET.tostring(e, encoding='unicode')
     else:
         ET.ElementTree(e).write(path, encoding='unicode')
+
 
 class _Points:
     """
@@ -332,8 +343,7 @@ class _Points:
         Returns:
             Points: Points with transformed coordinates.
         """
-        self.xy = [(a * xo + c * yo + e, b * xo + d * yo + f)
-            for xo, yo in self.xy]
+        self.xy = [(a * xo + c * yo + e, b * xo + d * yo + f) for xo, yo in self.xy]
         return self
 
     def transform(self, transform):

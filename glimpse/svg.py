@@ -130,7 +130,7 @@ def read(path, key=None, imgsz=None):
                 transform(e[key])
 
     transform(points)
-    return points["svg"]
+    return next(iter(points.values()))
 
 
 def _chunks(x, n):

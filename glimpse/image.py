@@ -37,14 +37,14 @@ class Image(object):
             cam = {}
         if isinstance(cam, dict):
             if not (
-                'imgsz' in cam and 'f' in cam or ('fmm' in cam and 'sensorsz' in cam)
+                "imgsz" in cam and "f" in cam or ("fmm" in cam and "sensorsz" in cam)
             ):
                 exif = exif or Exif(path)
                 cam = {
-                    'imgsz': exif.imgsz,
-                    'fmm': exif.fmm,
-                    'sensorsz': exif.sensorsz,
-                    **cam
+                    "imgsz": exif.imgsz,
+                    "fmm": exif.fmm,
+                    "sensorsz": exif.sensorsz,
+                    **cam,
                 }
             cam = Camera(**cam)
         self.cam = cam
@@ -97,19 +97,21 @@ class Image(object):
             ds = osgeo.gdal.Open(self.path)
             args = {}
             if resize:
-                args['buf_xsize'], args['buf_ysize'] = cam_size
+                args["buf_xsize"], args["buf_ysize"] = cam_size
             if box and not cache:
                 # Resize box to actual image size
                 xscale, yscale = size[0] / cam_size[0], size[1] / cam_size[1]
                 # Read image subset
-                args['xoff'] = int(round(box[0] * xscale))
-                args['win_xsize'] = int(round((box[2] - box[0]) * xscale))
-                args['yoff'] = int(round(box[1] * yscale))
-                args['win_ysize'] = int(round((box[3] - box[1]) * yscale))
-            I = np.dstack([
-                ds.GetRasterBand(i + 1).ReadAsArray(**args)
-                for i in range(ds.RasterCount)
-            ])
+                args["xoff"] = int(round(box[0] * xscale))
+                args["win_xsize"] = int(round((box[2] - box[0]) * xscale))
+                args["yoff"] = int(round(box[1] * yscale))
+                args["win_ysize"] = int(round((box[3] - box[1]) * yscale))
+            I = np.dstack(
+                [
+                    ds.GetRasterBand(i + 1).ReadAsArray(**args)
+                    for i in range(ds.RasterCount)
+                ]
+            )
             if I.shape[2] == 1:
                 I = I.squeeze(axis=2)
             if cache:
@@ -117,7 +119,7 @@ class Image(object):
                 self.I = I
         if box is not None and (cache or not new_I):
             # Caching and cropping: Subset cached array
-            I = I[box[1]:box[3], box[0]:box[2]]
+            I = I[box[1] : box[3], box[0] : box[2]]
         return I
 
     def write(self, path, I=None, driver=None):
@@ -144,11 +146,7 @@ class Image(object):
             **kwargs: Arguments passed to `matplotlib.pyplot.imshow`.
         """
         I = self.read()
-        kwargs = {
-            'origin': 'upper',
-            'extent': (0, I.shape[1], I.shape[0], 0),
-            **kwargs
-        }
+        kwargs = {"origin": "upper", "extent": (0, I.shape[1], I.shape[0], 0), **kwargs}
         matplotlib.pyplot.imshow(I, **kwargs)
 
     def set_plot_limits(self):
@@ -158,7 +156,7 @@ class Image(object):
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
-    def project(self, cam, method='linear'):
+    def project(self, cam, method="linear"):
         """
         Project image into another `Camera`.
 

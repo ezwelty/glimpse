@@ -1,5 +1,4 @@
-from .imports import (np, scipy, cv2, lmfit, matplotlib, sys, os, warnings,
-    datetime)
+from .imports import np, scipy, cv2, lmfit, matplotlib, sys, os, warnings, datetime
 from . import helpers, config, image
 
 # ---- Controls ----
@@ -8,6 +7,7 @@ from . import helpers, config, image
 # .size
 # .observed(index)
 # .predicted(index)
+
 
 class Points(object):
     """
@@ -29,7 +29,7 @@ class Points(object):
 
     def __init__(self, cam, uv, xyz, directions=False, correction=False):
         if len(uv) != len(xyz):
-            raise ValueError('`uv` and `xyz` have different number of rows')
+            raise ValueError("`uv` and `xyz` have different number of rows")
         self.cam = cam
         self.uv = uv
         self.xyz = xyz
@@ -70,8 +70,10 @@ class Points(object):
         if index is None:
             index = slice(None)
         if self.directions and not self.is_static():
-            raise ValueError('Camera has changed position (xyz) and `directions=True`')
-        return self.cam.project(self.xyz[index], directions=self.directions, correction=self.correction)
+            raise ValueError("Camera has changed position (xyz) and `directions=True`")
+        return self.cam.project(
+            self.xyz[index], directions=self.directions, correction=self.correction
+        )
 
     def is_static(self):
         """
@@ -79,7 +81,7 @@ class Points(object):
         """
         return (self.cam.xyz == self.cam_xyz).all()
 
-    def plot(self, index=None, scale=1, width=5, selected='red', unselected=None):
+    def plot(self, index=None, scale=1, width=5, selected="red", unselected=None):
         """
         Plot reprojection errors as quivers.
 
@@ -100,19 +102,27 @@ class Points(object):
         uv = self.observed()
         puv = self.predicted()
         duv = scale * (puv - uv)
-        defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
+        defaults = dict(
+            scale=1, scale_units="xy", angles="xy", units="xy", width=width, color="red"
+        )
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected = dict(color=unselected)
             unselected = helpers.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
-                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
+                uv[other_index, 0],
+                uv[other_index, 1],
+                duv[other_index, 0],
+                duv[other_index, 1],
+                **unselected
+            )
         if selected is not None:
             if not isinstance(selected, dict):
                 selected = dict(color=selected)
             selected = helpers.merge_dicts(defaults, selected)
             matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
+            )
 
     def resize(self, size=None, force=False):
         """
@@ -134,6 +144,7 @@ class Points(object):
         if any(scale != 1):
             self.uv = self.uv * scale
             self.imgsz = self.cam.imgsz.copy()
+
 
 class Lines(object):
     """
@@ -162,7 +173,9 @@ class Lines(object):
         self.uvs = list(uvs)
         self.step = step
         if step:
-            self.uvi = np.vstack((helpers.interpolate_line(uv, dx=step) for uv in self.uvs))
+            self.uvi = np.vstack(
+                (helpers.interpolate_line(uv, dx=step) for uv in self.uvs)
+            )
         else:
             self.uvi = np.vstack(self.uvs)
         self.xyzs = xyzs
@@ -201,7 +214,7 @@ class Lines(object):
             list: Arrays of image coordinates (Nx2)
         """
         if self.directions and not self.is_static():
-            raise ValueError('Camera has changed position (xyz) and `directions=True`')
+            raise ValueError("Camera has changed position (xyz) and `directions=True`")
         xy_step = 1 / self.cam.f.mean()
         uv_edges = self.cam.edges(step=self.cam.imgsz / 2)
         xy_edges = self.cam._image2camera(uv_edges)
@@ -211,17 +224,22 @@ class Lines(object):
         for xyz in self.xyzs:
             # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
-            xy = self.cam._world2camera(xyz, directions=self.directions, correction=self.correction)
+            xy = self.cam._world2camera(
+                xyz, directions=self.directions, correction=self.correction
+            )
             # Discard nan values (behind camera)
-            lines = helpers.boolean_split(xy, np.isnan(xy[:, 0]), include='false')
+            lines = helpers.boolean_split(xy, np.isnan(xy[:, 0]), include="false")
             for line in lines:
                 inlines.append(line)
                 # Clip lines in view
                 # Resolves coordinate wrap around with large distortion
                 for cline in helpers.clip_polyline_box(line, xy_box):
                     # Interpolate clipped lines to ~1 pixel density
-                    puvs.append(self.cam._camera2image(
-                        helpers.interpolate_line(np.array(cline), dx=xy_step)))
+                    puvs.append(
+                        self.cam._camera2image(
+                            helpers.interpolate_line(np.array(cline), dx=xy_step)
+                        )
+                    )
         if puvs:
             return puvs
         else:
@@ -250,8 +268,16 @@ class Lines(object):
         """
         return (self.cam.xyz == self.cam_xyz).all()
 
-    def plot(self, index=None, scale=1, width=5, selected='red', unselected=None,
-        observed='green', predicted='yellow'):
+    def plot(
+        self,
+        index=None,
+        scale=1,
+        width=5,
+        selected="red",
+        unselected=None,
+        observed="green",
+        predicted="yellow",
+    ):
         """
         Plot the reprojection errors as quivers.
 
@@ -270,14 +296,14 @@ class Lines(object):
         if observed is not None:
             if not isinstance(observed, dict):
                 observed = dict(color=observed)
-            observed = helpers.merge_dicts(dict(color='green'), observed)
+            observed = helpers.merge_dicts(dict(color="green"), observed)
             for uv in self.uvs:
                 matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
         # Plot world lines
         if predicted is not None:
             if not isinstance(predicted, dict):
                 predicted = dict(color=predicted)
-            predicted = helpers.merge_dicts(dict(color='yellow'), predicted)
+            predicted = helpers.merge_dicts(dict(color="yellow"), predicted)
             puvs = self.project()
             for puv in puvs:
                 matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
@@ -292,19 +318,32 @@ class Lines(object):
             distances = helpers.pairwise_distance(uv, puv)
             min_index = np.argmin(distances, axis=1)
             duv = scale * (puv[min_index, :] - uv)
-            defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
+            defaults = dict(
+                scale=1,
+                scale_units="xy",
+                angles="xy",
+                units="xy",
+                width=width,
+                color="red",
+            )
             if unselected is not None:
                 if not isinstance(unselected, dict):
                     unselected = dict(color=unselected)
                 unselected = helpers.merge_dicts(defaults, unselected)
                 matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **unselected)
+                    uv[index, 0],
+                    uv[index, 1],
+                    duv[index, 0],
+                    duv[index, 1],
+                    **unselected
+                )
             if selected is not None:
                 if not isinstance(selected, dict):
                     selected = dict(color=selected)
                 selected = helpers.merge_dicts(defaults, selected)
                 matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
+                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
+                )
 
     def resize(self, size=None, force=False):
         """
@@ -328,6 +367,7 @@ class Lines(object):
                 self.uvs[i] = uv * scale
             self.uvi *= scale
             self.imgsz = self.cam.imgsz.copy()
+
 
 class Matches(object):
     """
@@ -357,14 +397,14 @@ class Matches(object):
 
     def _test_matches(self):
         if self.cams[0] is self.cams[1]:
-            raise ValueError('Both cameras are the same object')
+            raise ValueError("Both cameras are the same object")
         uvs = self.uvs
         if uvs is None:
-            uvs = getattr(self, 'xys', None)
+            uvs = getattr(self, "xys", None)
         if len(self.cams) != 2 or len(uvs) != 2:
-            raise ValueError('`cams` and coordinate arrays must each have two elements')
+            raise ValueError("`cams` and coordinate arrays must each have two elements")
         if uvs[0].shape != uvs[1].shape:
-            raise ValueError('Coordinate arrays have different shapes')
+            raise ValueError("Coordinate arrays have different shapes")
 
     def observed(self, index=None, cam=0):
         """
@@ -388,7 +428,7 @@ class Matches(object):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError('Cameras have different positions (xyz)')
+            raise ValueError("Cameras have different positions (xyz)")
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -411,12 +451,14 @@ class Matches(object):
         """
         if isinstance(cam, int):
             if cam >= len(self.cams):
-                raise IndexError('Camera index out of range')
+                raise IndexError("Camera index out of range")
             return cam
         else:
             return self.cams.index(cam)
 
-    def plot(self, index=None, cam=0, scale=1, width=5, selected='red', unselected=None):
+    def plot(
+        self, index=None, cam=0, scale=1, width=5, selected="red", unselected=None
+    ):
         """
         Plot the reprojection errors as quivers.
 
@@ -438,19 +480,27 @@ class Matches(object):
         uv = self.observed(cam=cam)
         puv = self.predicted(cam=cam)
         duv = scale * (puv - uv)
-        defaults = dict(scale=1, scale_units='xy', angles='xy', units='xy', width=width, color='red')
+        defaults = dict(
+            scale=1, scale_units="xy", angles="xy", units="xy", width=width, color="red"
+        )
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected = dict(color=unselected)
             unselected = helpers.merge_dicts(defaults, unselected)
             matplotlib.pyplot.quiver(
-                uv[other_index, 0], uv[other_index, 1], duv[other_index, 0], duv[other_index, 1], **unselected)
+                uv[other_index, 0],
+                uv[other_index, 1],
+                duv[other_index, 0],
+                duv[other_index, 1],
+                **unselected
+            )
         if selected is not None:
             if not isinstance(selected, dict):
                 selected = dict(color=selected)
             selected = helpers.merge_dicts(defaults, selected)
             matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected)
+                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
+            )
 
     def as_type(self, mtype):
         """
@@ -483,7 +533,14 @@ class Matches(object):
                 self.uvs[i] = self.uvs[i] * scale
                 self.imgszs[i] = cam.imgsz.copy()
 
-    def filter(self, max_distance=None, max_error=None, min_weight=None, n_best=None, scaled=False):
+    def filter(
+        self,
+        max_distance=None,
+        max_error=None,
+        min_weight=None,
+        n_best=None,
+        scaled=False,
+    ):
         selected = np.ones(self.size, dtype=bool)
         if min_weight:
             selected &= self.weights >= min_weight
@@ -491,16 +548,22 @@ class Matches(object):
             if scaled:
                 max_distance = max_distance * self.cams[0].imgsz.max()
             scale = self.cams[0].imgsz / self.cams[1].imgsz
-            distances = np.linalg.norm(self.uvs[1][selected] * scale - self.uvs[0][selected], axis=1)
+            distances = np.linalg.norm(
+                self.uvs[1][selected] * scale - self.uvs[0][selected], axis=1
+            )
             selected[selected] &= distances <= max_distance
         if max_error:
             if scaled:
                 max_error = max_error * self.cams[0].imgsz.max()
-            errors = np.linalg.norm(self.observed(index=selected) - self.predicted(index=selected), axis=1)
+            errors = np.linalg.norm(
+                self.observed(index=selected) - self.predicted(index=selected), axis=1
+            )
             selected[selected] &= errors <= max_error
         if n_best:
-            weight_order = np.flip(np.argsort(self.weights[selected]), axis=0) # descending
-            indices = weight_order[:min(n_best, len(weight_order))]
+            weight_order = np.flip(
+                np.argsort(self.weights[selected]), axis=0
+            )  # descending
+            indices = weight_order[: min(n_best, len(weight_order))]
             # NOTE: Switch from boolean to integer indexing
             selected = np.arange(len(selected))[selected][indices]
         if self.uvs is not None:
@@ -508,8 +571,9 @@ class Matches(object):
         if self.weights is not None:
             self.weights = self.weights[selected]
         # HACK: Support for RotationMatches
-        if getattr(self, 'xys', None) is not None:
+        if getattr(self, "xys", None) is not None:
             self.xys = [xy[selected] for xy in self.xys]
+
 
 class RotationMatches(Matches):
     """
@@ -542,7 +606,8 @@ class RotationMatches(Matches):
         if uvs is None and xys is not None:
             return (
                 self.cams[0]._camera2image(xys[0]),
-                self.cams[1]._camera2image(xys[1]))
+                self.cams[1]._camera2image(xys[1]),
+            )
         else:
             return uvs
 
@@ -550,7 +615,8 @@ class RotationMatches(Matches):
         if xys is None and uvs is not None:
             return (
                 self.cams[0]._image2camera(uvs[0]),
-                self.cams[1]._image2camera(uvs[1]))
+                self.cams[1]._image2camera(uvs[1]),
+            )
         else:
             return xys
 
@@ -563,9 +629,11 @@ class RotationMatches(Matches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError('Cameras have different positions (xyz)')
+            raise ValueError("Cameras have different positions (xyz)")
         if not self.is_original_internals():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
+            raise ValueError(
+                "Camera internal parameters (imgsz, f, c, k, p) have changed"
+            )
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -578,8 +646,9 @@ class RotationMatches(Matches):
         Test whether camera internal parameters are unchanged.
         """
         return (
-            (self.cams[0].vector[6:] == self.original_internals[0]) &
-            (self.cams[1].vector[6:] == self.original_internals[1])).all()
+            (self.cams[0].vector[6:] == self.original_internals[0])
+            & (self.cams[1].vector[6:] == self.original_internals[1])
+        ).all()
 
     def as_type(self, mtype):
         """
@@ -591,7 +660,10 @@ class RotationMatches(Matches):
             uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
             return mtype(cams=self.cams, uvs=uvs, weights=self.weights)
         else:
-            return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights)
+            return mtype(
+                cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights
+            )
+
 
 class RotationMatchesXY(RotationMatches):
     """
@@ -649,9 +721,11 @@ class RotationMatchesXY(RotationMatches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError('Cameras have different positions (xyz)')
+            raise ValueError("Cameras have different positions (xyz)")
         if not self.is_original_internals():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
+            raise ValueError(
+                "Camera internal parameters (imgsz, f, c, k, p) have changed"
+            )
         if index is None:
             index = slice(None)
         cam_in = self.cam_index(cam)
@@ -660,7 +734,8 @@ class RotationMatchesXY(RotationMatches):
         return self.cams[cam_in]._world2camera(dxyz, directions=True)
 
     def plot(self, *args, **kwargs):
-        raise AttributeError('plot() not supported by RotationMatchesXY')
+        raise AttributeError("plot() not supported by RotationMatchesXY")
+
 
 class RotationMatchesXYZ(RotationMatches):
     """
@@ -697,7 +772,7 @@ class RotationMatchesXYZ(RotationMatches):
         return len(self.xys[0])
 
     def observed(self, *args, **kwargs):
-        raise AttributeError('observed() not supported by RotationMatchesXYZ')
+        raise AttributeError("observed() not supported by RotationMatchesXYZ")
 
     def predicted(self, index=None, cam=0):
         """
@@ -710,9 +785,11 @@ class RotationMatchesXYZ(RotationMatches):
             cam (Camera or int): Camera to project points into
         """
         if not self.is_static():
-            raise ValueError('Cameras have different positions (xyz)')
+            raise ValueError("Cameras have different positions (xyz)")
         if not self.is_original_internals():
-            raise ValueError('Camera internal parameters (imgsz, f, c, k, p) have changed')
+            raise ValueError(
+                "Camera internal parameters (imgsz, f, c, k, p) have changed"
+            )
         if index is None:
             index = slice(None)
         cam_idx = self.cam_index(cam)
@@ -722,7 +799,8 @@ class RotationMatchesXYZ(RotationMatches):
         return dxyz
 
     def plot(self, *args, **kwargs):
-        raise AttributeError('plot() not supported by RotationMatchesXY')
+        raise AttributeError("plot() not supported by RotationMatchesXY")
+
 
 # ---- Models ----
 
@@ -730,6 +808,7 @@ class RotationMatchesXYZ(RotationMatches):
 # .data_size()
 # .fit(index)
 # .errors(params, index)
+
 
 class Polynomial(object):
     """
@@ -787,7 +866,14 @@ class Polynomial(object):
         """
         return np.polyfit(self.data[index, 0], self.data[index, 1], deg=self.deg)
 
-    def plot(self, params=None, index=slice(None), selected='red', unselected='grey', polynomial='red'):
+    def plot(
+        self,
+        params=None,
+        index=slice(None),
+        selected="red",
+        unselected="grey",
+        polynomial="red",
+    ):
         """
         Plot the points and the polynomial fit.
 
@@ -803,11 +889,16 @@ class Polynomial(object):
             params = self.fit(index)
         other_index = np.delete(np.arange(self.data_size()), index)
         if selected:
-            matplotlib.pyplot.scatter(self.data[index, 0], self.data[index, 1], c=selected)
+            matplotlib.pyplot.scatter(
+                self.data[index, 0], self.data[index, 1], c=selected
+            )
         if unselected:
-            matplotlib.pyplot.scatter(self.data[other_index, 0], self.data[other_index, 1], c=unselected)
+            matplotlib.pyplot.scatter(
+                self.data[other_index, 0], self.data[other_index, 1], c=unselected
+            )
         if polynomial:
             matplotlib.pyplot.plot(self.data[:, 0], self.predict(params), c=polynomial)
+
 
 class Cameras(object):
     """
@@ -844,10 +935,26 @@ class Cameras(object):
         params (`lmfit.Parameters`): Parameter initial values and bounds
     """
 
-    def __init__(self, cams, controls, cam_params=None, group_indices=None,
-        group_params=None, weights=None, scales=True, sparsity=True):
-        cams, controls, cam_params, group_indices, group_params = self.__class__._as_lists(
-            cams, controls, cam_params, group_indices, group_params)
+    def __init__(
+        self,
+        cams,
+        controls,
+        cam_params=None,
+        group_indices=None,
+        group_params=None,
+        weights=None,
+        scales=True,
+        sparsity=True,
+    ):
+        (
+            cams,
+            controls,
+            cam_params,
+            group_indices,
+            group_params,
+        ) = self.__class__._as_lists(
+            cams, controls, cam_params, group_indices, group_params
+        )
         # Core attributes
         self.cams = cams
         controls = self.__class__.prune_controls(controls, cams=self.cams)
@@ -909,16 +1016,20 @@ class Cameras(object):
 
     @staticmethod
     def _lmfit_labels(mask, cam=None, group=None):
-        attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
+        attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
         lengths = [3, 3, 2, 2, 2, 6, 2]
-        base_labels = np.array([attribute + str(i)
-            for attribute, length in zip(attributes, lengths)
-            for i in range(length)])
+        base_labels = np.array(
+            [
+                attribute + str(i)
+                for attribute, length in zip(attributes, lengths)
+                for i in range(length)
+            ]
+        )
         labels = base_labels[mask]
         if cam is not None:
-            labels = ['cam' + str(cam) + '_' + label for label in labels]
+            labels = ["cam" + str(cam) + "_" + label for label in labels]
         if group is not None:
-            labels = ['group' + str(group) + '_' + label for label in labels]
+            labels = ["group" + str(group) + "_" + label for label in labels]
         return labels
 
     @staticmethod
@@ -933,8 +1044,9 @@ class Cameras(object):
         Returns:
             list: Control which reference the cameras in `cams`
         """
-        return [control for control in controls
-            if len(set(cams) & set(control.cams)) > 0]
+        return [
+            control for control in controls if len(set(cams) & set(control.cams)) > 0
+        ]
 
     @staticmethod
     def camera_scales(cam, controls=None):
@@ -961,23 +1073,31 @@ class Cameras(object):
             means = []
             weights = []
             for control in controls:
-                if isinstance(control, (Points, Lines)) and cam is control.cam and not control.directions:
+                if (
+                    isinstance(control, (Points, Lines))
+                    and cam is control.cam
+                    and not control.directions
+                ):
                     weights.append(control.size)
                     if isinstance(control, Points):
                         means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
                     elif isinstance(control, Lines):
-                        means.append(np.linalg.norm(np.vstack(control.xyzs).mean(axis=0) - cam.xyz))
+                        means.append(
+                            np.linalg.norm(
+                                np.vstack(control.xyzs).mean(axis=0) - cam.xyz
+                            )
+                        )
             if means:
                 dpixels[0:3] = cam.f.mean() / np.average(means, weights=weights)
         ## viewdir[0, 1]
         # First angle rotates camera left-right
         # Second angle rotates camera up-down
         imgsz_degrees = (2 * np.arctan(cam.imgsz / (2 * cam.f))) * (180 / np.pi)
-        dpixels[3:5] = cam.imgsz / imgsz_degrees # pixels per degree
+        dpixels[3:5] = cam.imgsz / imgsz_degrees  # pixels per degree
         ## viewdir[2]
         # Third angle rotates camera around image center
         theta = np.pi / 180
-        dpixels[5] = 2 * mean_r_uv * np.sin(theta / 2) # pixels per degree
+        dpixels[5] = 2 * mean_r_uv * np.sin(theta / 2)  # pixels per degree
         ## imgsz
         dpixels[6:8] = 0.5
         ## f (if not descaled)
@@ -988,16 +1108,25 @@ class Cameras(object):
         # Approximate at mean radius
         # NOTE: Not clear why '2**power' terms are needed
         dpixels[12:18] = [
-            mean_r_xy**3 * cam.f.mean() * 2**(1./2),
-            mean_r_xy**5 * cam.f.mean() * 2**(3./2),
-            mean_r_xy**7 * cam.f.mean() * 2**(5./2),
-            mean_r_xy**3 / (1 + cam.k[3] * mean_r_xy**2) * cam.f.mean() * 2**(1./2),
-            mean_r_xy**5 / (1 + cam.k[4] * mean_r_xy**4) * cam.f.mean() * 2**(3./2),
-            mean_r_xy**7 / (1 + cam.k[5] * mean_r_xy**6) * cam.f.mean() * 2**(5./2)
+            mean_r_xy ** 3 * cam.f.mean() * 2 ** (1.0 / 2),
+            mean_r_xy ** 5 * cam.f.mean() * 2 ** (3.0 / 2),
+            mean_r_xy ** 7 * cam.f.mean() * 2 ** (5.0 / 2),
+            mean_r_xy ** 3
+            / (1 + cam.k[3] * mean_r_xy ** 2)
+            * cam.f.mean()
+            * 2 ** (1.0 / 2),
+            mean_r_xy ** 5
+            / (1 + cam.k[4] * mean_r_xy ** 4)
+            * cam.f.mean()
+            * 2 ** (3.0 / 2),
+            mean_r_xy ** 7
+            / (1 + cam.k[5] * mean_r_xy ** 6)
+            * cam.f.mean()
+            * 2 ** (5.0 / 2),
         ]
         # p (if f is not descaled)
         # Approximate at mean radius at 45 degree angle
-        dpixels[18:20] = np.sqrt(5) * mean_r_xy**2 * cam.f.mean()
+        dpixels[18:20] = np.sqrt(5) * mean_r_xy ** 2 * cam.f.mean()
         # Convert pixels per change to change per pixel (the inverse)
         return 1 / dpixels
 
@@ -1009,22 +1138,38 @@ class Cameras(object):
         # Distortion bounds based on tested limits of Camera.undistort_oulu()
         k = cam.f.mean() / 4000
         p = cam.f.mean() / 40000
-        return np.array([
-            # xyz
-            [-np.inf, np.inf], [-np.inf, np.inf], [-np.inf, np.inf],
-            # viewdir
-            [-np.inf, np.inf], [-np.inf, np.inf], [-np.inf, np.inf],
-            # imgsz
-            [0, np.inf], [0, np.inf],
-            # f
-            [0, np.inf], [0, np.inf],
-            # c
-            [-0.5, 0.5] * cam.imgsz[0:1], [-0.5, 0.5] * cam.imgsz[1:2],
-            # k
-            [-k, k], [-k / 2, k / 2], [-k / 2, k / 2], [-k, k], [-k, k], [-k, k],
-            # p
-            [-p, p], [-p, p]
-        ], dtype=float)
+        return np.array(
+            [
+                # xyz
+                [-np.inf, np.inf],
+                [-np.inf, np.inf],
+                [-np.inf, np.inf],
+                # viewdir
+                [-np.inf, np.inf],
+                [-np.inf, np.inf],
+                [-np.inf, np.inf],
+                # imgsz
+                [0, np.inf],
+                [0, np.inf],
+                # f
+                [0, np.inf],
+                [0, np.inf],
+                # c
+                [-0.5, 0.5] * cam.imgsz[0:1],
+                [-0.5, 0.5] * cam.imgsz[1:2],
+                # k
+                [-k, k],
+                [-k / 2, k / 2],
+                [-k / 2, k / 2],
+                [-k, k],
+                [-k, k],
+                [-k, k],
+                # p
+                [-p, p],
+                [-p, p],
+            ],
+            dtype=float,
+        )
 
     @staticmethod
     def parse_params(params=None, default_bounds=None):
@@ -1055,7 +1200,7 @@ class Cameras(object):
         """
         if params is None:
             params = dict()
-        attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
+        attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
         indices = (0, 3, 6, 8, 10, 12, 18, 20)
         mask = np.zeros(20, dtype=bool)
         bounds = np.full((20, 2), np.nan)
@@ -1097,14 +1242,17 @@ class Cameras(object):
         """
         # Error: No controls reference the cameras
         if not len(self.controls):
-            raise ValueError('No controls reference the cameras')
+            raise ValueError("No controls reference the cameras")
         # Error: 'f' or 'c' in `group_params` but image sizes not equal
         for i, idx in enumerate(self.group_indices):
-            fc = 'f' in self.group_params[i] or 'c' in self.group_params[i]
+            fc = "f" in self.group_params[i] or "c" in self.group_params[i]
             sizes = np.unique(np.row_stack([self.cams[i].imgsz for i in idx]), axis=0)
             if fc and len(sizes) > 1:
-                raise ValueError('Group ' + str(i) +
-                    ": 'f' or 'c' in parameters but image sizes not equal")
+                raise ValueError(
+                    "Group "
+                    + str(i)
+                    + ": 'f' or 'c' in parameters but image sizes not equal"
+                )
         # Error: Cameras appear in multiple groups with overlapping masks
         # Test: indices of groups with overlapping masks non-unique
         M = np.row_stack(self.group_masks)
@@ -1114,24 +1262,33 @@ class Cameras(object):
             idx = np.concatenate([self.group_indices[group] for group in groups])
             if len(np.unique(idx)) < len(idx):
                 raise ValueError(
-                    'Some cameras are in multiple groups with overlapping masks')
+                    "Some cameras are in multiple groups with overlapping masks"
+                )
         # Error: Some cameras with params do not appear in controls
-        control_cams = [cam for control in self.controls
-            for cam in control.cams]
-        cams_with_params = [cam for i, cam in enumerate(self.cams)
-            if self.cam_params[i] or
-            any([self.group_params[j] for j, idx in enumerate(self.group_indices) if i in idx])]
+        control_cams = [cam for control in self.controls for cam in control.cams]
+        cams_with_params = [
+            cam
+            for i, cam in enumerate(self.cams)
+            if self.cam_params[i]
+            or any(
+                [
+                    self.group_params[j]
+                    for j, idx in enumerate(self.group_indices)
+                    if i in idx
+                ]
+            )
+        ]
         if set(cams_with_params) - set(control_cams):
-            raise ValueError('Not all cameras with params appear in controls')
+            raise ValueError("Not all cameras with params appear in controls")
 
     def _build_scales(self):
         # TODO: Weigh each camera by number of control points (sum of weights)
-        scales = [self.__class__.camera_scales(cam, self.controls)
-            for cam in self.cams]
-        cam_scales = [scale[mask]
-            for scale, mask in zip(scales, self.cam_masks)]
-        group_scales = [np.nanmean(np.row_stack([scales[i][mask] for i in idx]), axis=0)
-            for mask, idx in zip(self.group_masks, self.group_indices)]
+        scales = [self.__class__.camera_scales(cam, self.controls) for cam in self.cams]
+        cam_scales = [scale[mask] for scale, mask in zip(scales, self.cam_masks)]
+        group_scales = [
+            np.nanmean(np.row_stack([scales[i][mask] for i in idx]), axis=0)
+            for mask, idx in zip(self.group_masks, self.group_indices)
+        ]
         self.scales = np.hstack((np.hstack(group_scales), np.hstack(cam_scales)))
 
     def _build_sparsity(self):
@@ -1162,7 +1319,9 @@ class Cameras(object):
                 S[ctrl_slice, cam_slice] = 1
                 # Group parameters
                 for group in np.nonzero(groups[j])[0]:
-                    group_slice = slice(self.group_breaks[group], self.group_breaks[group + 1])
+                    group_slice = slice(
+                        self.group_breaks[group], self.group_breaks[group + 1]
+                    )
                     S[ctrl_slice, group_slice] = 1
         self.sparsity = S
 
@@ -1173,34 +1332,57 @@ class Cameras(object):
         self.params = lmfit.Parameters()
         # Camera parameters
         cam_bounds = [self.__class__.camera_bounds(cam) for cam in self.cams]
-        self.cam_masks, cam_bounds = zip(*[
-            self.__class__.parse_params(params, default_bounds=bounds)
-            for params, bounds in zip(self.cam_params, cam_bounds)])
-        cam_labels = [self.__class__._lmfit_labels(mask, cam=i, group=None)
-            for i, mask in enumerate(self.cam_masks)]
-        cam_values = [self.cams[i].vector[mask] for i, mask in enumerate(self.cam_masks)]
+        self.cam_masks, cam_bounds = zip(
+            *[
+                self.__class__.parse_params(params, default_bounds=bounds)
+                for params, bounds in zip(self.cam_params, cam_bounds)
+            ]
+        )
+        cam_labels = [
+            self.__class__._lmfit_labels(mask, cam=i, group=None)
+            for i, mask in enumerate(self.cam_masks)
+        ]
+        cam_values = [
+            self.cams[i].vector[mask] for i, mask in enumerate(self.cam_masks)
+        ]
         # Group parameters
         self.group_masks = []
         for group, idx in enumerate(self.group_indices):
-            bounds = np.column_stack((
-                np.column_stack([cam_bounds[i][:, 0] for i in idx]).max(axis=1),
-                np.column_stack([cam_bounds[i][:, 1] for i in idx]).min(axis=1)))
-            mask, bounds = self.__class__.parse_params(self.group_params[group], default_bounds=bounds)
+            bounds = np.column_stack(
+                (
+                    np.column_stack([cam_bounds[i][:, 0] for i in idx]).max(axis=1),
+                    np.column_stack([cam_bounds[i][:, 1] for i in idx]).min(axis=1),
+                )
+            )
+            mask, bounds = self.__class__.parse_params(
+                self.group_params[group], default_bounds=bounds
+            )
             labels = self.__class__._lmfit_labels(mask, cam=None, group=group)
             # NOTE: Initial group values as mean of cameras
-            values = np.nanmean(np.row_stack([self.cams[i].vector[mask] for i in idx]), axis=0)
+            values = np.nanmean(
+                np.row_stack([self.cams[i].vector[mask] for i in idx]), axis=0
+            )
             for label, value, bound in zip(labels, values, bounds[mask]):
-                self.params.add(name=label, value=value, vary=True, min=bound[0], max=bound[1])
+                self.params.add(
+                    name=label, value=value, vary=True, min=bound[0], max=bound[1]
+                )
             self.group_masks.append(mask)
         # Add camera parameters after group parameters
         for i in range(len(self.cams)):
-            for label, value, bound in zip(cam_labels[i], cam_values[i], cam_bounds[i][self.cam_masks[i]]):
-                self.params.add(name=label, value=value, vary=True, min=bound[0], max=bound[1])
+            for label, value, bound in zip(
+                cam_labels[i], cam_values[i], cam_bounds[i][self.cam_masks[i]]
+            ):
+                self.params.add(
+                    name=label, value=value, vary=True, min=bound[0], max=bound[1]
+                )
         # Pre-compute index breaks for set_cameras()
-        self.group_breaks = np.cumsum([0] + [np.count_nonzero(mask)
-            for mask in self.group_masks])
-        self.cam_breaks = np.cumsum([self.group_breaks[-1]] + [np.count_nonzero(mask)
-            for mask in self.cam_masks])
+        self.group_breaks = np.cumsum(
+            [0] + [np.count_nonzero(mask) for mask in self.group_masks]
+        )
+        self.cam_breaks = np.cumsum(
+            [self.group_breaks[-1]]
+            + [np.count_nonzero(mask) for mask in self.cam_masks]
+        )
 
     def set_cameras(self, params):
         """
@@ -1217,8 +1399,12 @@ class Cameras(object):
             params = list(params.valuesdict().values())
         for i, idx in enumerate(self.group_indices):
             for j in idx:
-                self.cams[j].vector[self.group_masks[i]] = params[self.group_breaks[i]:self.group_breaks[i + 1]]
-                self.cams[j].vector[self.cam_masks[j]] = params[self.cam_breaks[j]:self.cam_breaks[j + 1]]
+                self.cams[j].vector[self.group_masks[i]] = params[
+                    self.group_breaks[i] : self.group_breaks[i + 1]
+                ]
+                self.cams[j].vector[self.cam_masks[j]] = params[
+                    self.cam_breaks[j] : self.cam_breaks[j + 1]
+                ]
 
     def reset_cameras(self, vectors=None, save=False):
         """
@@ -1279,7 +1465,9 @@ class Cameras(object):
             # TODO: Map index to subindices for each control
             if index is None:
                 index = slice(None)
-            result = np.vstack((control.predicted() for control in self.controls))[index]
+            result = np.vstack((control.predicted() for control in self.controls))[
+                index
+            ]
         if params is not None:
             self.reset_cameras(vectors)
         return result
@@ -1314,8 +1502,17 @@ class Cameras(object):
         """
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
 
-    def fit(self, index=None, cam_params=None, group_params=None, full=False,
-        method='least_squares', nan_policy='omit', reduce_fcn=None, **kwargs):
+    def fit(
+        self,
+        index=None,
+        cam_params=None,
+        group_params=None,
+        full=False,
+        method="least_squares",
+        nan_policy="omit",
+        reduce_fcn=None,
+        **kwargs
+    ):
         """
         Return optimal camera parameter values.
 
@@ -1343,42 +1540,65 @@ class Cameras(object):
                 by group or camera (group, cam0, cam1, ...),
                 then ordered by position in `Camera.vector`.
         """
-        if method == 'leastsq':
-            if self.scales is not None and not hasattr(kwargs, 'diag'):
-                kwargs['diag'] = self.scales
-        if method == 'least_squares':
-            if self.scales is not None and not hasattr(kwargs, 'x_scale'):
-                kwargs['x_scale'] = self.scales
-            if self.sparsity is not None and not hasattr(kwargs, 'jac_sparsity'):
+        if method == "leastsq":
+            if self.scales is not None and not hasattr(kwargs, "diag"):
+                kwargs["diag"] = self.scales
+        if method == "least_squares":
+            if self.scales is not None and not hasattr(kwargs, "x_scale"):
+                kwargs["x_scale"] = self.scales
+            if self.sparsity is not None and not hasattr(kwargs, "jac_sparsity"):
                 if index is None:
-                    kwargs['jac_sparsity'] = self.sparsity
+                    kwargs["jac_sparsity"] = self.sparsity
                 else:
                     if isinstance(index, slice):
                         jac_index = np.arange(self.data_size())[index]
                     else:
                         jac_index = index
                     jac_index = np.dstack((2 * jac_index, 2 * jac_index + 1)).ravel()
-                    kwargs['jac_sparsity'] = self.sparsity[jac_index]
+                    kwargs["jac_sparsity"] = self.sparsity[jac_index]
+
         def callback(params, iter, resid, *args, **kwargs):
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
-            sys.stdout.write('\r' + str(err))
+            sys.stdout.write("\r" + str(err))
             sys.stdout.flush()
+
         iterations = max(
             len(cam_params) if cam_params else 0,
-            len(group_params) if group_params else 0)
+            len(group_params) if group_params else 0,
+        )
         if iterations:
             for n in range(iterations):
                 iter_cam_params = cam_params[n] if cam_params else self.cam_params
-                iter_group_params = group_params[n] if group_params else self.group_params
-                model = Cameras(cams=self.cams, controls=self.controls,
-                    cam_params=iter_cam_params, group_params=iter_group_params)
-                values = model.fit(index=index, method=method, nan_policy=nan_policy, reduce_fcn=reduce_fcn, **kwargs)
+                iter_group_params = (
+                    group_params[n] if group_params else self.group_params
+                )
+                model = Cameras(
+                    cams=self.cams,
+                    controls=self.controls,
+                    cam_params=iter_cam_params,
+                    group_params=iter_group_params,
+                )
+                values = model.fit(
+                    index=index,
+                    method=method,
+                    nan_policy=nan_policy,
+                    reduce_fcn=reduce_fcn,
+                    **kwargs
+                )
                 if values is not None:
                     model.set_cameras(params=values)
             self.update_params()
-        result = lmfit.minimize(params=self.params, fcn=self.residuals, kws=dict(index=index), iter_cb=callback,
-            method=method, nan_policy=nan_policy, reduce_fcn=reduce_fcn, **kwargs)
-        sys.stdout.write('\n')
+        result = lmfit.minimize(
+            params=self.params,
+            fcn=self.residuals,
+            kws=dict(index=index),
+            iter_cb=callback,
+            method=method,
+            nan_policy=nan_policy,
+            reduce_fcn=reduce_fcn,
+            **kwargs
+        )
+        sys.stdout.write("\n")
         if iterations:
             self.reset_cameras()
             self.update_params()
@@ -1389,8 +1609,18 @@ class Cameras(object):
         elif result.success:
             return np.array(list(result.params.valuesdict().values()))
 
-    def plot(self, params=None, cam=0, index=None, scale=1, width=5, selected='red', unselected=None,
-        lines_observed='green', lines_predicted='yellow'):
+    def plot(
+        self,
+        params=None,
+        cam=0,
+        index=None,
+        scale=1,
+        width=5,
+        selected="red",
+        unselected=None,
+        lines_observed="green",
+        lines_predicted="yellow",
+    ):
         """
         Plot reprojection errors.
 
@@ -1411,7 +1641,9 @@ class Cameras(object):
         """
         if index is not None and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
-            raise ValueError('Plotting with `index` not yet supported with multiple controls')
+            raise ValueError(
+                "Plotting with `index` not yet supported with multiple controls"
+            )
         if params is not None:
             vectors = [cam.vector.copy() for cam in self.cams]
             self.set_cameras(params)
@@ -1419,12 +1651,32 @@ class Cameras(object):
         cam_controls = self.__class__.prune_controls(self.controls, cams=[cam])
         for control in cam_controls:
             if isinstance(control, Lines):
-                control.plot(index=index, scale=scale, width=width, selected=selected, unselected=unselected,
-                    observed=lines_observed, predicted=lines_predicted)
+                control.plot(
+                    index=index,
+                    scale=scale,
+                    width=width,
+                    selected=selected,
+                    unselected=unselected,
+                    observed=lines_observed,
+                    predicted=lines_predicted,
+                )
             elif isinstance(control, Points):
-                control.plot(index=index, scale=scale, width=width, selected=selected, unselected=unselected)
+                control.plot(
+                    index=index,
+                    scale=scale,
+                    width=width,
+                    selected=selected,
+                    unselected=unselected,
+                )
             elif isinstance(control, Matches):
-                control.plot(cam=cam, index=index, scale=scale, width=width, selected=selected, unselected=unselected)
+                control.plot(
+                    cam=cam,
+                    index=index,
+                    scale=scale,
+                    width=width,
+                    selected=selected,
+                    unselected=unselected,
+                )
         if params is not None:
             self.reset_cameras(vectors)
 
@@ -1433,9 +1685,12 @@ class Cameras(object):
             index = slice(None)
         weights = np.ones(self.data_size()) if self.weights is None else self.weights
         uv = self.observed(index=index)
-        matplotlib.pyplot.scatter(uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap)
+        matplotlib.pyplot.scatter(
+            uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap
+        )
         matplotlib.pyplot.colorbar()
         matplotlib.pyplot.gca().invert_yaxis()
+
 
 class ObserverCameras(object):
     """
@@ -1457,14 +1712,15 @@ class ObserverCameras(object):
             is_anchor = [img.anchor for img in self.observer.images]
             anchors = np.where(is_anchor)[0]
             if len(anchors) == 0:
-                warnings.warn('No anchor image found, using first image as anchor')
-                anchors = (0, )
+                warnings.warn("No anchor image found, using first image as anchor")
+                anchors = (0,)
         self.anchors = anchors
         self.matches = matches
         self.matcher = KeypointMatcher(images=self.observer.images)
         # Placeholders
-        self.viewdirs = np.vstack([img.cam.viewdir.copy()
-            for img in self.observer.images])
+        self.viewdirs = np.vstack(
+            [img.cam.viewdir.copy() for img in self.observer.images]
+        )
 
     def set_cameras(self, viewdirs):
         for i, img in enumerate(self.observer.images):
@@ -1481,7 +1737,7 @@ class ObserverCameras(object):
         self.matcher.convert_matches(RotationMatchesXYZ)
         self.matches = self.matcher.matches
 
-    def fit(self, anchor_weight=1e6, method='bfgs', **params):
+    def fit(self, anchor_weight=1e6, method="bfgs", **params):
         """
         Return optimal camera view directions.
 
@@ -1509,7 +1765,9 @@ class ObserverCameras(object):
             objective = 0
             gradients = np.zeros(viewdirs.shape)
             for i in self.anchors:
-                objective += (anchor_weight / 2.0) * np.sum((viewdirs[i] - self.viewdirs[i])**2)
+                objective += (anchor_weight / 2.0) * np.sum(
+                    (viewdirs[i] - self.viewdirs[i]) ** 2
+                )
                 gradients[i] += anchor_weight * (viewdirs[i] - self.viewdirs[i])
             for m, i, j in zip(matches.data, matches.row, matches.col):
                 # Project matches
@@ -1524,20 +1782,24 @@ class ObserverCameras(object):
                 # j -> i
                 gradients[j] -= gradient
             # Update console output
-            sys.stdout.write('\r' + str(objective))
+            sys.stdout.write("\r" + str(objective))
             sys.stdout.flush()
             return objective, gradients.ravel()
+
         # Optimize camera view directions
         viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
         result = scipy.optimize.minimize(
-            fun=fun, x0=viewdirs_0, jac=True, method=method, **params)
+            fun=fun, x0=viewdirs_0, jac=True, method=method, **params
+        )
         self.reset_cameras()
         if not result.success:
-            sys.stdout.write('\n') # new line
+            sys.stdout.write("\n")  # new line
             print(result.message)
         return result
 
+
 # ---- RANSAC ----
+
 
 def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws):
     """
@@ -1589,10 +1851,11 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
                 inlier_idx = better_idx
         i += 1
     if params is None:
-        raise ValueError('Best fit does not meet acceptance criteria')
+        raise ValueError("Best fit does not meet acceptance criteria")
     # HACK: Recompute inlier index on best params
     inlier_idx = np.where(model.errors(params) <= max_error)[0]
     return params, inlier_idx
+
 
 def ransac_sample(sample_size, data_size):
     """
@@ -1607,14 +1870,16 @@ def ransac_sample(sample_size, data_size):
         array (int): Outlier indices
     """
     if sample_size >= data_size:
-        raise ValueError('`sample_size` is larger or equal to `data_size`')
+        raise ValueError("`sample_size` is larger or equal to `data_size`")
     indices = np.arange(data_size)
     np.random.shuffle(indices)
     return indices[:sample_size], indices[sample_size:]
 
+
 # ---- Keypoints ----
 
-def detect_keypoints(array, mask=None, method='sift', root=True, **params):
+
+def detect_keypoints(array, mask=None, method="sift", root=True, **params):
     """
     Return keypoints and descriptors for an image.
 
@@ -1630,13 +1895,13 @@ def detect_keypoints(array, mask=None, method='sift', root=True, **params):
         list: Keypoints as cv2.KeyPoint objects
         array: Descriptors as array rows
     """
-    if method == 'sift':
+    if method == "sift":
         try:
             detector = cv2.xfeatures2d.SIFT_create(**params)
         except AttributeError:
             # OpenCV 2
             detector = cv2.SIFT(**params)
-    elif method == 'surf':
+    elif method == "surf":
         try:
             detector = cv2.xfeatures2d.SURF_create(**params)
         except AttributeError:
@@ -1649,9 +1914,17 @@ def detect_keypoints(array, mask=None, method='sift', root=True, **params):
         descriptors = np.sqrt(descriptors)
     return keypoints, descriptors
 
-def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
-    indexParams=dict(algorithm=1, trees=5), searchParams=dict(checks=50),
-    return_ratios=False):
+
+def match_keypoints(
+    ka,
+    kb,
+    mask=None,
+    max_ratio=None,
+    max_distance=None,
+    indexParams=dict(algorithm=1, trees=5),
+    searchParams=dict(checks=50),
+    return_ratios=False,
+):
     """
     Return the coordinates of matched keypoint pairs.
 
@@ -1674,14 +1947,18 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
     compute_ratios = max_ratio or return_ratios
     n_nearest = 2 if compute_ratios else 1
     if len(ka[0]) >= n_nearest and len(kb[0]) >= n_nearest:
-        flann = cv2.FlannBasedMatcher(indexParams=indexParams, searchParams=searchParams)
+        flann = cv2.FlannBasedMatcher(
+            indexParams=indexParams, searchParams=searchParams
+        )
         matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
         uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
         uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
         if compute_ratios:
             ratios = np.array([m.distance / n.distance for m, n in matches])
         if max_ratio:
-            is_valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
+            is_valid = (
+                np.array([m.distance / n.distance for m, n in matches]) < max_ratio
+            )
             uvA = uvA[is_valid]
             uvB = uvB[is_valid]
             if return_ratios:
@@ -1701,6 +1978,7 @@ def match_keypoints(ka, kb, mask=None, max_ratio=None, max_distance=None,
         return uvA, uvB, ratios
     else:
         return uvA, uvB
+
 
 class KeypointMatcher(object):
     """
@@ -1723,7 +2001,7 @@ class KeypointMatcher(object):
     def __init__(self, images, clahe=False):
         dts = np.diff([img.datetime for img in images])
         if np.any(dts < datetime.timedelta(0)):
-            raise ValueError('Images are not in ascending temporal order')
+            raise ValueError("Images are not in ascending temporal order")
         self.images = np.asarray(images)
         if clahe is False:
             self.clahe = None
@@ -1739,13 +2017,20 @@ class KeypointMatcher(object):
         Prepare image data for keypoint detection.
         """
         if I.ndim > 2:
-            I = helpers.rgb_to_gray(I, method='average', weights=None)
+            I = helpers.rgb_to_gray(I, method="average", weights=None)
         if self.clahe is not None:
             I = self.clahe.apply(I.astype(np.uint8))
         return I.astype(np.uint8)
 
-    def build_keypoints(self, masks=None, overwrite=False,
-        clear_images=True, clear_keypoints=False, parallel=False, **params):
+    def build_keypoints(
+        self,
+        masks=None,
+        overwrite=False,
+        clear_images=True,
+        clear_keypoints=False,
+        parallel=False,
+        **params
+    ):
         """
         Build image keypoints and their descriptors.
 
@@ -1767,14 +2052,16 @@ class KeypointMatcher(object):
         """
         # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
-            masks = (masks, ) * len(self.images)
+            masks = (masks,) * len(self.images)
         parallel = helpers._parse_parallel(parallel)
         if parallel and any((img.keypoints_path is None for img in self.images)):
-            raise ValueError('Image.keypoints_path must be set for parallel processing')
+            raise ValueError("Image.keypoints_path must be set for parallel processing")
         # Define parallel process
         def process(img, mask):
             print(img.path)
-            no_keypoints_file = img.keypoints_path is None or not os.path.isfile(img.keypoints_path)
+            no_keypoints_file = img.keypoints_path is None or not os.path.isfile(
+                img.keypoints_path
+            )
             if overwrite or (img.keypoints is None and no_keypoints_file):
                 I = self._prepare_image(img.read())
                 img.keypoints = detect_keypoints(I, mask=mask, **params)
@@ -1784,14 +2071,28 @@ class KeypointMatcher(object):
                         img.keypoints = None
                 if clear_images:
                     img.I = None
+
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
             pool.map(process, tuple(zip(self.images, masks)), star=True)
 
-    def build_matches(self, maxdt=None, min_nearest=0, seq=None, imgs=None,
-        path=None, overwrite=False, skip_missing=False, clear_keypoints=True,
-        clear_matches=False, parallel=False, weights=False,
-        as_type=None, filter=None, **params):
+    def build_matches(
+        self,
+        maxdt=None,
+        min_nearest=0,
+        seq=None,
+        imgs=None,
+        path=None,
+        overwrite=False,
+        skip_missing=False,
+        clear_keypoints=True,
+        clear_matches=False,
+        parallel=False,
+        weights=False,
+        as_type=None,
+        filter=None,
+        **params
+    ):
         """
         Build matches between each image and its nearest neighbors.
 
@@ -1830,22 +2131,21 @@ class KeypointMatcher(object):
             **params: Additional arguments to `optimize.match_keypoints()`
         """
         if clear_matches and not path:
-            raise ValueError('path must be set when clear_matches=True')
+            raise ValueError("path must be set when clear_matches=True")
         parallel = helpers._parse_parallel(parallel)
         params = helpers.merge_dicts(params, dict(return_ratios=weights))
         # Compute basenames
         if path:
-            basenames = [helpers.strip_path(img.path)
-                for img in self.images]
+            basenames = [helpers.strip_path(img.path) for img in self.images]
             if len(basenames) != len(set(basenames)):
-                raise ValueError('Image basenames are not unique')
+                raise ValueError("Image basenames are not unique")
         # Match images
         n = len(self.images)
         if maxdt is None:
             matching_images = [tuple(range(i + 1, n)) for i in range(n)]
         else:
             datetimes = np.array([img.datetime for img in self.images])
-            ends = np.searchsorted(datetimes, datetimes + maxdt, side='right')
+            ends = np.searchsorted(datetimes, datetimes + maxdt, side="right")
             if min_nearest:
                 shift = min(min_nearest, n) + 1
                 min_ends = [min(i + shift, n) for i in range(n)]
@@ -1857,7 +2157,7 @@ class KeypointMatcher(object):
             seq = np.unique(seq[seq > 0])
             for i, m in enumerate(matching_images):
                 iseq = seq + i
-                iseq = iseq[:np.searchsorted(iseq, n)]
+                iseq = iseq[: np.searchsorted(iseq, n)]
                 matching_images[i] = np.unique(np.concatenate((m, iseq)))
         # Filter matched image pairs
         if imgs is not None:
@@ -1866,13 +2166,15 @@ class KeypointMatcher(object):
         # Define parallel process
         def process(i, js):
             if len(js) > 0:
-                print('Matching', i, '->', ', '.join(js.astype(str)))
+                print("Matching", i, "->", ", ".join(js.astype(str)))
             matches = []
             imgA = self.images[i]
             for j in js:
                 imgB = self.images[j]
                 if path:
-                    outfile = os.path.join(path, basenames[i] + '-' + basenames[j] + '.pkl')
+                    outfile = os.path.join(
+                        path, basenames[i] + "-" + basenames[j] + ".pkl"
+                    )
                 if path and not overwrite and os.path.exists(outfile):
                     if not clear_matches:
                         match = helpers.read_pickle(outfile)
@@ -1884,10 +2186,14 @@ class KeypointMatcher(object):
                 elif skip_missing:
                     matches.append(False)
                 else:
-                    result = match_keypoints(imgA.read_keypoints(), imgB.read_keypoints(), **params)
+                    result = match_keypoints(
+                        imgA.read_keypoints(), imgB.read_keypoints(), **params
+                    )
                     match = Matches(
-                        cams=(imgA.cam, imgB.cam), uvs=result[0:2],
-                        weights=(1 / result[2]) if weights else None)
+                        cams=(imgA.cam, imgB.cam),
+                        uvs=result[0:2],
+                        weights=(1 / result[2]) if weights else None,
+                    )
                     if path is not None:
                         helpers.write_pickle(match, outfile)
                     if not clear_matches:
@@ -1897,23 +2203,31 @@ class KeypointMatcher(object):
             if clear_keypoints:
                 imgA.keypoints = None
             return None if clear_matches else matches
+
         def reduce(matches):
             if filter:
                 for match in matches:
                     if match:
                         match.filter(**filter)
             return matches
+
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
             matches = pool.map(
-                func=process, reduce=reduce, star=True,
-                sequence=tuple(enumerate(matching_images)))
+                func=process,
+                reduce=reduce,
+                star=True,
+                sequence=tuple(enumerate(matching_images)),
+            )
             if not clear_matches:
                 # Build Compressed Sparse Row (CSR) matrix
-                matches = scipy.sparse.csr_matrix((
-                    np.concatenate(matches), # data
-                    np.concatenate(matching_images), # column indices
-                    np.cumsum([0] + [len(row) for row in matching_images]))) # row ranges
+                matches = scipy.sparse.csr_matrix(
+                    (
+                        np.concatenate(matches),  # data
+                        np.concatenate(matching_images),  # column indices
+                        np.cumsum([0] + [len(row) for row in matching_images]),
+                    )
+                )  # row ranges
                 # Convert to Coordinate Format (COO) matrix
                 matches = matches.tocoo()
                 if skip_missing:
@@ -1927,7 +2241,7 @@ class KeypointMatcher(object):
 
     def _test_matches(self):
         if self.matches is None:
-            raise ValueError('Matches have not been initialized. Run build_matches()')
+            raise ValueError("Matches have not been initialized. Run build_matches()")
 
     def _assign_cameras(self):
         for m, i, j in zip(self.matches.data, self.matches.row, self.matches.col):
@@ -1936,35 +2250,47 @@ class KeypointMatcher(object):
     def convert_matches(self, mtype, clear_uvs=False, parallel=False):
         self._test_matches()
         parallel = helpers._parse_parallel(parallel)
+
         def process(i, m):
             m = m.as_type(mtype)
             if clear_uvs and mtype in (RotationMatchesXY, RotationMatchesXYZ):
                 m.uvs = None
             return i, m
+
         def reduce(i, m):
             self.matches.data[i] = m
+
         with config._MapReduce(np=parallel) as pool:
             _ = pool.map(
-                func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))
+                func=process,
+                reduce=reduce,
+                star=True,
+                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)),
+            )
         if parallel:
             self._assign_cameras()
 
     def filter_matches(self, clear_weights=False, parallel=False, **params):
         self._test_matches()
         parallel = helpers._parse_parallel(parallel)
+
         def process(i, m):
             if params:
                 m.filter(**params)
             if clear_weights:
                 m.weights = None
             return i, m
+
         def reduce(i, m):
             self.matches.data[i] = m
+
         with config._MapReduce(np=parallel) as pool:
             _ = pool.map(
-                func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)))
+                func=process,
+                reduce=reduce,
+                star=True,
+                sequence=tuple(zip(range(self.matches.data.size), self.matches.data)),
+            )
         if parallel:
             self._assign_cameras()
 
@@ -1999,10 +2325,14 @@ class KeypointMatcher(object):
         keep = np.union1d(self.matches.row, self.matches.col)
         drop = np.setdiff1d(all, keep)
         # Remove row and column of each dropped image
-        _, new_row = np.unique(np.concatenate((self.matches.row, keep)), return_inverse=True)
-        self.matches.row = new_row[:-len(keep)]
-        _, new_col = np.unique(np.concatenate((self.matches.col, keep)), return_inverse=True)
-        self.matches.col = new_col[:-len(keep)]
+        _, new_row = np.unique(
+            np.concatenate((self.matches.row, keep)), return_inverse=True
+        )
+        self.matches.row = new_row[: -len(keep)]
+        _, new_col = np.unique(
+            np.concatenate((self.matches.col, keep)), return_inverse=True
+        )
+        self.matches.col = new_col[: -len(keep)]
         # Resize matches matrix
         n = len(self.images) - len(drop)
         self.matches._shape = (n, n)
@@ -2015,6 +2345,10 @@ class KeypointMatcher(object):
         starts, counts = np.unique(self.matches.row, return_counts=True)
         breaks = np.setdiff1d(all_starts, starts)
         if min_matches:
-            min_matches = np.minimum(min_matches, len(self.images) - np.arange(len(self.images)))
-            breaks = np.sort(np.concatenate((breaks, np.where(counts < min_matches)[0])))
+            min_matches = np.minimum(
+                min_matches, len(self.images) - np.arange(len(self.images))
+            )
+            breaks = np.sort(
+                np.concatenate((breaks, np.where(counts < min_matches)[0]))
+            )
         return breaks

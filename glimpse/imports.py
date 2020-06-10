@@ -16,7 +16,8 @@ import sys
 import time
 import traceback
 import warnings
-warnings.formatwarning = lambda msg, *args, **kwargs: f'[warning] {msg}\n'
+
+warnings.formatwarning = lambda msg, *args, **kwargs: f"[warning] {msg}\n"
 import xml.etree.ElementTree
 import inspect
 
@@ -53,21 +54,27 @@ try:
     import osgeo.gdal_array
     import osgeo.osr
 except ImportError:
-    warnings.warn('Module osgeo not found: Reading and writing rasters disabled')
+    warnings.warn("Module osgeo not found: Reading and writing rasters disabled")
     osgeo = None
 
 # ---- Decorators ----
 
 _imports = locals()
 
+
 def require(modules):
     if isinstance(modules, str):
-        modules = modules,
+        modules = (modules,)
+
     def decorator(f):
         def wrapped(*args, **kwargs):
             for module in modules:
                 if module in _imports and _imports[module] is None:
-                    raise ImportError('Missing module ' + module + ' required for ' + f.__name__)
+                    raise ImportError(
+                        "Missing module " + module + " required for " + f.__name__
+                    )
             return f(*args, **kwargs)
+
         return wrapped
+
     return decorator

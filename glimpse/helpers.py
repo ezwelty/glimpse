@@ -1,9 +1,31 @@
-from .imports import (require,
-    np, pickle, pyproj, json, collections, copy, pandas, scipy, gzip, PIL,
-    sklearn, cv2, copyreg, os, re, datetime, matplotlib, shapely, sharedmem,
-    sys, progress, osgeo)
+from .imports import (
+    require,
+    np,
+    pickle,
+    pyproj,
+    json,
+    collections,
+    copy,
+    pandas,
+    scipy,
+    gzip,
+    PIL,
+    sklearn,
+    cv2,
+    copyreg,
+    os,
+    re,
+    datetime,
+    matplotlib,
+    shapely,
+    sharedmem,
+    sys,
+    progress,
+    osgeo,
+)
 
 # ---- General ---- #
+
 
 def merge_dicts(*args):
     """
@@ -18,6 +40,7 @@ def merge_dicts(*args):
     for d in args:
         merge.update(d)
     return merge
+
 
 def format_list(x, length=None, default=None, dtype=None):
     """
@@ -53,6 +76,7 @@ def format_list(x, length=None, default=None, dtype=None):
         x = [dtype(i) for i in x]
     return x
 
+
 def make_path_directories(path, is_file=True):
     """
     Make directories as needed to build a path.
@@ -72,6 +96,7 @@ def make_path_directories(path, is_file=True):
             if not os.path.isdir(path):
                 raise
 
+
 def numpy_dtype(obj):
     """
     Return numpy data type.
@@ -83,6 +108,7 @@ def numpy_dtype(obj):
         return obj.dtype
     else:
         return np.dtype(obj)
+
 
 def numpy_dtype_minmax(dtype):
     """
@@ -104,13 +130,15 @@ def numpy_dtype_minmax(dtype):
     elif dtype.type in (np.bool_, np.bool):
         return False, True
     else:
-        raise ValueError('Cannot determine min, max for ' + str(dtype))
+        raise ValueError("Cannot determine min, max for " + str(dtype))
+
 
 def split_extension(path):
-    parts = path.split('.')
+    parts = path.split(".")
     if len(parts) == 1:
-        return path, ''
-    return '.'.join(parts[:-1]), parts[-1]
+        return path, ""
+    return ".".join(parts[:-1]), parts[-1]
+
 
 def strip_path(path, extensions=True):
     """
@@ -124,9 +152,10 @@ def strip_path(path, extensions=True):
     if extensions:
         if extensions is True:
             extensions = -1
-        return basename[::-1].split('.', maxsplit=extensions)[-1][::-1]
+        return basename[::-1].split(".", maxsplit=extensions)[-1][::-1]
     else:
         return basename
+
 
 def first_not(*args, value=None, default=None):
     """
@@ -138,6 +167,7 @@ def first_not(*args, value=None, default=None):
         default: Object to return if all `*args` are `value`
     """
     return next((xi for xi in args if xi is not value), default)
+
 
 def as_array(a, dtype=None):
     """
@@ -157,6 +187,7 @@ def as_array(a, dtype=None):
     else:
         return np.asarray(a, dtype=dtype)
 
+
 def diag_indices(a, k=0):
     """
     Return the indices of diagonals in an array.
@@ -169,7 +200,8 @@ def diag_indices(a, k=0):
     assert all(np.array(a.shape) == a.shape[0])
     rows, cols = np.diag_indices_from(a)
     if not np.iterable(k):
-        k = k,
+        k = (k,)
+
     def diag(ki):
         if ki < 0:
             return rows[-ki:], cols[:ki]
@@ -177,8 +209,10 @@ def diag_indices(a, k=0):
             return rows[:-ki], cols[ki:]
         else:
             return rows, cols
+
     rowcols = [diag(ki) for ki in k]
     return np.hstack([rc[0] for rc in rowcols]), np.hstack([rc[1] for rc in rowcols])
+
 
 def sorted_neighbors(x, y):
     """
@@ -200,6 +234,7 @@ def sorted_neighbors(x, y):
     index[index == len(x)] -= 2
     return np.column_stack((index, index + 1))
 
+
 def sorted_nearest(x, y):
     """
     Return indices of nearest neighbors.
@@ -215,6 +250,7 @@ def sorted_nearest(x, y):
     neighbors = sorted_neighbors(x, y)
     nearest = np.argmin(np.abs(y.reshape(-1, 1) - x[neighbors]), axis=1)
     return neighbors[range(len(y)), nearest]
+
 
 def tile_axis(a, shape, axis=None):
     """
@@ -245,6 +281,7 @@ def tile_axis(a, shape, axis=None):
     assert np.all(result.shape == shape)
     return result
 
+
 def weighted_nanmean(a, weights, axis=None):
     """
     Return the weighted mean of non-missing values in an array.
@@ -256,8 +293,10 @@ def weighted_nanmean(a, weights, axis=None):
     """
     a = np.asarray(a)
     weights = np.asarray(weights)
-    return (np.nansum(a * weights, axis=axis) /
-        np.nansum(weights * ~np.isnan(a), axis=axis))
+    return np.nansum(a * weights, axis=axis) / np.nansum(
+        weights * ~np.isnan(a), axis=axis
+    )
+
 
 def weighted_nanstd(a, weights, axis=None, means=None):
     """
@@ -276,9 +315,9 @@ def weighted_nanstd(a, weights, axis=None, means=None):
     if means is None:
         means = weighted_nanmean(a, weights=weights, axis=axis)
     means = tile_axis(means, shape=a.shape, axis=axis)
-    std = np.sqrt(weighted_nanmean(
-        (a - means)**2, weights=weights, axis=axis))
+    std = np.sqrt(weighted_nanmean((a - means) ** 2, weights=weights, axis=axis))
     return std
+
 
 def hypot_sigma(x, y):
     """
@@ -290,12 +329,12 @@ def hypot_sigma(x, y):
     """
     # https://en.wikipedia.org/wiki/Propagation_of_uncertainty#Example_formulas
     z = np.hypot(x[0], y[0])
-    z_sigma = np.sqrt(
-        (x[0] / z)**2 * x[1]**2 +
-        (y[0] / z)**2 * y[1]**2)
+    z_sigma = np.sqrt((x[0] / z) ** 2 * x[1] ** 2 + (y[0] / z) ** 2 * y[1] ** 2)
     return z, z_sigma
 
+
 # ---- Pickles ---- #
+
 
 def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):
     """
@@ -309,13 +348,14 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTO
         protocol (int): Protocol to use
     """
     make_path_directories(path, is_file=True)
-    mode = 'wb' if binary else 'w'
+    mode = "wb" if binary else "w"
     if gz:
         fp = gzip.open(path, mode=mode)
     else:
         fp = open(path, mode=mode)
     pickle.dump(obj, file=fp, protocol=protocol)
     fp.close()
+
 
 def read_pickle(path, gz=False, binary=True, **kwargs):
     """
@@ -327,7 +367,7 @@ def read_pickle(path, gz=False, binary=True, **kwargs):
         binary (bool): Whether pickle is binary
         **kwargs: Arguments to `pickle.load()`
     """
-    mode = 'rb' if binary else 'r'
+    mode = "rb" if binary else "r"
     if gz:
         fp = gzip.open(path, mode=mode)
     else:
@@ -336,13 +376,20 @@ def read_pickle(path, gz=False, binary=True, **kwargs):
     fp.close()
     return obj
 
+
 # Register Pickle method for cv2.KeyPoint
 # https://stackoverflow.com/questions/10045363/pickling-cv2-keypoint-causes-picklingerror
 def _pickle_cv2_keypoints(k):
-    return cv2.KeyPoint, (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id)
+    return (
+        cv2.KeyPoint,
+        (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id),
+    )
+
+
 copyreg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
 
 # ---- JSON ---- #
+
 
 def read_json(path, **kwargs):
     """
@@ -352,8 +399,9 @@ def read_json(path, **kwargs):
         path (str): Path to file
         **kwargs: Additional arguments passed to `json.load()`
     """
-    with open(path, mode='r') as fp:
+    with open(path, mode="r") as fp:
         return json.load(fp, **kwargs)
+
 
 def write_json(obj, path=None, flat_arrays=False, **kwargs):
     """
@@ -368,22 +416,26 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
         **kwargs: Additional arguments passed to `json.dumps()`
     """
     txt = json.dumps(obj, **kwargs)
-    if flat_arrays and kwargs.get('indent') >= 0:
-        separators = kwargs.get('separators')
-        sep = separators[0] if separators else ', '
-        squished_sep = re.sub(r'\s', '', sep)
+    if flat_arrays and kwargs.get("indent") >= 0:
+        separators = kwargs.get("separators")
+        sep = separators[0] if separators else ", "
+        squished_sep = re.sub(r"\s", "", sep)
+
         def flatten(match):
-            return re.sub(squished_sep, sep, re.sub(r'\s', '', match.group(0)))
-        txt = re.sub(r'(\[\s*)+[^\]\{]*(\s*\])+', flatten, txt)
+            return re.sub(squished_sep, sep, re.sub(r"\s", "", match.group(0)))
+
+        txt = re.sub(r"(\[\s*)+[^\]\{]*(\s*\])+", flatten, txt)
     if path:
         make_path_directories(path, is_file=True)
-        with open(path, mode='w') as fp:
+        with open(path, mode="w") as fp:
             fp.write(txt)
         return None
     else:
         return txt
 
+
 # ---- Arrays: General ---- #
+
 
 def normalize(array):
     """
@@ -393,6 +445,7 @@ def normalize(array):
         array (array): Input array
     """
     return (array - array.mean()) * (1 / array.std())
+
 
 def normalize_range(array, interval=(0, 1)):
     """
@@ -412,6 +465,7 @@ def normalize_range(array, interval=(0, 1)):
     scale = (interval[1] - interval[0]) / (np.nanmax(array) - np.nanmin(array))
     scaled = array * scale
     return scaled - np.nanmin(scaled) + interval[0]
+
 
 def gaussian_filter(array, mask=None, fill=False, **kwargs):
     """
@@ -439,6 +493,7 @@ def gaussian_filter(array, mask=None, fill=False, **kwargs):
             x[~mask] = array[~mask]
         return x
 
+
 def maximum_filter(array, mask=None, fill=False, **kwargs):
     """
     Return a maximum-filtered array.
@@ -464,6 +519,7 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
             mask = x == dtype_min
         x[mask] = array[mask]
         return x
+
 
 def median_filter(array, mask=None, fill=False, **kwargs):
     """
@@ -493,6 +549,7 @@ def median_filter(array, mask=None, fill=False, **kwargs):
             x[mask] = array[mask]
         return x
 
+
 # ---- Arrays: Images ---- #
 
 # NOTE: Unused
@@ -507,7 +564,8 @@ def linear_to_gamma(array, gamma=2.2):
         array (array): Input array
         gamma (float): Gamma coefficient
     """
-    return array**gamma
+    return array ** gamma
+
 
 # NOTE: Unused
 def gamma_to_linear(array, gamma=2.2):
@@ -521,11 +579,13 @@ def gamma_to_linear(array, gamma=2.2):
         array (array): Input array
         gamma (float): Gamma coefficient
     """
-    return array**(1 / gamma)
+    return array ** (1 / gamma)
 
-GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver='arpack', whiten=False)
 
-def rgb_to_gray(rgb, method='average', weights=None, pca=None):
+GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver="arpack", whiten=False)
+
+
+def rgb_to_gray(rgb, method="average", weights=None, pca=None):
     """
     Convert a color image to a grayscale image.
 
@@ -542,7 +602,7 @@ def rgb_to_gray(rgb, method='average', weights=None, pca=None):
     Returns:
         array: 2-d grayscale image
     """
-    if method == 'average':
+    if method == "average":
         return np.average(rgb, axis=2, weights=weights)
     else:
         if pca is None:
@@ -551,6 +611,7 @@ def rgb_to_gray(rgb, method='average', weights=None, pca=None):
         pca.fit(Q)
         pca.components_ = np.sign(pca.components_[0]) * pca.components_
         return pca.transform(Q).reshape(rgb.shape[0:2])
+
 
 def compute_cdf(array, return_inverse=False):
     """
@@ -575,6 +636,7 @@ def compute_cdf(array, return_inverse=False):
     else:
         return results[0], quantiles
 
+
 def match_histogram(source, template):
     """
     Adjust the values of an array such that its histogram matches that of a target array.
@@ -594,9 +656,11 @@ def match_histogram(source, template):
     new_values = np.interp(s_quantiles, template[1], template[0])
     return new_values[inverse_index].reshape(source.shape)
 
+
 # ---- GIS ---- #
 
-@require('osgeo')
+
+@require("osgeo")
 def crs_to_wkt(crs):
     """
     Convert coordinate reference system (CRS) to well-known text (WKT).
@@ -608,15 +672,16 @@ def crs_to_wkt(crs):
     if isinstance(crs, int):
         obj.ImportFromEPSG(crs)
     elif isinstance(crs, str):
-        if re.findall(r'\[', crs):
+        if re.findall(r"\[", crs):
             return crs
-        elif re.findall(r':', crs):
+        elif re.findall(r":", crs):
             obj.ImportFromProj4(crs.lower())
         else:
-            raise ValueError('crs string format not Proj4 or WKT')
+            raise ValueError("crs string format not Proj4 or WKT")
     else:
-        raise ValueError('crs must be int (EPSG) or str (Proj4 or WKT)')
+        raise ValueError("crs must be int (EPSG) or str (Proj4 or WKT)")
     return obj.ExportToWkt()
+
 
 def sp_transform(points, current, target):
     """
@@ -630,15 +695,17 @@ def sp_transform(points, current, target):
         current: Current coordinate system
         target: Target coordinate system
     """
+
     def build_proj(obj):
         if isinstance(obj, pyproj.Proj):
             return obj
         elif isinstance(obj, int):
-            return pyproj.Proj(init='EPSG:' + str(obj))
+            return pyproj.Proj(init="EPSG:" + str(obj))
         elif isinstance(obj, dict):
             return pyproj.Proj(**obj)
         else:
-            raise ValueError('Cannot coerce input to pyproj.Proj')
+            raise ValueError("Cannot coerce input to pyproj.Proj")
+
     current = build_proj(current)
     target = build_proj(target)
     if points.shape[1] < 3:
@@ -647,6 +714,7 @@ def sp_transform(points, current, target):
         z = points[:, 2]
     result = pyproj.transform(current, target, x=points[:, 0], y=points[:, 1], z=z)
     return np.column_stack(result)
+
 
 def read_geojson(path, key=None, crs=None, **kwargs):
     """
@@ -666,8 +734,11 @@ def read_geojson(path, key=None, crs=None, **kwargs):
     if crs:
         apply_geojson_coords(obj, sp_transform, current=4326, target=crs)
     if key:
-        obj['features'] = dict((feature['properties'][key], feature) for feature in obj['features'])
+        obj["features"] = dict(
+            (feature["properties"][key], feature) for feature in obj["features"]
+        )
     return obj
+
 
 def write_geojson(obj, path=None, crs=None, decimals=None, **kwargs):
     """
@@ -681,15 +752,17 @@ def write_geojson(obj, path=None, crs=None, decimals=None, **kwargs):
             If `None`, coordinates are unchanged.
         kwargs (dict): Additional arguments passed to `write_json()`
     """
+
     def round_coords(coords, decimals):
         for i, decimal in enumerate(decimals):
             if i < coords.shape[1]:
                 coords[:, i] = np.round(coords[:, i], decimal)
         return coords
+
     obj = copy.deepcopy(obj)
-    if isinstance(obj['features'], dict):
+    if isinstance(obj["features"], dict):
         # Revert named features back to list
-        obj['features'] = obj['features'].values()
+        obj["features"] = obj["features"].values()
     apply_geojson_coords(obj, np.atleast_2d)
     if crs:
         apply_geojson_coords(obj, sp_transform, current=crs, target=4326)
@@ -699,11 +772,12 @@ def write_geojson(obj, path=None, crs=None, decimals=None, **kwargs):
     apply_geojson_coords(obj, np.ndarray.tolist)
     return write_json(obj, path=path, **kwargs)
 
+
 def geojson_iterfeatures(obj):
     """
     Return an iterator over GeoJSON features.
     """
-    features = obj['features']
+    features = obj["features"]
     if isinstance(features, list):
         index = range(len(features))
     else:
@@ -711,17 +785,20 @@ def geojson_iterfeatures(obj):
     for i in index:
         yield features[i]
 
+
 def _get_geojson_coords(feature):
-    if 'geometry' in feature:
-        return feature['geometry']['coordinates']
+    if "geometry" in feature:
+        return feature["geometry"]["coordinates"]
     else:
-        return feature['coordinates']
+        return feature["coordinates"]
+
 
 def _set_geojson_coords(feature, coords):
-    if 'geometry' in feature:
-        feature['geometry']['coordinates'] = coords
+    if "geometry" in feature:
+        feature["geometry"]["coordinates"] = coords
     else:
-        feature['coordinates'] = coords
+        feature["coordinates"] = coords
+
 
 def geojson_itercoords(obj):
     """
@@ -729,6 +806,7 @@ def geojson_itercoords(obj):
     """
     for feature in geojson_iterfeatures(obj):
         yield _get_geojson_coords(feature)
+
 
 def apply_geojson_coords(obj, fun, **kwargs):
     """
@@ -751,7 +829,8 @@ def apply_geojson_coords(obj, fun, **kwargs):
         elif ndim == 3:
             _set_geojson_coords(feature, [fun(X, **kwargs) for X in coords])
         else:
-            raise ValueError('Unknown coordinates format')
+            raise ValueError("Unknown coordinates format")
+
 
 def elevate_geojson(obj, elevation):
     """
@@ -764,24 +843,33 @@ def elevate_geojson(obj, elevation):
             the name of the feature property containing elevation (str), or
             digital elevation model from which to sample elevations (`dem.DEM`)
     """
+
     def set_z(coords, z):
         if len(z) == 1:
             z = np.repeat(z, len(coords))
         return np.column_stack((coords[:, 0:2], z))
+
     def set_from_elevation(coords, elevation):
         if isinstance(elevation, (int, float)):
             return set_z(coords, elevation)
         else:
             return set_z(coords, elevation.sample(coords[:, 0:2]))
+
     if isinstance(elevation, (bytes, str)):
         for feature in geojson_iterfeatures(obj):
             coords = _get_geojson_coords(feature)
-            _set_geojson_coords(feature, set_z(coords, feature['properties'][elevation]))
+            _set_geojson_coords(
+                feature, set_z(coords, feature["properties"][elevation])
+            )
     else:
         apply_geojson_coords(obj, set_from_elevation, elevation=elevation)
 
-def ordered_geojson(obj, properties=None,
-    keys=('type', 'properties', 'features', 'geometry', 'coordinates')):
+
+def ordered_geojson(
+    obj,
+    properties=None,
+    keys=("type", "properties", "features", "geometry", "coordinates"),
+):
     """
     Return GeoJSON as a nested ordered dictionary.
 
@@ -790,6 +878,7 @@ def ordered_geojson(obj, properties=None,
         properties (list): Order of properties (any unnamed are returned last)
         keys (list): Order of keys (any unnamed are returned last)
     """
+
     def order_item(d, name=None):
         if isinstance(d, list):
             index = range(len(d))
@@ -800,20 +889,24 @@ def ordered_geojson(obj, properties=None,
         for i in index:
             d[i] = order_item(d[i], name=i)
         if isinstance(d, dict):
-            if properties and name == 'properties':
-                ordered_keys = ([key for key in properties if key in index]
-                    + [key for key in index if key not in properties])
+            if properties and name == "properties":
+                ordered_keys = [key for key in properties if key in index] + [
+                    key for key in index if key not in properties
+                ]
                 return collections.OrderedDict((k, d[k]) for k in ordered_keys)
-            elif keys and name != 'properties':
-                ordered_keys = ([key for key in keys if key in index]
-                    + [key for key in index if key not in keys])
+            elif keys and name != "properties":
+                ordered_keys = [key for key in keys if key in index] + [
+                    key for key in index if key not in keys
+                ]
                 return collections.OrderedDict((k, d[k]) for k in ordered_keys)
             else:
                 return d
         else:
             return d
+
     obj = copy.deepcopy(obj)
     return order_item(obj)
+
 
 def gdal_driver_from_path(path, raster=True, vector=True):
     ext = split_extension(path)[1].lower()
@@ -824,37 +917,41 @@ def gdal_driver_from_path(path, raster=True, vector=True):
         is_vector = vector and meta.get(osgeo.gdal.DCAP_VECTOR)
         if is_raster or is_vector:
             extensions = meta.get(osgeo.gdal.DMD_EXTENSIONS)
-            if extensions and ext in extensions.split(' '):
+            if extensions and ext in extensions.split(" "):
                 return driver
     return None
+
 
 def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
     a = np.atleast_3d(a)
     dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(a.dtype)
     if not dtype:
-        dtypes = ', '.join([x.__name__ for x in osgeo.gdal_array.codes.values()])
-        raise ValueError(f'Unsupported array data type: {a.dtype}.\nSupported: {dtypes}')
+        dtypes = ", ".join([x.__name__ for x in osgeo.gdal_array.codes.values()])
+        raise ValueError(
+            f"Unsupported array data type: {a.dtype}.\nSupported: {dtypes}"
+        )
     if driver:
-        msg = f'Unrecognized GDAL driver: {driver}'
+        msg = f"Unrecognized GDAL driver: {driver}"
         driver = osgeo.gdal.GetDriverByName(driver)
         if not driver:
             raise ValueError(msg)
     else:
         driver = gdal_driver_from_path(path, vector=False)
         if not driver:
-            raise ValueError(f'Could not guess GDAL driver from path: {path}')
+            raise ValueError(f"Could not guess GDAL driver from path: {path}")
     meta = driver.GetMetadata()
     can_create = meta.get(osgeo.gdal.DCAP_CREATE)
     can_copy = meta.get(osgeo.gdal.DCAP_CREATECOPY)
     if not can_create and not can_copy:
-        raise ValueError(f'Driver {driver.ShortName} cannot create files')
-    create_driver = driver if can_create else osgeo.gdal.GetDriverByName('mem')
+        raise ValueError(f"Driver {driver.ShortName} cannot create files")
+    create_driver = driver if can_create else osgeo.gdal.GetDriverByName("mem")
     output = create_driver.Create(
-        utf8_path=path if can_create else '',
+        utf8_path=path if can_create else "",
         xsize=a.shape[1],
         ysize=a.shape[0],
         bands=a.shape[2],
-        eType=dtype)
+        eType=dtype,
+    )
     if transform:
         output.SetGeoTransform(transform)
     if crs:
@@ -868,9 +965,11 @@ def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
         output = driver.CreateCopy(path, output, 0)
     output.FlushCache()
 
+
 # ---- Geometry ---- #
 
-def boolean_split(x, mask, axis=0, circular=False, include='all'):
+
+def boolean_split(x, mask, axis=0, circular=False, include="all"):
     """
     Split array by boolean mask.
 
@@ -889,16 +988,17 @@ def boolean_split(x, mask, axis=0, circular=False, include='all'):
     if circular and len(splits) > 1 and mask[0] is mask[-1]:
         splits[0] = np.concatenate((splits[-1], splits[0]), axis=axis)
         splits.pop(-1)
-    if include == 'all':
+    if include == "all":
         return splits
-    elif include == 'true':
+    elif include == "true":
         index = slice(0, None, 2) if mask[0] else slice(1, None, 2)
         return splits[index]
-    elif include == 'false':
+    elif include == "false":
         index = slice(1, None, 2) if mask[0] else slice(0, None, 2)
         return splits[index]
     else:
         return list()
+
 
 def project_points_plane(points, plane):
     """
@@ -911,7 +1011,8 @@ def project_points_plane(points, plane):
     # http://www.9math.com/book/projection-point-plane
     n = np.asarray(plane[0:3])
     d = plane[3]
-    return points - n * ((np.dot(points, n) + d) * (1 / sum(n**2)))[:, None]
+    return points - n * ((np.dot(points, n) + d) * (1 / sum(n ** 2)))[:, None]
+
 
 def intersect_rays_plane(origin, directions, plane):
     """
@@ -932,9 +1033,10 @@ def intersect_rays_plane(origin, directions, plane):
     # intersect at t = - (xyz . n + d) / (dxyz . n), if t >= 0
     n = plane[0:3]
     d = plane[3]
-    t = - (np.dot(n, origin) + d) / np.dot(n, directions.T)
+    t = -(np.dot(n, origin) + d) / np.dot(n, directions.T)
     t[t < 0] = np.nan
     return origin + t[:, None] * directions
+
 
 def in_box(points, box):
     """
@@ -948,6 +1050,7 @@ def in_box(points, box):
     """
     box = unravel_box(box)
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
+
 
 def clip_polyline_box(line, box, t=False):
     """
@@ -982,8 +1085,11 @@ def clip_polyline_box(line, box, t=False):
             distance = segments[i + 1][0, :] - origin
             ti = intersect_edge_box(origin[cols], distance[cols], box)
             if ti is not None:
-                segments[i] = np.insert(segments[i], len(segments[i]), origin + ti * distance, axis=0)
+                segments[i] = np.insert(
+                    segments[i], len(segments[i]), origin + ti * distance, axis=0
+                )
     return segments[trues]
+
 
 def intersect_edge_box(origin, distance, box):
     """
@@ -1000,6 +1106,7 @@ def intersect_edge_box(origin, distance, box):
         return t
     else:
         return None
+
 
 def intersect_rays_box(origin, directions, box, t=False):
     """
@@ -1047,7 +1154,9 @@ def intersect_rays_box(origin, directions, box, t=False):
         # Apply z-axis intersections
         idx = np.ravel_multi_index((all_rays, 2 + sign[:, 2] * ndims), bounds.shape)
         tzmin = (fbounds[idx] - origin[2]) * invdir[:, 2]
-        idx = np.ravel_multi_index((all_rays, 2 + (1 - sign[:, 2]) * ndims), bounds.shape)
+        idx = np.ravel_multi_index(
+            (all_rays, 2 + (1 - sign[:, 2]) * ndims), bounds.shape
+        )
         tzmax = (fbounds[idx] - origin[2]) * invdir[:, 2]
         misses = (tmin > tzmax) | (tzmin > tmax)
         tmin[misses] = np.nan
@@ -1063,6 +1172,7 @@ def intersect_rays_box(origin, directions, box, t=False):
         return tmin[:, None], tmax[:, None]
     else:
         return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
+
 
 # TODO: Implement faster run-slice (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
 def bresenham_line(start, end):
@@ -1123,6 +1233,7 @@ def bresenham_line(start, end):
         points.reverse()
     return np.array(points)
 
+
 def bresenham_circle(center, radius):
     """
     Return grid indices along a circular path.
@@ -1145,7 +1256,7 @@ def bresenham_circle(center, radius):
     y = radius
     f = 1 - radius
     dx = 1
-    dy = - 2 * radius
+    dy = -2 * radius
     xy = np.full((n_points, 2), np.nan)
     # 1st octant
     xy[0, :] = [x0 + x, y0 + y]
@@ -1189,8 +1300,9 @@ def bresenham_circle(center, radius):
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
     return xy
 
+
 # NOTE: Unused
-def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
+def inverse_kernel_distance(data, bandwidth=None, function="gaussian"):
     """
     Return spatial weights based on inverse kernel distances.
 
@@ -1207,18 +1319,19 @@ def inverse_kernel_distance(data, bandwidth=None, function='gaussian'):
         bandwidth = np.max(nd)
     nd *= 1 / bandwidth
     included = nd <= 1
-    if function == 'triangular':
+    if function == "triangular":
         temp = np.where(included, 1 - nd, 0)
-    elif function == 'uniform':
+    elif function == "uniform":
         temp = np.where(included, 0.5, 0)
-    elif function == 'quadratic':
-        temp = np.where(included, (3./4) * (1 - nd**2), 0)
-    elif function == 'quartic':
-        temp = np.where(included, (15./16) * (1 - nd**2)**2, 0)
-    elif function == 'gaussian':
-        temp = np.where(included, (2 * np.pi)**(-0.5) * np.exp((-nd**2) / 2), 0)
+    elif function == "quadratic":
+        temp = np.where(included, (3.0 / 4) * (1 - nd ** 2), 0)
+    elif function == "quartic":
+        temp = np.where(included, (15.0 / 16) * (1 - nd ** 2) ** 2, 0)
+    elif function == "gaussian":
+        temp = np.where(included, (2 * np.pi) ** (-0.5) * np.exp((-(nd ** 2)) / 2), 0)
     # Compute weights as inverse sum of kernel distances
     return 1 / np.sum(temp, axis=1)
+
 
 def intersect_ranges(ranges):
     """
@@ -1231,9 +1344,10 @@ def intersect_ranges(ranges):
     rmin = np.nanmax(ranges[:, 0])
     rmax = np.nanmin(ranges[:, 1])
     if rmax - rmin <= 0:
-        raise ValueError('Ranges do not intersect')
+        raise ValueError("Ranges do not intersect")
     else:
         return np.hstack((rmin, rmax))
+
 
 def cut_ranges(ranges, cuts):
     ranges = np.sort(ranges, axis=1)
@@ -1246,6 +1360,7 @@ def cut_ranges(ranges, cuts):
     order = np.lexsort((ranges[:, 1], ranges[:, 0]))
     return ranges[order]
 
+
 def cut_out_ranges(ranges, cutouts):
     cutouts = np.reshape(cutouts, (-1, 2))
     ranges = cut_ranges(ranges, cuts=cutouts.ravel())
@@ -1253,6 +1368,7 @@ def cut_out_ranges(ranges, cutouts):
         is_cutout = (ranges[:, 0] >= x[0]) & (ranges[:, 1] <= x[1])
         ranges = ranges[~is_cutout]
     return ranges
+
 
 def intersect_boxes(boxes):
     """
@@ -1267,15 +1383,17 @@ def intersect_boxes(boxes):
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
     boxmax = np.nanmin(boxes[:, ndim:], axis=0)
     if any(boxmax - boxmin <= 0):
-        raise ValueError('Boxes do not intersect')
+        raise ValueError("Boxes do not intersect")
     else:
         return np.hstack((boxmin, boxmax))
+
 
 def union_boxes(boxes):
     points = np.row_stack([unravel_box(box) for box in boxes])
     return bounding_box(points)
 
-def pairwise_distance(x, y, metric='sqeuclidean', **params):
+
+def pairwise_distance(x, y, metric="sqeuclidean", **params):
     """
     Return the pairwise distance between two sets of points.
 
@@ -1294,9 +1412,14 @@ def pairwise_distance(x, y, metric='sqeuclidean', **params):
     return scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
-        metric=metric, **params)
+        metric=metric,
+        **params,
+    )
 
-def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fill='endpoints'):
+
+def interpolate_line(
+    vertices, x=None, xi=None, n=None, dx=None, error=True, fill="endpoints"
+):
     """
     Return points at the specified distances along a line.
 
@@ -1317,7 +1440,7 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
     assert not all((xi is None, n is None, dx is None))
     if x is None:
         # Compute total distance at each vertex
-        x = np.cumsum(np.sqrt(np.sum(np.diff(vertices, axis=0)**2, axis=1)))
+        x = np.cumsum(np.sqrt(np.sum(np.diff(vertices, axis=0) ** 2, axis=1)))
         # Set first vertex at 0
         x = np.insert(x, 0, 0)
     if xi is None:
@@ -1329,16 +1452,17 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
         xi = np.linspace(start=x[0], stop=x[-1], num=n, endpoint=True)
         # Ensure defaults for speed
         error = False
-        fill = 'endpoints'
+        fill = "endpoints"
     # x must be increasing
     if len(x) > 1 and x[1] < x[0]:
         sort_index = np.argsort(x)
         x = x[sort_index]
         vertices = vertices[sort_index, :]
     # Interpolate each dimension and combine
-    result = np.column_stack((
-        np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1])))
-    if fill == 'endpoints':
+    result = np.column_stack(
+        (np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1]))
+    )
+    if fill == "endpoints":
         if error is False:
             return result
         else:
@@ -1350,11 +1474,12 @@ def interpolate_line(vertices, x=None, xi=None, n=None, dx=None, error=True, fil
     if x[0] > x[-1]:
         right, left = left, right
     if error and (left.any() or right.any()):
-        raise ValueError('Requested distance outside range')
+        raise ValueError("Requested distance outside range")
     else:
         result[left, :] = fill[0]
         result[right, :] = fill[1]
         return result
+
 
 def unravel_box(box):
     """
@@ -1371,6 +1496,7 @@ def unravel_box(box):
     ndim = box.size // 2
     return box.reshape(-1, ndim)
 
+
 def bounding_box(points):
     """
     Return bounding box of points.
@@ -1379,9 +1505,8 @@ def bounding_box(points):
         points (iterable): Points, each in the format (x, ...)
     """
     points = as_array(points)
-    return np.hstack((
-        np.min(points, axis=0),
-        np.max(points, axis=0)))
+    return np.hstack((np.min(points, axis=0), np.max(points, axis=0)))
+
 
 def box_to_polygon(box):
     """
@@ -1391,11 +1516,10 @@ def box_to_polygon(box):
         box (iterable): Box (minx, ..., maxx, ...)
     """
     box = unravel_box(box)
-    return np.column_stack((
-        box[(0, 0, 1, 1, 0), 0],
-        box[(0, 1, 1, 0, 0), 1]))
+    return np.column_stack((box[(0, 0, 1, 1, 0), 0], box[(0, 1, 1, 0, 0), 1]))
 
-def box_to_grid(box, step, snap=None, mode='grids'):
+
+def box_to_grid(box, step, snap=None, mode="grids"):
     """
     Return grid of points inside box.
 
@@ -1411,19 +1535,22 @@ def box_to_grid(box, step, snap=None, mode='grids'):
     """
     box = unravel_box(box)
     ndim = box.shape[1]
-    step = step if np.iterable(step) else (step, ) * ndim
+    step = step if np.iterable(step) else (step,) * ndim
     if snap is None:
         snap = box[0, :]
     shift = (snap - box[0, :]) % step
     n = (np.diff(box, axis=0).ravel() - shift) // step
-    arrays = (np.linspace(box[0, i] + shift[i],
-        box[0, i] + shift[i] + n[i] * step[i],
-        int(n[i]) + 1)
-        for i in range(ndim))
-    if mode == 'vectors':
+    arrays = (
+        np.linspace(
+            box[0, i] + shift[i], box[0, i] + shift[i] + n[i] * step[i], int(n[i]) + 1
+        )
+        for i in range(ndim)
+    )
+    if mode == "vectors":
         return tuple(arrays)
     else:
         return np.meshgrid(*arrays)
+
 
 def grid_to_points(grid):
     """
@@ -1437,6 +1564,7 @@ def grid_to_points(grid):
     """
     return np.reshape(grid, (len(grid), -1)).T
 
+
 def points_in_polygon(points, polygon):
     """
     Return whether each point is contained by the polygon.
@@ -1447,6 +1575,7 @@ def points_in_polygon(points, polygon):
     """
     path = matplotlib.path.Path(polygon)
     return path.contains_points(points)
+
 
 def polygon_to_grid_points(polygon, holes=None, **params):
     """
@@ -1461,13 +1590,14 @@ def polygon_to_grid_points(polygon, holes=None, **params):
         **params (dict): Arguments passed to `box_to_grid()`
     """
     box = bounding_box(polygon)
-    grid = box_to_grid(box, mode='grids', **params)
+    grid = box_to_grid(box, mode="grids", **params)
     points = grid_to_points(grid)
     is_in = points_in_polygon(points, polygon)
     if holes:
         for hole in holes:
             is_in &= ~points_in_polygon(points, hole)
     return points[is_in, :]
+
 
 def side(points, edge):
     """
@@ -1482,6 +1612,7 @@ def side(points, edge):
     """
     cross = np.cross(edge[0] - edge[1], points - edge[0])
     return np.sign(cross).astype(int)
+
 
 def cartesian_to_polyline(points, line):
     """
@@ -1499,7 +1630,7 @@ def cartesian_to_polyline(points, line):
     # NOTE: Slow
     M = [Line.project(shapely.geometry.Point(p)) for p in points]
     # Compute signed distance to line (- left, + right)
-    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0)**2, axis=1)))
+    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0) ** 2, axis=1)))
     x = np.insert(x, 0, 0)
     mi = np.interp(x=M, xp=x, fp=np.arange(len(x)))
     starts = np.floor(mi).astype(int)
@@ -1508,11 +1639,12 @@ def cartesian_to_polyline(points, line):
     signs = np.zeros(len(points), dtype=int)
     for start in np.unique(starts):
         index = starts == start
-        signs[index] = side(points[index, :], line[start:(start + 2), :])
+        signs[index] = side(points[index, :], line[start : (start + 2), :])
     projected_points = interpolate_line(line, x=x, xi=M)
     # Distances to line
     D = np.linalg.norm(projected_points - points, axis=1)
     return np.column_stack((M, D * signs))
+
 
 def polyline_to_cartesian(points, line):
     """
@@ -1527,7 +1659,7 @@ def polyline_to_cartesian(points, line):
     """
     projected_points = interpolate_line(line, xi=points[:, 0])
     # Locate start of line segment
-    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0)**2, axis=1)))
+    x = np.cumsum(np.sqrt(np.sum(np.diff(line, axis=0) ** 2, axis=1)))
     x = np.insert(x, 0, 0)
     mi = np.interp(x=points[:, 0], xp=x, fp=np.arange(len(x)))
     starts = np.floor(mi).astype(int)
@@ -1540,12 +1672,17 @@ def polyline_to_cartesian(points, line):
     directions = np.arctan2(dxy[:, 1], dxy[:, 0])
     new_directions = directions[starts]
     # Inner vertex: Take average of adjacent segment slopes
-    new_directions[is_inner_vertex] = (0.5 * (directions[:-1] + directions[1:]))[starts[is_inner_vertex] - 1]
+    new_directions[is_inner_vertex] = (0.5 * (directions[:-1] + directions[1:]))[
+        starts[is_inner_vertex] - 1
+    ]
     new_directions -= np.sign(points[:, 1]) * (np.pi * 0.5)
-    return projected_points + np.abs(points[:, 1:2]) * np.column_stack((
-        np.cos(new_directions), np.sin(new_directions)))
+    return projected_points + np.abs(points[:, 1:2]) * np.column_stack(
+        (np.cos(new_directions), np.sin(new_directions))
+    )
+
 
 # ---- Image formation ---- #
+
 
 def rasterize_points(rows, cols, values, shape, fun=np.mean):
     """
@@ -1566,11 +1703,12 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
             where available and `NaN` elsewhere
     """
     df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
-    groups = df.groupby(('row', 'col')).aggregate(fun).reset_index()
+    groups = df.groupby(("row", "col")).aggregate(fun).reset_index()
     idx = np.ravel_multi_index((groups.row.values, groups.col.values), shape)
     grid = np.full(shape, np.nan)
     grid.flat[idx] = groups.value.values
     return grid
+
 
 def polygons_to_mask(polygons, size, holes=None):
     """
@@ -1583,7 +1721,7 @@ def polygons_to_mask(polygons, size, holes=None):
         size (iterable): Array size (nx, ny)
         holes (iterable): Polygons representing holes in `polygons`
     """
-    im_mask = PIL.Image.new(mode='1', size=(int(size[0]), int(size[1])))
+    im_mask = PIL.Image.new(mode="1", size=(int(size[0]), int(size[1])))
     draw = PIL.ImageDraw.ImageDraw(im_mask)
     for polygon in polygons:
         if isinstance(polygon, np.ndarray):
@@ -1597,7 +1735,14 @@ def polygons_to_mask(polygons, size, holes=None):
         draw.polygon(hole, fill=0)
     return np.array(im_mask)
 
-def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_radius=6.3781e6, refraction=0.13):
+
+def elevation_corrections(
+    origin=None,
+    xyz=None,
+    squared_distances=None,
+    earth_radius=6.3781e6,
+    refraction=0.13,
+):
     """
     Return elevation corrections for earth curvature and refraction.
 
@@ -1615,10 +1760,12 @@ def elevation_corrections(origin=None, xyz=None, squared_distances=None, earth_r
     # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
     # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
     if squared_distances is None:
-        squared_distances = np.sum((xyz[:, 0:2] - origin[0:2])**2, axis=1)
+        squared_distances = np.sum((xyz[:, 0:2] - origin[0:2]) ** 2, axis=1)
     return (refraction - 1) * squared_distances / (2 * earth_radius)
 
+
 # ---- Time ----
+
 
 def datetimes_to_float(datetimes):
     """
@@ -1637,6 +1784,7 @@ def datetimes_to_float(datetimes):
         epoch = datetime.datetime.fromtimestamp(0)
         return [(xi - epoch).total_seconds() for xi in datetimes]
 
+
 def pairwise_distance_datetimes(x, y):
     """
     Return the pairwise distances between two sets of datetimes.
@@ -1651,8 +1799,9 @@ def pairwise_distance_datetimes(x, y):
         array: Pairwise distances in seconds, where [i, j] = distance(x[i], y[j])
     """
     return pairwise_distance(
-        datetimes_to_float(x), datetimes_to_float(y),
-        metric='minkowski', p=1)
+        datetimes_to_float(x), datetimes_to_float(y), metric="minkowski", p=1
+    )
+
 
 def datetime_range(start, stop, step):
     """
@@ -1665,6 +1814,7 @@ def datetime_range(start, stop, step):
     """
     max_steps = (stop - start) // step
     return [start + n * step for n in range(max_steps + 1)]
+
 
 def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
     """
@@ -1688,6 +1838,7 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
     if dx is not None:
         dx = dx.total_seconds()
     return interpolate_line(vertices, x=x, xi=xi, n=n, dx=dx, **kwargs)
+
 
 def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
     """
@@ -1732,7 +1883,9 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
         selected &= temp
     return np.nonzero(selected)[0]
 
+
 # ---- Velocity analysis ----
+
 
 def triangle_area(xy):
     """
@@ -1746,6 +1899,7 @@ def triangle_area(xy):
     """
     return 0.5 * np.linalg.det(np.hstack((np.ones((3, 1)), xy)))
 
+
 def triangle_centroid(xy):
     """
     Return the centroid of a triangle.
@@ -1757,6 +1911,7 @@ def triangle_centroid(xy):
         array: Triangle centroid (x, y)
     """
     return np.mean(xy, axis=0)
+
 
 def triangle_velocity_strain(xy, vxy):
     """
@@ -1790,16 +1945,22 @@ def triangle_velocity_strain(xy, vxy):
     u, v = vxy[:, 0], vxy[:, 1]
     centroid = triangle_centroid(xy)
     area = triangle_area(xy)
-    velocity = (1 / (2 * area)) * np.array((
-        np.sum(a * u) + centroid[0] * np.sum(b * u) + centroid[1] * np.sum(c * u),
-        np.sum(a * v) + centroid[0] * np.sum(b * v) + centroid[1] * np.sum(c * v)))
+    velocity = (1 / (2 * area)) * np.array(
+        (
+            np.sum(a * u) + centroid[0] * np.sum(b * u) + centroid[1] * np.sum(c * u),
+            np.sum(a * v) + centroid[0] * np.sum(b * v) + centroid[1] * np.sum(c * v),
+        )
+    )
     # Strain
-    B = [[b[0], 0, b[1], 0, b[2], 0],
+    B = [
+        [b[0], 0, b[1], 0, b[2], 0],
         [0, c[0], 0, c[1], 0, c[2]],
-        [c[0], b[0], c[1], b[1], c[2], b[2]]]
+        [c[0], b[0], c[1], b[1], c[2], b[2]],
+    ]
     delta = vxy.reshape(-1, 1)
     strain = (1 / (2 * area)) * np.matmul(B, delta)
     return velocity, strain.ravel()
+
 
 def strain_to_principal_strain(strain):
     """
@@ -1826,6 +1987,7 @@ def strain_to_principal_strain(strain):
     emax, emin = np.diag(np.matmul(Q, np.matmul(E, Q.T)))
     return emax, emin, theta, theta + np.pi * 0.5
 
+
 def compute_strain(xy, vxy):
     """
     Return centroids, velocities, and strains of triangular elements.
@@ -1841,10 +2003,13 @@ def compute_strain(xy, vxy):
     """
     tri = scipy.spatial.Delaunay(xy)
     centroids = [triangle_centroid(xy[indices]) for indices in tri.simplices]
-    temp = [triangle_velocity_strain(xy[indices], vxy[indices]) for indices in tri.simplices]
+    temp = [
+        triangle_velocity_strain(xy[indices], vxy[indices]) for indices in tri.simplices
+    ]
     velocities = [x[0] for x in temp]
     strains = [x[1] for x in temp]
     return np.row_stack(centroids), np.row_stack(velocities), np.row_stack(strains)
+
 
 def angle_between_vectors(x, y):
     """
@@ -1858,12 +2023,14 @@ def angle_between_vectors(x, y):
         array: Angle in radians between each vector pair x[i], y[i] (n, )
     """
     x, y = np.atleast_2d(x), np.atleast_2d(y)
-    radians = np.arccos(np.sum(x * y, axis=1) /
-        (np.linalg.norm(x, axis=1) * np.linalg.norm(y, axis=1)))
+    radians = np.arccos(
+        np.sum(x * y, axis=1) / (np.linalg.norm(x, axis=1) * np.linalg.norm(y, axis=1))
+    )
     is_nan_angle = np.isnan(radians)
     is_nan_vector = np.any(np.isnan(x), axis=1) | np.any(np.isnan(y), axis=1)
     radians[is_nan_angle & ~is_nan_vector] = 0
     return radians
+
 
 def normalize_angles(x):
     """
@@ -1872,7 +2039,9 @@ def normalize_angles(x):
     # https://stackoverflow.com/a/7869457
     return np.mod(x + np.pi, 2 * np.pi) - np.pi
 
+
 # ---- Uncertainties ----
+
 
 def take_along_axis(a, indices, axis):
     """
@@ -1885,21 +2054,22 @@ def take_along_axis(a, indices, axis):
     """
     # https://github.com/numpy/numpy/issues/8708
     if axis < 0:
-       if axis >= -a.ndim:
-           axis += a.ndim
-       else:
-           raise IndexError('axis out of range')
+        if axis >= -a.ndim:
+            axis += a.ndim
+        else:
+            raise IndexError("axis out of range")
     ind_shape = (1,) * indices.ndim
-    ins_ndim = indices.ndim - (a.ndim - 1)   # inserted dimensions
+    ins_ndim = indices.ndim - (a.ndim - 1)  # inserted dimensions
     dest_dims = list(range(axis)) + [None] + list(range(axis + ins_ndim, indices.ndim))
     inds = []
     for dim, n in zip(dest_dims, a.shape):
         if dim is None:
             inds.append(indices)
         else:
-            ind_shape_dim = ind_shape[:dim] + (-1,) + ind_shape[(dim + 1):]
+            ind_shape_dim = ind_shape[:dim] + (-1,) + ind_shape[(dim + 1) :]
             inds.append(np.arange(n).reshape(ind_shape_dim))
     return a[tuple(inds)]
+
 
 def normal_weighted_mean(means, sigmas, axis=None, correlated=False):
     """
@@ -1915,28 +2085,31 @@ def normal_weighted_mean(means, sigmas, axis=None, correlated=False):
     isnan_mean = np.isnan(means)
     isnan_sigmas = np.isnan(sigmas)
     if (isnan_mean != isnan_sigmas).any():
-        raise ValueError('mean and sigma NaNs do not match')
+        raise ValueError("mean and sigma NaNs do not match")
     if correlated:
         # Reorder nan to end
         order = np.argsort(isnan_mean, axis=axis)
         means = take_along_axis(means, order, axis=axis)
         sigmas = take_along_axis(sigmas, order, axis=axis)
     if (sigmas == 0).any():
-        raise ValueError('sigmas cannot be 0')
-    weights = sigmas**-2
+        raise ValueError("sigmas cannot be 0")
+    weights = sigmas ** -2
     weights *= np.expand_dims(1 / np.nansum(weights, axis=axis), axis)
     wmeans = np.nansum(weights * means, axis=axis)
     isnan = isnan_mean.all(axis=axis)
     wmeans[isnan] = np.nan
-    variances = np.nansum(weights**2 * sigmas**2, axis=axis)
+    variances = np.nansum(weights ** 2 * sigmas ** 2, axis=axis)
     variances[isnan] = np.nan
     if correlated:
         ab = np.product(weights.take(range(2), axis), axis=axis)
         single = np.isnan(weights.take(range(2), axis)).sum(axis=axis) == 1
         ab[single] = 0
-        variances += 2 * np.nansum(weights.take(
-            range(2, weights.shape[axis]), axis), axis=axis) + 2 * ab
+        variances += (
+            2 * np.nansum(weights.take(range(2, weights.shape[axis]), axis), axis=axis)
+            + 2 * ab
+        )
     return wmeans, np.sqrt(variances)
+
 
 def circular_normal(x, weights=None, axis=None):
     """
@@ -1954,16 +2127,17 @@ def circular_normal(x, weights=None, axis=None):
         numpy.ndarray: Circular standard deviations
     """
     if weights is None:
-        unit_yx = (
-            np.nanmean(np.sin(x), axis=axis),
-            np.nanmean(np.cos(x), axis=axis))
+        unit_yx = (np.nanmean(np.sin(x), axis=axis), np.nanmean(np.cos(x), axis=axis))
     else:
         unit_yx = (
             weighted_nanmean(np.sin(x), weights=weights, axis=axis),
-            weighted_nanmean(np.cos(x), weights=weights, axis=axis))
+            weighted_nanmean(np.cos(x), weights=weights, axis=axis),
+        )
     return np.arctan2(*unit_yx), np.sqrt(-2 * np.log(np.hypot(*unit_yx)))
 
+
 # ---- Flotation ----
+
 
 def ice_flotation_thickness(bed, water, density_ice=916.7, density_water=1025):
     """
@@ -1977,6 +2151,7 @@ def ice_flotation_thickness(bed, water, density_ice=916.7, density_water=1025):
         density_water (float): Density of water (kg / m^3)
     """
     return (water - bed) * (density_water / density_ice)
+
 
 def ice_thickness(ice, bed, water, density_ice=916.7, density_water=1025):
     """
@@ -2006,6 +2181,7 @@ def ice_thickness(ice, bed, water, density_ice=916.7, density_water=1025):
         h = floating_h
     return h
 
+
 def ice_flotation_probability(ice, bed, water, density_ice=916.7, density_water=1025):
     """
     Return the probability of ice flotation.
@@ -2026,17 +2202,25 @@ def ice_flotation_probability(ice, bed, water, density_ice=916.7, density_water=
     dh = hmax - hf
     return scipy.stats.norm().cdf(-dh.mean / dh.sigma)
 
+
 # ---- Internal ----
 
+
 def _progress_bar(max):
-    return progress.bar.Bar('', fill='#', max=max, hide_cursor=False,
-        suffix='%(percent)3d%% (%(index)d of %(max)d) %(elapsed_td)s')
+    return progress.bar.Bar(
+        "",
+        fill="#",
+        max=max,
+        hide_cursor=False,
+        suffix="%(percent)3d%% (%(index)d of %(max)d) %(elapsed_td)s",
+    )
+
 
 def _parse_parallel(parallel):
     if parallel is True:
         n = os.cpu_count()
         if n is None:
-            raise NotImplementedError('Cannot determine number of CPUs')
+            raise NotImplementedError("Cannot determine number of CPUs")
     elif parallel is False:
         n = 0
     else:

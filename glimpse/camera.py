@@ -58,9 +58,18 @@ class Camera(object):
     """
 
     def __init__(
-        self, vector=None, xyz=(0, 0, 0), viewdir=(0, 0, 0),
-        imgsz=(100, 100), f=(100, 100), c=(0, 0), k=(0, 0, 0, 0, 0, 0), p=(0, 0),
-        sensorsz=None, fmm=None, cmm=None
+        self,
+        vector=None,
+        xyz=(0, 0, 0),
+        viewdir=(0, 0, 0),
+        imgsz=(100, 100),
+        f=(100, 100),
+        c=(0, 0),
+        k=(0, 0, 0, 0, 0, 0),
+        p=(0, 0),
+        sensorsz=None,
+        fmm=None,
+        cmm=None,
     ):
         self.vector = np.full(20, np.nan, dtype=float)
         self.sensorsz = sensorsz
@@ -229,12 +238,12 @@ class Camera(object):
                     [
                         S[0] * S[1] * C[2] - C[0] * S[2],
                         -S[0] * S[1] * S[2] - C[0] * C[2],
-                        0
+                        0,
                     ],
                     [
                         S[0] * S[2] + C[0] * S[1] * C[2],
                         S[0] * C[2] - C[0] * S[1] * S[2],
-                        0
+                        0,
                     ],
                     [-C[1] * C[2], C[1] * S[2], 0],
                 ],
@@ -249,10 +258,13 @@ class Camera(object):
 
     @property
     def cameraMatrix(self):
-        return np.array([
-            [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
-            [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
-            [0, 0, 1]])
+        return np.array(
+            [
+                [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
+                [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
+                [0, 0, 1],
+            ]
+        )
 
     @property
     def distCoeffs(self):
@@ -308,23 +320,23 @@ class Camera(object):
         """
         sensor_sizes = {
             # https://www.dpreview.com/reviews/nikond2x/2
-            'NIKON CORPORATION NIKON D2X': (23.7, 15.7),
+            "NIKON CORPORATION NIKON D2X": (23.7, 15.7),
             # https://www.dpreview.com/reviews/nikond200/2
-            'NIKON CORPORATION NIKON D200': (23.6, 15.8),
+            "NIKON CORPORATION NIKON D200": (23.6, 15.8),
             # https://www.dpreview.com/reviews/nikond300s/2
-            'NIKON CORPORATION NIKON D300S': (23.6, 15.8),
+            "NIKON CORPORATION NIKON D300S": (23.6, 15.8),
             # https://www.dpreview.com/reviews/nikoncp8700/2
-            'NIKON E8700': (8.8, 6.6),
+            "NIKON E8700": (8.8, 6.6),
             # https://www.dpreview.com/reviews/canoneos20d/2
-            'Canon Canon EOS 20D': (22.5, 15.0),
+            "Canon Canon EOS 20D": (22.5, 15.0),
             # https://www.dpreview.com/reviews/canoneos40d/2
-            'Canon Canon EOS 40D': (22.2, 14.8),
+            "Canon Canon EOS 40D": (22.2, 14.8),
         }
         make_model = make.strip() + " " + model.strip()
         if make_model in sensor_sizes:
             return sensor_sizes[make_model]
         else:
-            raise KeyError('No sensor size found for: ' + make_model)
+            raise KeyError("No sensor size found for: " + make_model)
 
     @staticmethod
     def get_scale_from_size(old_size, new_size):
@@ -347,11 +359,12 @@ class Camera(object):
 
         def err(scale):
             return np.sum(np.abs(np.floor(scale * old_size + 0.5) - new_size))
+
         fit = scipy.optimize.minimize(
             err, x0=scale_bounds.mean(), bounds=[scale_bounds]
         )
-        if err(fit['x']) == 0:
-            return fit['x']
+        if err(fit["x"]) == 0:
+            return fit["x"]
         else:
             return None
 
@@ -391,10 +404,11 @@ class Camera(object):
             dict: Attribute names and values
         """
         if attributes is None:
-            attributes = ('xyz', 'viewdir', 'imgsz', 'f', 'c', 'k', 'p')
+            attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
         return {
             name: list(getattr(self, name))
-            for name in attributes if hasattr(self, name)
+            for name in attributes
+            if hasattr(self, name)
         }
 
     def write(self, path=None, attributes=None, **kwargs):
@@ -437,16 +451,16 @@ class Camera(object):
             args = {
                 key: np.add(
                     mean[key],
-                    np.random.normal(scale=sigma[key]) if sigma.get(key) else 0
+                    np.random.normal(scale=sigma[key]) if sigma.get(key) else 0,
                 )
                 for key in mean
             }
-            if 'f' in sigma:
-                args.pop('fmm', None)
-            if 'c' in sigma:
-                args.pop('cmm', None)
+            if "f" in sigma:
+                args.pop("fmm", None)
+            if "c" in sigma:
+                args.pop("cmm", None)
         else:
-            args = {'vector': self.vector + np.random.normal(scale=sigma)}
+            args = {"vector": self.vector + np.random.normal(scale=sigma)}
         return self.__class__(**args)
 
     def idealize(self):
@@ -483,7 +497,7 @@ class Camera(object):
                 scale1d = Camera.get_scale_from_size(self.original_imgsz, scale1d)
                 if scale1d is None:
                     raise ValueError(
-                        'Target size does not preserve original aspect ratio'
+                        "Target size does not preserve original aspect ratio"
                     )
             new_size = np.floor(scale1d * self.original_imgsz + 0.5)
         scale2d = new_size / self.imgsz
@@ -492,9 +506,7 @@ class Camera(object):
         self.f *= scale2d
         self.c *= scale2d
 
-    def project(
-        self, xyz, directions=False, correction=False, return_depth=False
-    ):
+    def project(self, xyz, directions=False, correction=False, return_depth=False):
         """
         Project world coordinates to image coordinates.
 
@@ -579,7 +591,7 @@ class Camera(object):
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
 
-    def grid(self, step, snap=None, mode='vectors'):
+    def grid(self, step, snap=None, mode="vectors"):
         """
         Return grid of image coordinates.
 
@@ -594,13 +606,13 @@ class Camera(object):
                 - 'points': x, y coordinates (ny * nx, 2)
         """
         box = (0, 0, self.imgsz[0], self.imgsz[1])
-        vectors = helpers.box_to_grid(box, step=step, snap=snap, mode='vectors')
-        if mode == 'vectors':
+        vectors = helpers.box_to_grid(box, step=step, snap=snap, mode="vectors")
+        if mode == "vectors":
             return vectors
         grid = np.meshgrid(*vectors)
-        if mode == 'grids':
+        if mode == "grids":
             return grid
-        if mode == 'points':
+        if mode == "points":
             return helpers.grid_to_points(grid)
 
     def edges(self, step=(1, 1)):
@@ -618,12 +630,14 @@ class Camera(object):
         nv = (self.imgsz[1] / step[1] if step[1] else 1) + 1
         u = np.linspace(0, self.imgsz[0], int(nu))
         v = np.linspace(0, self.imgsz[1], int(nv))
-        return np.vstack((
-            np.column_stack((u, np.repeat(0, len(u)))),
-            np.column_stack((np.repeat(u[-1], len(v) - 2), v[1:-1])),
-            np.column_stack((u[::-1], np.repeat(v[-1], len(u)))),
-            np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1]))
-        ))
+        return np.vstack(
+            (
+                np.column_stack((u, np.repeat(0, len(u)))),
+                np.column_stack((np.repeat(u[-1], len(v) - 2), v[1:-1])),
+                np.column_stack((u[::-1], np.repeat(v[-1], len(u)))),
+                np.column_stack((np.repeat(0, len(v) - 2), v[::-1][1:-1])),
+            )
+        )
 
     def viewbox(self, depth, step=(1, 1)):
         """
@@ -655,9 +669,12 @@ class Camera(object):
                 If `None`, no planar projection is performed.
         """
         n = int(self.imgsz[0] / step) + 1
-        uv = np.column_stack((
-            np.linspace(0, self.imgsz[0], n),
-            np.repeat(self.imgsz[1] / 2 + self.c[1], n)))
+        uv = np.column_stack(
+            (
+                np.linspace(0, self.imgsz[0], n),
+                np.repeat(self.imgsz[1] / 2 + self.c[1], n),
+            )
+        )
         xyz = self.invproject(uv, directions=False, depth=depth)
         vertices = np.row_stack((self.xyz, xyz, self.xyz))
         if plane is None:
@@ -677,8 +694,11 @@ class Camera(object):
         is_in = self.inframe(uv)
         shape = (int(self.imgsz[1]), int(self.imgsz[0]))
         return helpers.rasterize_points(
-            uv[is_in, 1].astype(int), uv[is_in, 0].astype(int), values[is_in], shape,
-            fun=fun
+            uv[is_in, 1].astype(int),
+            uv[is_in, 0].astype(int),
+            values[is_in],
+            shape,
+            fun=fun,
         )
 
     def spherical_to_xyz(self, angles):
@@ -699,10 +719,13 @@ class Camera(object):
         # https://en.wikipedia.org/wiki/Spherical_coordinate_system
         azimuth_iso = (np.pi / 2 - angles[:, 0] * np.pi / 180) % (2 * np.pi)
         altitude_iso = (np.pi / 2 - angles[:, 1] * np.pi / 180) % (2 * np.pi)
-        xyz = np.column_stack((
-            np.sin(altitude_iso) * np.cos(azimuth_iso),
-            np.sin(altitude_iso) * np.sin(azimuth_iso),
-            np.cos(altitude_iso)))
+        xyz = np.column_stack(
+            (
+                np.sin(altitude_iso) * np.cos(azimuth_iso),
+                np.sin(altitude_iso) * np.sin(azimuth_iso),
+                np.cos(altitude_iso),
+            )
+        )
         directions = angles.shape[1] < 3
         if not directions:
             xyz *= angles[:, 2:3]
@@ -715,18 +738,29 @@ class Camera(object):
         r = np.sqrt(np.sum(xyz ** 2, axis=1))
         azimuth_iso = np.arctan2(xyz[:, 1], xyz[:, 0])
         altitude_iso = np.arccos(xyz[:, 2] / r)
-        angles = np.column_stack((
-            (90 - (azimuth_iso * 180 / np.pi)) % 360,
-            90 - (altitude_iso * 180 / np.pi)
-        ))
+        angles = np.column_stack(
+            (
+                (90 - (azimuth_iso * 180 / np.pi)) % 360,
+                90 - (altitude_iso * 180 / np.pi),
+            )
+        )
         if not directions:
             angles = np.column_stack((angles, r))
         return angles
 
     def project_dem(
-        self, dem, values=None, mask=None, tile_size=(256, 256),
-        tile_overlap=(1, 1), scale=1, scale_limits=(1, 1), aggregate=np.mean,
-        parallel=False, correction=False, return_depth=False
+        self,
+        dem,
+        values=None,
+        mask=None,
+        tile_size=(256, 256),
+        tile_overlap=(1, 1),
+        scale=1,
+        scale_limits=(1, 1),
+        aggregate=np.mean,
+        parallel=False,
+        correction=False,
+        return_depth=False,
     ):
         """
         Return an image simulated from a digital elevation model.
@@ -773,7 +807,7 @@ class Camera(object):
         parallel = helpers._parse_parallel(parallel)
         has_values = values is not None
         if not has_values and not return_depth:
-            raise ValueError('values cannot be missing if return_depth is False')
+            raise ValueError("values cannot be missing if return_depth is False")
         if has_values:
             values = np.atleast_3d(values)
         # Generate DEM block indices
@@ -784,9 +818,10 @@ class Camera(object):
         nbands_in = (values.shape[2] if has_values else 0) + return_depth
         df = pandas.DataFrame(
             data=np.zeros((2, nbands_in + 2)),
-            columns=['row', 'col'] + list(range(nbands_in)))
-        nbands_out = df.groupby(['row', 'col']).aggregate(aggregate).shape[1]
-        I = np.full(self.shape + (nbands_out, ), np.nan)
+            columns=["row", "col"] + list(range(nbands_in)),
+        )
+        nbands_out = df.groupby(["row", "col"]).aggregate(aggregate).shape[1]
+        I = np.full(self.shape + (nbands_out,), np.nan)
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)
 
@@ -820,9 +855,9 @@ class Camera(object):
                     for i in range(tile_values.shape[2])
                 )
             # Project tile
-            xyz = helpers.grid_to_points((
-                tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask]
-            ))
+            xyz = helpers.grid_to_points(
+                (tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask])
+            )
             if return_depth:
                 xy, depth = self._world2camera(
                     xyz, correction=correction, return_depth=True
@@ -848,9 +883,10 @@ class Camera(object):
             for i in range(tile_values.shape[1]):
                 df.insert(df.shape[1], i, tile_values[:, i])
             # Aggregate values
-            groups = df.groupby(('row', 'col')).aggregate(aggregate).reset_index()
+            groups = df.groupby(("row", "col")).aggregate(aggregate).reset_index()
             idx = (
-                groups.row.as_matrix().astype(int), groups.col.as_matrix().astype(int)
+                groups.row.as_matrix().astype(int),
+                groups.col.as_matrix().astype(int),
             )
             return idx, groups.iloc[:, 2:].as_matrix()
 
@@ -858,6 +894,7 @@ class Camera(object):
             bar.next()
             if idx is not None:
                 I[idx] = values
+
         with config._MapReduce(np=parallel) as pool:
             pool.map(func=process, reduce=reduce, sequence=tile_indices)
         bar.finish()
@@ -903,8 +940,8 @@ class Camera(object):
         # dtx = 2xy * p1 + p2 * (r^2 + 2x^2)
         # dty = p1 * (r^2 + 2y^2) + 2xy * p2
         xty = xy[:, 0] * xy[:, 1]
-        dtx = 2 * xty * self.p[0] + self.p[1] * (r2 + 2 * xy[:, 0]**2)
-        dty = self.p[0] * (r2 + 2 * xy[:, 1]**2) + 2 * xty * self.p[1]
+        dtx = 2 * xty * self.p[0] + self.p[1] * (r2 + 2 * xy[:, 0] ** 2)
+        dty = self.p[0] * (r2 + 2 * xy[:, 1] ** 2) + 2 * xty * self.p[1]
         return np.column_stack((dtx, dty))
 
     def _distort(self, xy):
@@ -919,14 +956,14 @@ class Camera(object):
             return xy
         else:
             dxy = xy.copy()
-            r2 = np.sum(xy**2, axis=1)
+            r2 = np.sum(xy ** 2, axis=1)
             if any(self.k):
                 dxy *= self._radial_distortion(r2)
             if any(self.p):
                 dxy += self._tangential_distortion(xy, r2)
             return dxy
 
-    def _undistort(self, xy, method='oulu', **params):
+    def _undistort(self, xy, method="oulu", **params):
         """
         Remove distortion from camera coordinates.
 
@@ -941,11 +978,11 @@ class Camera(object):
             return xy
         elif self.k[0] and not any(self.k[1:]) and not any(self.p):
             return self._undistort_k1(xy)
-        elif method == 'lookup':
+        elif method == "lookup":
             return self._undistort_lookup(xy, **params)
-        elif method == 'oulu':
+        elif method == "oulu":
             return self._undistort_oulu(xy, **params)
-        elif method == 'regulafalsi':
+        elif method == "regulafalsi":
             return self._undistort_regulafalsi(xy, **params)
 
     def _undistort_k1(self, xy):
@@ -963,13 +1000,13 @@ class Camera(object):
         # Solve for undistorted radius in polar coordinates
         # r^3 + r / k1 - r'/k1 = 0
         phi = np.arctan2(xy[:, 1], xy[:, 0])
-        Q = - 1 / (3 * self.k[0])
+        Q = -1 / (3 * self.k[0])
         # r' = y / cos(phi)
-        R = - xy[:, 0] / (2 * self.k[0] * np.cos(phi))
-        has_three_roots = R**2 < Q**3
+        R = -xy[:, 0] / (2 * self.k[0] * np.cos(phi))
+        has_three_roots = R ** 2 < Q ** 3
         r = np.full(len(xy), np.nan)
         if np.any(has_three_roots):
-            th = np.arccos(R[has_three_roots] * Q**-1.5)
+            th = np.arccos(R[has_three_roots] * Q ** -1.5)
             r[has_three_roots] = -2 * np.sqrt(Q) * np.cos((th - 2 * np.pi) / 3)
         has_one_root = ~has_three_roots
         if np.any(has_one_root):
@@ -997,28 +1034,29 @@ class Camera(object):
             density (float): Grid points per pixel (approximate)
         """
         # Estimate undistorted camera coordinate bounds
-        uv_edges = self.imgsz * np.array([
-            [0, 0], [0.5, 0], [1, 0], [1, 0.5],
-            [1, 1], [0.5, 1], [0, 1], [0, 0.5]
-        ])
+        uv_edges = self.imgsz * np.array(
+            [[0, 0], [0.5, 0], [1, 0], [1, 0.5], [1, 1], [0.5, 1], [0, 1], [0, 0.5]]
+        )
         xyu_edges = (uv_edges - (self.imgsz / 2 + self.c)) / self.f
         xyd_edges = self._distort(xyu_edges)
         # Build undistorted camera coordinates on regular grid
         ux = np.linspace(
             min(xyu_edges[:, 0].min(), xyd_edges[:, 0].min()),
             max(xyu_edges[:, 0].max(), xyd_edges[:, 0].max()),
-            int(density * self.imgsz[0]))
+            int(density * self.imgsz[0]),
+        )
         uy = np.linspace(
             min(xyu_edges[:, 1].min(), xyd_edges[:, 1].min()),
             max(xyu_edges[:, 1].max(), xyd_edges[:, 1].max()),
-            int(density * self.imgsz[1]))
+            int(density * self.imgsz[1]),
+        )
         UX, UY = np.meshgrid(ux, uy)
         uxy = np.column_stack((UX.flatten(), UY.flatten()))
         # Distort grid
         dxy = self._distort(uxy)
         # Interpolate distortion removal from gridded results
         # NOTE: Cannot use faster grid interpolation because dxy is not regular
-        return scipy.interpolate.griddata(dxy, uxy, xy, method='linear')
+        return scipy.interpolate.griddata(dxy, uxy, xy, method="linear")
 
     def _undistort_oulu(self, xy, iterations=20, tolerance=0):
         """
@@ -1037,19 +1075,17 @@ class Camera(object):
         # Initial guess
         uxy = xy
         for _ in range(iterations):
-            r2 = np.sum(uxy**2, axis=1)
+            r2 = np.sum(uxy ** 2, axis=1)
             if any(self.p) and not any(self.k):
                 uxy = xy - self._tangential_distortion(uxy, r2)
             elif any(self.k) and not any(self.k):
                 uxy = xy * (1 / self._radial_distortion(r2))
             else:
-                uxy = (
-                    (xy - self._tangential_distortion(uxy, r2)) *
-                    (1 / self._radial_distortion(r2))
+                uxy = (xy - self._tangential_distortion(uxy, r2)) * (
+                    1 / self._radial_distortion(r2)
                 )
-            if (
-                tolerance > 0 and
-                np.all((np.abs(self._distort(uxy) - xy)) < tolerance / self.f.mean())
+            if tolerance > 0 and np.all(
+                (np.abs(self._distort(uxy) - xy)) < tolerance / self.f.mean()
             ):
                 break
         return uxy
@@ -1113,19 +1149,26 @@ class Camera(object):
 
         TODO: Derive this explicitly from the distortion parameters.
         """
-        xy_row = np.column_stack((
-            np.linspace(
-                -self.imgsz[0] / (2 * self.f[0]), self.imgsz[0] / (2 * self.f[0]),
-                int(self.imgsz[0])
-            ),
-            np.zeros(int(self.imgsz[0]))))
+        xy_row = np.column_stack(
+            (
+                np.linspace(
+                    -self.imgsz[0] / (2 * self.f[0]),
+                    self.imgsz[0] / (2 * self.f[0]),
+                    int(self.imgsz[0]),
+                ),
+                np.zeros(int(self.imgsz[0])),
+            )
+        )
         dxy = self._distort(xy_row)
         continuous_row = np.all(dxy[1:, 0] >= dxy[:-1, 0])
-        xy_col = np.column_stack((
-            np.zeros(int(self.imgsz[1])),
-            np.linspace(
-                -self.imgsz[1] / (2 * self.f[1]), self.imgsz[1] / (2 * self.f[1]),
-                int(self.imgsz[1]))
+        xy_col = np.column_stack(
+            (
+                np.zeros(int(self.imgsz[1])),
+                np.linspace(
+                    -self.imgsz[1] / (2 * self.f[1]),
+                    self.imgsz[1] / (2 * self.f[1]),
+                    int(self.imgsz[1]),
+                ),
             )
         )
         dxy = self._distort(xy_col)
@@ -1157,8 +1200,8 @@ class Camera(object):
             if isinstance(correction, dict):
                 # Apply elevation correction
                 dxyz[:, 2] += helpers.elevation_corrections(
-                    squared_distances=np.sum(dxyz[:, 0:2]**2, axis=1),
-                    **correction)
+                    squared_distances=np.sum(dxyz[:, 0:2] ** 2, axis=1), **correction
+                )
         # Convert coordinates to ray directions
         if config._UseMatMul:
             xyz_c = np.matmul(self.R, dxyz.T).T

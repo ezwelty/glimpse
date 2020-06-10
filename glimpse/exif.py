@@ -8,17 +8,17 @@ import piexif
 
 SENSOR_SIZES = {
     # https://www.dpreview.com/reviews/nikond2x/2
-    'NIKON CORPORATION NIKON D2X': (23.7, 15.7),
+    "NIKON CORPORATION NIKON D2X": (23.7, 15.7),
     # https://www.dpreview.com/reviews/nikond200/2
-    'NIKON CORPORATION NIKON D200': (23.6, 15.8),
+    "NIKON CORPORATION NIKON D200": (23.6, 15.8),
     # https://www.dpreview.com/reviews/nikond300s/2
-    'NIKON CORPORATION NIKON D300S': (23.6, 15.8),
+    "NIKON CORPORATION NIKON D300S": (23.6, 15.8),
     # https://www.dpreview.com/reviews/nikoncp8700/2
-    'NIKON E8700': (8.8, 6.6),
+    "NIKON E8700": (8.8, 6.6),
     # https://www.dpreview.com/reviews/canoneos20d/2
-    'Canon Canon EOS 20D': (22.5, 15.0),
+    "Canon Canon EOS 20D": (22.5, 15.0),
     # https://www.dpreview.com/reviews/canoneos40d/2
-    'Canon Canon EOS 40D': (22.2, 14.8),
+    "Canon Canon EOS 40D": (22.2, 14.8),
 }
 
 
@@ -88,62 +88,62 @@ class Exif:
     def __init__(self, path: str, thumbnail: bool = False):
         self.tags = piexif.load(path, key_is_name=True)
         if not thumbnail:
-            self.tags.pop('thumbnail', None)
-            self.tags.pop('1st', None)
+            self.tags.pop("thumbnail", None)
+            self.tags.pop("1st", None)
 
     @property
     def imgsz(self) -> Optional[Tuple[int, int]]:
-        width = self.parse_tag('PixelXDimension')
-        height = self.parse_tag('PixelYDimension')
+        width = self.parse_tag("PixelXDimension")
+        height = self.parse_tag("PixelYDimension")
         if width and height:
             return width, height
         return None
 
     @property
     def datetime(self) -> Optional[datetime.datetime]:
-        datetime_str = self.parse_tag('DateTimeOriginal')
+        datetime_str = self.parse_tag("DateTimeOriginal")
         if not datetime_str:
             return None
-        subsec_str = self.parse_tag('SubSecTimeOriginal')
+        subsec_str = self.parse_tag("SubSecTimeOriginal")
         if subsec_str:
             return datetime.datetime.strptime(
-                datetime_str + '.' + subsec_str, '%Y:%m:%d %H:%M:%S.%f')
-        return datetime.datetime.strptime(
-            datetime_str, '%Y:%m:%d %H:%M:%S')
+                datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f"
+            )
+        return datetime.datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
 
     @property
     def exposure(self) -> Optional[float]:
-        return self.parse_tag('ExposureTime')
+        return self.parse_tag("ExposureTime")
 
     @property
     def aperture(self) -> Optional[float]:
-        return self.parse_tag('FNumber')
+        return self.parse_tag("FNumber")
 
     @property
     def iso(self) -> Optional[int]:
-        return self.parse_tag('ISOSpeedRatings')
+        return self.parse_tag("ISOSpeedRatings")
 
     @property
     def fmm(self) -> Optional[float]:
-        return self.parse_tag('FocalLength')
+        return self.parse_tag("FocalLength")
 
     @property
     def make(self) -> Optional[str]:
-        return self.parse_tag('Make', group='0th')
+        return self.parse_tag("Make", group="0th")
 
     @property
     def model(self) -> Optional[str]:
-        return self.parse_tag('Model', group='0th')
+        return self.parse_tag("Model", group="0th")
 
     @property
     def sensorsz(self) -> Optional[Tuple[float, float]]:
         if self.make and self.model:
-            make_model = self.make.strip() + ' ' + self.model.strip()
+            make_model = self.make.strip() + " " + self.model.strip()
             return SENSOR_SIZES.get(make_model)
         return None
 
     def parse_tag(
-        self, tag: str, group: str = 'Exif'
+        self, tag: str, group: str = "Exif"
     ) -> Optional[Union[int, str, float]]:
         """
         Return the parsed value of a tag.
@@ -176,18 +176,18 @@ class Exif:
         tags = copy.deepcopy(self.tags)
         # Replace key names with codes
         for group in self.tags:
-            if group == 'thumbnail':
+            if group == "thumbnail":
                 continue
-            if group not in ('0th', '1st', 'Exif', 'GPS', 'Interop'):
-                raise ValueError('Invalid group \'{0}\''.format(group))
-            ifd_name = 'ImageIFD' if group in ('0th', '1st') else group + 'IFD'
+            if group not in ("0th", "1st", "Exif", "GPS", "Interop"):
+                raise ValueError("Invalid group '{0}'".format(group))
+            ifd_name = "ImageIFD" if group in ("0th", "1st") else group + "IFD"
             ifd = getattr(piexif, ifd_name)
             for tag in self.tags[group]:
                 try:
                     code = getattr(ifd, tag)
                 except AttributeError:
                     raise ValueError(
-                        'Invalid tag \'{0}\' in group \'{1}\''.format(tag, group)
+                        "Invalid tag '{0}' in group '{1}'".format(tag, group)
                     )
                 tags[group][code] = tags[group].pop(tag)
         # Encode to bytes

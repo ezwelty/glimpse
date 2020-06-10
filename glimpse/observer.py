@@ -2,6 +2,7 @@ from .imports import np, scipy, datetime, matplotlib
 from .raster import Grid
 from . import helpers
 
+
 class Observer(object):
     """
     An `Observer` contains a sequence of `Image` objects and the methods to compute
@@ -22,7 +23,7 @@ class Observer(object):
 
     def __init__(self, images, datetimes=None, sigma=0.3, correction=True, cache=True):
         if len(images) < 2:
-            raise ValueError('Observer must have two or more images')
+            raise ValueError("Observer must have two or more images")
         self.xyz = images[0].cam.xyz
         self.test_images(images)
         self.images = images
@@ -32,25 +33,25 @@ class Observer(object):
             datetimes = np.asarray(datetimes)
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
         if any(time_deltas <= 0):
-            raise ValueError('Image datetimes are not stricly increasing')
+            raise ValueError("Image datetimes are not stricly increasing")
         self.datetimes = datetimes
         self.sigma = sigma
         self.correction = correction
         self.cache = cache
         n = self.images[0].cam.imgsz.astype(int)
         if (n != self.images[0].cam.imgsz).any():
-            raise ValueError('Image sizes (imgsz) are not integer')
+            raise ValueError("Image sizes (imgsz) are not integer")
         self.grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
-    def test_images(images,cam_tol=1e-3):
+    def test_images(images, cam_tol=1e-3):
         for img in images[1:]:
-            if np.linalg.norm(img.cam.xyz-images[0].cam.xyz) > cam_tol:
-                raise ValueError('Positions (xyz) are not equal')
+            if np.linalg.norm(img.cam.xyz - images[0].cam.xyz) > cam_tol:
+                raise ValueError("Positions (xyz) are not equal")
             if any(img.cam.f != images[0].cam.f):
-                raise ValueError('Focal lengths (f) are not equal')
+                raise ValueError("Focal lengths (f) are not equal")
             if any(img.cam.imgsz != images[0].cam.imgsz):
-                raise ValueError('Image sizes (imgsz) are not equal')
+                raise ValueError("Image sizes (imgsz) are not equal")
 
     def index(self, value, maxdt=datetime.timedelta(0)):
         """
@@ -66,7 +67,9 @@ class Observer(object):
             dts = np.abs(value - self.datetimes)
             index = np.argmin(dts)
             if maxdt is not None and dts[index] > abs(maxdt):
-                raise IndexError('Nearest image out of range by ' + str(dts[index] - abs(maxdt)))
+                raise IndexError(
+                    "Nearest image out of range by " + str(dts[index] - abs(maxdt))
+                )
             return index
         else:
             return self.images.index(value)
@@ -81,7 +84,9 @@ class Observer(object):
             directions (bool): Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
         """
-        return self.images[img].cam.project(xyz, directions=directions, correction=self.correction)
+        return self.images[img].cam.project(
+            xyz, directions=directions, correction=self.correction
+        )
 
     def tile_box(self, uv, size=(1, 1)):
         """
@@ -127,10 +132,10 @@ class Observer(object):
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
         if any(np.abs(duv) > 0.5):
-            raise ValueError('Shift larger than 0.5 pixels')
+            raise ValueError("Shift larger than 0.5 pixels")
         # Cell center coordinates (arbitrary origin)
-        cu = self.grid.x[0:tile.shape[0]] # x|cols
-        cv = self.grid.y[0:tile.shape[1]] # y|rows
+        cu = self.grid.x[0 : tile.shape[0]]  # x|cols
+        cv = self.grid.y[0 : tile.shape[1]]  # y|rows
         # Interpolate at shifted center coordinates
         tile = np.atleast_3d(tile)
         for i in range(tile.shape[2]):
@@ -155,13 +160,13 @@ class Observer(object):
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
         if not np.all(helpers.in_box(uv, box)):
-            raise ValueError('Some sampling points are outside box')
+            raise ValueError("Some sampling points are outside box")
         # Cell sizes
         du = (box[2] - box[0]) / tile.shape[1]
         dv = (box[3] - box[1]) / tile.shape[0]
         # Cell center coordinates
-        cu = np.arange(box[0] + du * 0.5, box[2]) # x|cols
-        cv = np.arange(box[1] + dv * 0.5, box[3]) # y|rows
+        cu = np.arange(box[0] + du * 0.5, box[2])  # x|cols
+        cv = np.arange(box[1] + dv * 0.5, box[3])  # y|rows
         # Interpolate at arbitrary coordinates
         f = scipy.interpolate.RectBivariateSpline(cv, cu, tile, **kwargs)
         if grid:
@@ -188,7 +193,7 @@ class Observer(object):
         extent = (box[0], box[2], box[3], box[1])
         if axes is None:
             axes = matplotlib.pyplot
-        return axes.imshow(tile, origin='upper', extent=extent, **kwargs)
+        return axes.imshow(tile, origin="upper", extent=extent, **kwargs)
 
     def plot_box(self, box, fill=False, axes=None, **kwargs):
         """
@@ -205,9 +210,15 @@ class Observer(object):
         """
         if axes is None:
             axes = matplotlib.pyplot.gca()
-        return axes.add_patch(matplotlib.patches.Rectangle(
-            xy=box[0:2], width=box[2] - box[0], height=box[3] - box[1],
-            fill=fill, **kwargs))
+        return axes.add_patch(
+            matplotlib.patches.Rectangle(
+                xy=box[0:2],
+                width=box[2] - box[0],
+                height=box[3] - box[1],
+                fill=fill,
+                **kwargs
+            )
+        )
 
     def set_plot_limits(self, box=None):
         """
@@ -246,7 +257,15 @@ class Observer(object):
         for img in np.array(self.images)[index]:
             img.I = None
 
-    def animate(self, uv=None, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
+    def animate(
+        self,
+        uv=None,
+        frames=None,
+        size=(100, 100),
+        interval=200,
+        subplots=dict(),
+        animation=dict(),
+    ):
         """
         Animate image tiles centered around a target point.
 
@@ -282,9 +301,15 @@ class Observer(object):
         box = self.tile_box(uv, size=size)
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes) for axes in ax]
-        pt = [axis.plot(uv[0], uv[1], marker='.', color='red')[0] for axis in ax]
-        txt = ax[0].text(0.5, 0.95, '', color='white',
-            horizontalalignment='center', transform=ax[0].transAxes)
+        pt = [axis.plot(uv[0], uv[1], marker=".", color="red")[0] for axis in ax]
+        txt = ax[0].text(
+            0.5,
+            0.95,
+            "",
+            color="white",
+            horizontalalignment="center",
+            transform=ax[0].transAxes,
+        )
         ax[1].set_xlim(uv[0] - halfsize[0], uv[0] + halfsize[0])
         ax[1].set_ylim(uv[1] + halfsize[1], uv[1] - halfsize[0])
         # Update plot
@@ -295,10 +320,12 @@ class Observer(object):
             if np.any(inbounds):
                 if not np.all(inbounds):
                     # Intersect box with image bounds
-                    box = helpers.intersect_boxes((box,
-                        np.concatenate(([0, 0], self.images[i].cam.imgsz))))
-                box = self.grid.snap_xy(helpers.unravel_box(box),
-                    centers=False, edges=True).ravel()
+                    box = helpers.intersect_boxes(
+                        (box, np.concatenate(([0, 0], self.images[i].cam.imgsz)))
+                    )
+                box = self.grid.snap_xy(
+                    helpers.unravel_box(box), centers=False, edges=True
+                ).ravel()
                 tile = self.extract_tile(img=i, box=box)
             else:
                 # Use white tile
@@ -311,12 +338,23 @@ class Observer(object):
             ax[0].set_xlim(puv[0] - halfsize[0], puv[0] + halfsize[0])
             ax[0].set_ylim(puv[1] + halfsize[1], puv[1] - halfsize[0])
             basename = helpers.strip_path(self.images[i].path)
-            txt.set_text(str(i) + ' : ' + basename)
+            txt.set_text(str(i) + " : " + basename)
             return im + pt + [txt]
-        # Build animation
-        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
 
-    def track(self, xyz, frames=None, size=(100, 100), interval=200, subplots=dict(), animation=dict()):
+        # Build animation
+        return matplotlib.animation.FuncAnimation(
+            fig, update_plot, frames=frames, interval=interval, blit=True, **animation
+        )
+
+    def track(
+        self,
+        xyz,
+        frames=None,
+        size=(100, 100),
+        interval=200,
+        subplots=dict(),
+        animation=dict(),
+    ):
         """
         Animate image tiles tracking a moving point.
 
@@ -352,17 +390,35 @@ class Observer(object):
         box = self.tile_box(uv, size=size)
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes, zorder=1) for axes in ax]
-        track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], 'y.-', alpha=0.5, zorder=2)[0]
-        pt = [axis.plot(uv[0], uv[1], marker='.', color='red', zorder=3)[0] for axis in ax]
+        track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], "y.-", alpha=0.5, zorder=2)[
+            0
+        ]
+        pt = [
+            axis.plot(uv[0], uv[1], marker=".", color="red", zorder=3)[0] for axis in ax
+        ]
         basename = helpers.strip_path(self.images[frames[0]].path)
-        ax[0].text(0.5, 0.95, '0 : ' + basename, color='white',
-            horizontalalignment='center', zorder=4, transform=ax[0].transAxes)
-        txt = ax[1].text(0.5, 0.95, '', color='white',
-            horizontalalignment='center', zorder=4, transform=ax[1].transAxes)
+        ax[0].text(
+            0.5,
+            0.95,
+            "0 : " + basename,
+            color="white",
+            horizontalalignment="center",
+            zorder=4,
+            transform=ax[0].transAxes,
+        )
+        txt = ax[1].text(
+            0.5,
+            0.95,
+            "",
+            color="white",
+            horizontalalignment="center",
+            zorder=4,
+            transform=ax[1].transAxes,
+        )
         # Update plot
         def update_plot(i):
             j = np.where(frames == i)[0][0]
-            track_uv = self.images[i].cam.project(xyz[:(j + 1)])
+            track_uv = self.images[i].cam.project(xyz[: (j + 1)])
             uv = track_uv[-1]
             box = self.tile_box(uv, size=size)
             tile = self.extract_tile(img=i, box=box)
@@ -375,10 +431,13 @@ class Observer(object):
             basename = helpers.strip_path(self.images[i].path)
             txt.set_x(uv[0])
             txt.set_y(uv[1] - (halfsize[1] - 10))
-            txt.set_text(str(i) + ' : ' + basename)
+            txt.set_text(str(i) + " : " + basename)
             return im + [track] + pt + [txt]
+
         # Build animation
-        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, interval=interval, blit=True, **animation)
+        return matplotlib.animation.FuncAnimation(
+            fig, update_plot, frames=frames, interval=interval, blit=True, **animation
+        )
 
     def subset(self, **kwargs):
         """
@@ -389,7 +448,7 @@ class Observer(object):
         """
         index = helpers.select_datetimes(self.datetimes, **kwargs)
         images = [self.images[i] for i in index]
-        params = {key: getattr(self, key) for key in ('sigma', 'correction', 'cache')}
+        params = {key: getattr(self, key) for key in ("sigma", "correction", "cache")}
         return self.__class__(images, datetimes=self.datetimes[index], **params)
 
     def split(self, n, overlap=1):
@@ -405,8 +464,7 @@ class Observer(object):
             breaks = np.unique(np.hstack((n, self.datetimes[[0, -1]])))
         else:
             dt = (self.datetimes[-1] - self.datetimes[0]) / n
-            breaks = helpers.datetime_range(
-                self.datetimes[0], self.datetimes[-1], dt)
+            breaks = helpers.datetime_range(self.datetimes[0], self.datetimes[-1], dt)
         observers = []
         start = breaks[0]
         for i in range(len(breaks) - 1):

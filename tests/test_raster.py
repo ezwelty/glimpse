@@ -1,7 +1,8 @@
 from .context import *
-from glimpse.imports import (np, datetime, osgeo)
+from glimpse.imports import np, datetime, osgeo
 import pytest
 import itertools
+
 
 def test_raster_defaults():
     Z = np.zeros((3, 3))
@@ -17,6 +18,7 @@ def test_raster_defaults():
     assert all(dem.y == (0.5, 1.5, 2.5))
     assert (dem.X == ((dem.x, dem.x, dem.x))).all()
     assert (dem.Y.T == ((dem.y, dem.y, dem.y))).all()
+
 
 def test_raster_xy():
     xlim = (0, 3)
@@ -45,6 +47,7 @@ def test_raster_xy():
     assert all(dem.x == x)
     assert all(dem.y == y)
 
+
 def test_raster_sample(tol=1e-13):
     Z = np.arange(16).reshape(4, 4)
     dem = glimpse.Raster(Z, (-0.5, 3.5), (-0.5, 3.5))
@@ -52,6 +55,7 @@ def test_raster_sample(tol=1e-13):
     xy_diagonal = np.column_stack((dem.x, dem.y))
     dz_points = dem.sample(xy_diagonal) - dem.Z.diagonal()
     assert all(dz_points < tol)
+
 
 def test_raster_crop_ascending():
     Z = np.arange(9).reshape(3, 3)
@@ -96,6 +100,7 @@ def test_raster_crop_ascending():
     assert all(cdem.ylim == (1, 2))
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
+
 def test_raster_crop_descending():
     Z = np.arange(9).reshape(3, 3)
     dem = glimpse.Raster(Z, (3, 0), (3, 0))
@@ -111,6 +116,7 @@ def test_raster_crop_descending():
     assert all(cdem.ylim == (2, 1))
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
+
 def test_raster_resize():
     Z = np.zeros((10, 10))
     dem = glimpse.Raster(Z)
@@ -125,14 +131,16 @@ def test_raster_resize():
     assert all(rdem.d == dem.d / 2)
     assert all(rdem.xlim == dem.xlim)
 
+
 def test_raster_io():
     old = glimpse.Raster(
         Z=np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
         x=np.array((1, 2, 3), dtype=float),
         y=np.array((3, 2, 1), dtype=float),
-        crs='+init=epsg:4326')
+        crs="+init=epsg:4326",
+    )
     # Write to file and read
-    tempfile = 'temp.tif'
+    tempfile = "temp.tif"
     old.write(tempfile)
     new = glimpse.Raster.read(tempfile)
     np.testing.assert_equal(old.Z, new.Z)
@@ -146,11 +154,13 @@ def test_raster_io():
     # Delete file
     os.remove(tempfile)
 
+
 def test_raster_interpolant():
     # Read rasters
     mean_paths = [
-        os.path.join(test_dir, '000nan.tif'),
-        os.path.join(test_dir, '11-1nan.tif')]
+        os.path.join(test_dir, "000nan.tif"),
+        os.path.join(test_dir, "11-1nan.tif"),
+    ]
     means = [glimpse.Raster.read(path) for path in mean_paths]
     Zs = [mean.Z for mean in means]
     sigma_paths = mean_paths
@@ -160,7 +170,8 @@ def test_raster_interpolant():
     xs = [
         (0, 1),
         (datetime.datetime(2000, 1, 1), datetime.datetime(2000, 1, 3)),
-        (0.0, 1.0)]
+        (0.0, 1.0),
+    ]
     # means, sigmas
     means_sigmas = [
         (means, sigmas),
@@ -168,11 +179,10 @@ def test_raster_interpolant():
         (means, [0] * len(means)),
         (mean_paths, sigma_paths),
         (mean_paths, None),
-        (mean_paths, [0] * len(means))]
+        (mean_paths, [0] * len(means)),
+    ]
     # scale, extrapolate
-    samples = [
-        (0.5, False),
-        (1.5, True)]
+    samples = [(0.5, False), (1.5, True)]
     tests = tuple(itertools.product(xs, means_sigmas, samples))
     # Run tests
     for test in tests:
@@ -181,8 +191,7 @@ def test_raster_interpolant():
         scale, extrapolate = test[2]
         interpolant = glimpse.RasterInterpolant(means=means, sigmas=sigmas, x=x)
         xi = x[0] + (x[1] - x[0]) * scale
-        imean, isigma = interpolant(xi, extrapolate=extrapolate,
-            return_sigma=True)
+        imean, isigma = interpolant(xi, extrapolate=extrapolate, return_sigma=True)
         mean = Zs[0] + (Zs[1] - Zs[0]) * scale
         np.testing.assert_equal(imean.Z, mean)
         if isinstance(xi, datetime.datetime):

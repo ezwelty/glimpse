@@ -1,7 +1,7 @@
-from .imports import (np, cv2, warnings, datetime, scipy, matplotlib, sys,
-    traceback)
+from .imports import np, cv2, warnings, datetime, scipy, matplotlib, sys, traceback
 from .raster import Raster
 from . import helpers, config
+
 
 class Tracker(object):
     """
@@ -30,9 +30,16 @@ class Tracker(object):
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
-    def __init__(self, observers, viewshed=None, resample_method='systematic',
-        grayscale=dict(method='average'), highpass=dict(size=(5, 5)),
-        interpolation=dict(kx=3, ky=3)):
+
+    def __init__(
+        self,
+        observers,
+        viewshed=None,
+        resample_method="systematic",
+        grayscale=dict(method="average"),
+        highpass=dict(size=(5, 5)),
+        interpolation=dict(kx=3, ky=3),
+    ):
         self.observers = observers
         self.viewshed = viewshed
         self.resample_method = resample_method
@@ -63,8 +70,7 @@ class Tracker(object):
         """
         Sorted list of all unique Observer datetimes.
         """
-        return np.unique(np.concatenate([obs.datetimes
-            for obs in self.observers]))
+        return np.unique(np.concatenate([obs.datetimes for obs in self.observers]))
 
     def compute_particle_sigma(self, mean=None):
         """
@@ -78,8 +84,9 @@ class Tracker(object):
         """
         if mean is None:
             mean = self.particle_mean
-        variance = np.average((self.particles - mean)**2,
-            weights=self.weights, axis=0)
+        variance = np.average(
+            (self.particles - mean) ** 2, weights=self.weights, axis=0
+        )
         return np.sqrt(variance)
 
     def test_particles(self):
@@ -95,9 +102,9 @@ class Tracker(object):
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], order=0)
             if not all(is_visible):
-                raise ValueError('Some particles are on non-visible viewshed cells')
+                raise ValueError("Some particles are on non-visible viewshed cells")
         if np.isnan(self.particles).any():
-            raise ValueError('Some particles have missing (NaN) values')
+            raise ValueError("Some particles have missing (NaN) values")
 
     def initialize_weights(self):
         """
@@ -117,11 +124,12 @@ class Tracker(object):
             imgs (iterable): Image index for each Observer, or `None` to skip
             motion_model (MotionModel): Motion model
         """
-        log_likelihoods = [self.compute_observer_log_likelihoods(obs, img)
-            for obs, img in enumerate(imgs)]
+        log_likelihoods = [
+            self.compute_observer_log_likelihoods(obs, img)
+            for obs, img in enumerate(imgs)
+        ]
         if motion_model:
-            log_likelihoods.append(
-                motion_model.compute_log_likelihoods(self.particles))
+            log_likelihoods.append(motion_model.compute_log_likelihoods(self.particles))
         # Remove empty elements
         log_likelihoods = [x for x in log_likelihoods if x is not None]
         likelihoods = np.exp(-sum(log_likelihoods))
@@ -142,12 +150,14 @@ class Tracker(object):
             positions = (np.arange(n) + np.random.random()) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
             return np.searchsorted(cumulative_weight, positions)
+
         # Stratified resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
         def stratified():
             positions = (np.arange(n) + np.random.random(n)) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
             return np.searchsorted(cumulative_weight, positions)
+
         # Residual resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
         def residual():
@@ -158,29 +168,41 @@ class Tracker(object):
             cumulative_sum = np.cumsum(residuals)
             cumulative_sum[-1] = 1.0
             additional_indexes = np.searchsorted(
-                cumulative_sum, np.random.random(n - len(initial_indexes)))
+                cumulative_sum, np.random.random(n - len(initial_indexes))
+            )
             return np.hstack((initial_indexes, additional_indexes))
+
         # Random choice
         def choice():
-            return np.random.choice(np.arange(n), size=(n, ),
-                replace=True, p=self.weights)
+            return np.random.choice(
+                np.arange(n), size=(n,), replace=True, p=self.weights
+            )
+
         if method is None:
             method = self.resample_method
-        if method == 'systematic':
+        if method == "systematic":
             indexes = systematic()
-        elif method == 'stratified':
+        elif method == "stratified":
             indexes = stratified()
-        elif method == 'residual':
+        elif method == "residual":
             indexes = residual()
-        elif method == 'choice':
+        elif method == "choice":
             indexes = choice()
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]
         self.weights *= 1 / self.weights.sum()
 
-    def track(self, motion_models, datetimes=None, maxdt=datetime.timedelta(0),
-        tile_size=(15, 15), observer_mask=None, return_covariances=False,
-        return_particles=False, parallel=False):
+    def track(
+        self,
+        motion_models,
+        datetimes=None,
+        maxdt=datetime.timedelta(0),
+        tile_size=(15, 15),
+        observer_mask=None,
+        return_covariances=False,
+        return_particles=False,
+        parallel=False,
+    ):
         """
         Track particles through time.
 
@@ -238,6 +260,7 @@ class Tracker(object):
         bar = helpers._progress_bar(max=ntracks)
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
+
         def process(motion_model, observer_mask):
             means = np.full((ntimes, 6), np.nan)
             if return_covariances:
@@ -268,11 +291,16 @@ class Tracker(object):
                         # Initialize templates for Observers starting at datetimes[i]
                         at_template = observer_mask & (template_indices == i)
                         for obs in np.nonzero(at_template)[0]:
-                            self.initialize_template(obs=obs,
-                                img=matching_images[i][obs], tile_size=tile_size)
+                            self.initialize_template(
+                                obs=obs,
+                                img=matching_images[i][obs],
+                                tile_size=tile_size,
+                            )
                         if i > first:
-                            imgs = [img if m else None
-                                for img, m in zip(matching_images[i], observer_mask)]
+                            imgs = [
+                                img if m else None
+                                for img, m in zip(matching_images[i], observer_mask)
+                            ]
                             self.update_weights(imgs=imgs, motion_model=motion_model)
                             self.resample_particles()
                         means[i] = self.particle_mean
@@ -291,21 +319,28 @@ class Tracker(object):
                 if errors:
                     raise e
                 elif parallel:
-                    error = e.__class__(''.join(
-                        traceback.format_exception(*sys.exc_info())))
+                    error = e.__class__(
+                        "".join(traceback.format_exception(*sys.exc_info()))
+                    )
                 else:
                     error = e
             results = [means, sigmas, error, all_warnings]
             if return_particles:
                 results += [particles, weights]
             return results
+
         def reduce(results):
             bar.next()
             return results
+
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
-            results = pool.map(func=process, reduce=reduce, star=True,
-                sequence=tuple(zip(motion_models, observer_mask)))
+            results = pool.map(
+                func=process,
+                reduce=reduce,
+                star=True,
+                sequence=tuple(zip(motion_models, observer_mask)),
+            )
         bar.finish()
         # Return results as Tracks
         if return_particles:
@@ -313,14 +348,21 @@ class Tracker(object):
         else:
             means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
-        kwargs = dict(datetimes=datetimes, means=means,
-            particles=particles, weights=weights,
-            tracker=self, images=matching_images, params=params,
-            errors=errors, warnings=all_warnings)
+        kwargs = dict(
+            datetimes=datetimes,
+            means=means,
+            particles=particles,
+            weights=weights,
+            tracker=self,
+            images=matching_images,
+            params=params,
+            errors=errors,
+            warnings=all_warnings,
+        )
         if return_covariances:
-            kwargs['covariances'] = sigmas
+            kwargs["covariances"] = sigmas
         else:
-            kwargs['sigmas'] = sigmas
+            kwargs["sigmas"] = sigmas
         return Tracks(**kwargs)
 
     def reset(self):
@@ -348,24 +390,24 @@ class Tracker(object):
         """
         datetimes = np.asarray(datetimes)
         # Datetimes must be monotonic
-        monotonic = (
-            (datetimes[1:] >= datetimes[:-1]).all() or
-            (datetimes[1:] <= datetimes[:-1]).all())
+        monotonic = (datetimes[1:] >= datetimes[:-1]).all() or (
+            datetimes[1:] <= datetimes[:-1]
+        ).all()
         if not monotonic:
-            raise ValueError('Datetimes must be monotonic')
+            raise ValueError("Datetimes must be monotonic")
         # Datetimes must be unique
-        selected = np.concatenate(((True, ), datetimes[1:] != datetimes[:-1]))
+        selected = np.concatenate(((True,), datetimes[1:] != datetimes[:-1]))
         if not all(selected):
-            warnings.warn('Dropping duplicate datetimes')
+            warnings.warn("Dropping duplicate datetimes")
             datetimes = datetimes[selected]
         # Datetimes must match at least one Observer
         distances = helpers.pairwise_distance_datetimes(datetimes, self.datetimes)
         selected = distances.min(axis=1) <= abs(maxdt.total_seconds())
         if not all(selected):
-            warnings.warn('Dropping datetimes not matching any Observers')
+            warnings.warn("Dropping datetimes not matching any Observers")
             datetimes = datetimes[selected]
         if len(datetimes) < 2:
-            raise ValueError('Fewer than two valid datetimes')
+            raise ValueError("Fewer than two valid datetimes")
         return datetimes
 
     def match_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
@@ -382,7 +424,9 @@ class Tracker(object):
         """
         matches = np.full((len(datetimes), len(self.observers)), None)
         for i, observer in enumerate(self.observers):
-            distances = helpers.pairwise_distance_datetimes(datetimes, observer.datetimes)
+            distances = helpers.pairwise_distance_datetimes(
+                datetimes, observer.datetimes
+            )
             nearest_index = np.argmin(distances, axis=1)
             matches[:, i] = nearest_index
             nearest_distance = distances[np.arange(distances.shape[0]), nearest_index]
@@ -443,10 +487,11 @@ class Tracker(object):
         box = self.observers[obs].tile_box(uv, size=tile_size)
         # Build template
         template = dict(
-            obs=obs, img=img, box=box,
-            duv=uv - box.reshape(2, -1).mean(axis=0))
-        template['tile'], template['histogram'] = self.extract_tile(
-            obs=obs, img=img, box=box, return_histogram=True)
+            obs=obs, img=img, box=box, duv=uv - box.reshape(2, -1).mean(axis=0)
+        )
+        template["tile"], template["histogram"] = self.extract_tile(
+            obs=obs, img=img, box=box, return_histogram=True
+        )
         self.templates[obs] = template
 
     def compute_observer_log_likelihoods(self, obs, img):
@@ -464,19 +509,17 @@ class Tracker(object):
         if img is None:
             return constant_log_likelihood
         # Build image box around all particles, with a buffer for template matching
-        size = np.asarray(self.templates[obs]['tile'].shape[0:2][::-1])
+        size = np.asarray(self.templates[obs]["tile"].shape[0:2][::-1])
         uv = self.observers[obs].project(self.particles[:, 0:3], img=img)
         halfsize = size * 0.5
-        box = np.row_stack((
-            uv.min(axis=0) - halfsize,
-            uv.max(axis=0) + halfsize))
+        box = np.row_stack((uv.min(axis=0) - halfsize, uv.max(axis=0) + halfsize))
         # Enlarge box to ensure SSE has cols, rows (ky + 1, kx + 1) for interpolation
-        ky = self.interpolation.get('ky', 3)
+        ky = self.interpolation.get("ky", 3)
         ncols = ky - (np.diff(box[:, 0]) - size[0])
         if ncols > 0:
             # Widen box in 2nd ('y') dimension (x|cols)
             box[:, 0] += np.hstack((-ncols, ncols)) * 0.5
-        kx = self.interpolation.get('kx', 3)
+        kx = self.interpolation.get("kx", 3)
         nrows = kx - (np.diff(box[:, 1]) - size[1])
         if nrows > 0:
             # Widen box in 1st ('x') dimension (y|rows)
@@ -484,27 +527,35 @@ class Tracker(object):
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)
         # Check that box is within image bounds
         if not all(self.observers[obs].grid.inbounds(box)):
-            warnings.warn('Particles too close to or beyond image bounds, skipping image')
+            warnings.warn(
+                "Particles too close to or beyond image bounds, skipping image"
+            )
             return constant_log_likelihood
         # Flatten box
         box = box.ravel()
         # Extract search tile
         search_tile = self.extract_tile(
-            obs=obs, img=img, box=box, histogram=self.templates[obs]['histogram'])
+            obs=obs, img=img, box=box, histogram=self.templates[obs]["histogram"]
+        )
         # Compute area-averaged sum of squares error (SSE)
-        sse = cv2.matchTemplate(search_tile.astype(np.float32),
-            templ=self.templates[obs]['tile'].astype(np.float32), method=cv2.TM_SQDIFF)
+        sse = cv2.matchTemplate(
+            search_tile.astype(np.float32),
+            templ=self.templates[obs]["tile"].astype(np.float32),
+            method=cv2.TM_SQDIFF,
+        )
         sse *= 1 / (size[0] * size[1])
         # Compute SSE bounding box
         # (relative to search tile: shrunk by halfsize of template tile - 0.5 pixel)
         box_edge = halfsize - 0.5
         sse_box = box + np.concatenate((box_edge, -box_edge))
         # (shift by subpixel offset of template tile)
-        sse_box += np.tile(self.templates[obs]['duv'], 2)
+        sse_box += np.tile(self.templates[obs]["duv"], 2)
         # Sample at projected particles
-        sampled_sse = self.observers[obs].sample_tile(uv, tile=sse,
-            box=sse_box, grid=False, **self.interpolation)
-        return sampled_sse * (1 / (2 * self.observers[obs].sigma**2))
+        sampled_sse = self.observers[obs].sample_tile(
+            uv, tile=sse, box=sse_box, grid=False, **self.interpolation
+        )
+        return sampled_sse * (1 / (2 * self.observers[obs].sigma ** 2))
+
 
 class Tracks(object):
     """
@@ -534,9 +585,20 @@ class Tracks(object):
             Warnings indicate the track completed but may not be valid.
     """
 
-    def __init__(self, datetimes, means, sigmas=None, covariances=None,
-        particles=None, weights=None, tracker=None, images=None, params=None,
-        errors=None, warnings=None):
+    def __init__(
+        self,
+        datetimes,
+        means,
+        sigmas=None,
+        covariances=None,
+        particles=None,
+        weights=None,
+        tracker=None,
+        images=None,
+        params=None,
+        errors=None,
+        warnings=None,
+    ):
         self.datetimes = np.asarray(datetimes)
         if np.iterable(means) and not isinstance(means, np.ndarray):
             means = np.stack(means, axis=0)
@@ -643,29 +705,36 @@ class Tracks(object):
         if mean:
             if mean is True:
                 mean = dict()
-            default = dict(color='black')
+            default = dict(color="black")
             mean = helpers.merge_dicts(default, mean)
-            matplotlib.pyplot.plot(self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean)
+            matplotlib.pyplot.plot(
+                self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean
+            )
         if start:
             if start is True:
                 start = dict()
-            default = dict(color='black', marker='.', linestyle='none')
-            if isinstance(mean, dict) and 'color' in mean:
-                default['color'] = mean['color']
+            default = dict(color="black", marker=".", linestyle="none")
+            if isinstance(mean, dict) and "color" in mean:
+                default["color"] = mean["color"]
             start = helpers.merge_dicts(default, start)
-            matplotlib.pyplot.plot(self.xyz[tracks, 0, 0], self.xyz[tracks, 0, 1], **start)
+            matplotlib.pyplot.plot(
+                self.xyz[tracks, 0, 0], self.xyz[tracks, 0, 1], **start
+            )
         if sigma:
             if sigma is True:
                 sigma = dict()
-            default = dict(color='black', alpha=0.25)
-            if isinstance(mean, dict) and 'color' in mean:
-                default['color'] = mean['color']
+            default = dict(color="black", alpha=0.25)
+            if isinstance(mean, dict) and "color" in mean:
+                default["color"] = mean["color"]
             sigma = helpers.merge_dicts(default, sigma)
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
                 matplotlib.pyplot.errorbar(
-                    self.xyz[i, :, 0], self.xyz[i, :, 1],
-                    xerr=self.xyz_sigma[i, :, 0], yerr=self.xyz_sigma[i, :, 1],
-                    **sigma)
+                    self.xyz[i, :, 0],
+                    self.xyz[i, :, 1],
+                    xerr=self.xyz_sigma[i, :, 0],
+                    yerr=self.xyz_sigma[i, :, 1],
+                    **sigma
+                )
 
     def plot_vxy(self, tracks=None, **kwargs):
         """
@@ -678,12 +747,16 @@ class Tracks(object):
         """
         if tracks is None:
             tracks = slice(None)
-        default = dict(angles='xy')
+        default = dict(angles="xy")
         kwargs = helpers.merge_dicts(default, kwargs)
         for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
             matplotlib.pyplot.quiver(
-                self.xyz[i, :, 0], self.xyz[i, :, 1],
-                self.vxyz[i, :, 0], self.vxyz[i, :, 1], **kwargs)
+                self.xyz[i, :, 0],
+                self.xyz[i, :, 1],
+                self.vxyz[i, :, 0],
+                self.vxyz[i, :, 1],
+                **kwargs
+            )
 
     def plot_v1d(self, dim, tracks=None, mean=True, sigma=False):
         """
@@ -702,25 +775,36 @@ class Tracks(object):
         if mean:
             if mean is True:
                 mean = dict()
-            default = dict(color='black')
+            default = dict(color="black")
             mean = helpers.merge_dicts(default, mean)
             matplotlib.pyplot.plot(self.datetimes, self.vxyz[tracks, :, dim].T, **mean)
         if sigma:
             if sigma is True:
                 sigma = dict()
-            default = dict(facecolor='black', edgecolor='none', alpha=0.25)
-            if isinstance(mean, dict) and 'color' in mean:
-                default['facecolor'] = mean['color']
+            default = dict(facecolor="black", edgecolor="none", alpha=0.25)
+            if isinstance(mean, dict) and "color" in mean:
+                default["facecolor"] = mean["color"]
             sigma = helpers.merge_dicts(default, sigma)
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
                 matplotlib.pyplot.fill_between(
                     self.datetimes,
                     y1=self.vxyz[i, :, dim] + self.vxyz_sigma[i, :, dim],
                     y2=self.vxyz[i, :, dim] - self.vxyz_sigma[i, :, dim],
-                    **sigma)
+                    **sigma
+                )
 
-    def animate(self, track, obs=0, frames=None, images=None, particles=None,
-        map_size=(20, 20), img_size=(100, 100), subplots=dict(), animation=dict()):
+    def animate(
+        self,
+        track,
+        obs=0,
+        frames=None,
+        images=None,
+        particles=None,
+        map_size=(20, 20),
+        img_size=(100, 100),
+        subplots=dict(),
+        animation=dict(),
+    ):
         """
         Animate track.
 
@@ -752,44 +836,61 @@ class Tracks(object):
         if frames is None:
             frames = np.arange(len(self.datetimes))
         has_frame = np.where(
-            ~np.isnan(self.xyz[track, :, 0]) & (self.images[:, obs] != None))[0]
+            ~np.isnan(self.xyz[track, :, 0]) & (self.images[:, obs] != None)
+        )[0]
         frames = np.intersect1d(frames, has_frame)
         # Initialize plot
         i = frames[0]
         img = self.images[i, obs]
         # Map: Track
-        track_xyz = self.xyz[track, :(i + 1)]
-        map_track = axes[0].plot(track_xyz[:, 0], track_xyz[:, 1], color='black', marker='.')[0]
+        track_xyz = self.xyz[track, : (i + 1)]
+        map_track = axes[0].plot(
+            track_xyz[:, 0], track_xyz[:, 1], color="black", marker="."
+        )[0]
         if images:
             # Image: Track
             track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
-            image_track = axes[1].plot(track_uv[:, 0], track_uv[:, 1], color='black', marker='.')[0]
+            image_track = axes[1].plot(
+                track_uv[:, 0], track_uv[:, 1], color="black", marker="."
+            )[0]
             # Image: Mean
-            image_mean = axes[1].plot(track_uv[-1, 0], track_uv[-1, 1], color='red', marker='.')[0]
+            image_mean = axes[1].plot(
+                track_uv[-1, 0], track_uv[-1, 1], color="red", marker="."
+            )[0]
             # Image: Tile
             box = self.tracker.observers[obs].tile_box(track_uv[-1], size=img_size)
             tile = self.tracker.observers[obs].extract_tile(img=img, box=box)
-            image_tile = self.tracker.observers[obs].plot_tile(tile=tile, box=box, axes=axes[1])
+            image_tile = self.tracker.observers[obs].plot_tile(
+                tile=tile, box=box, axes=axes[1]
+            )
         # Map: Basename
         if images:
             basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
         else:
-            basename = str(obs) + ' : ' + str(img)
-        map_txt = axes[0].text(0.5, 0.9, basename, color='black',
-            horizontalalignment='center', transform=axes[0].transAxes)
+            basename = str(obs) + " : " + str(img)
+        map_txt = axes[0].text(
+            0.5,
+            0.9,
+            basename,
+            color="black",
+            horizontalalignment="center",
+            transform=axes[0].transAxes,
+        )
         if particles:
             # Compute quiver scales
             scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
             # Compute weight limits for static colormap
             clim = (
                 self.weights[track, :].ravel().min(),
-                self.weights[track, :].ravel().max())
+                self.weights[track, :].ravel().max(),
+            )
         elif self.tracker is not None:
             scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
         else:
             scales = np.ones(len(frames) - 1)
         # Discard last frame
         frames = frames[:-1]
+
         def update_plot(i):
             # PathCollections cannot set x, y, so new objects have to be created
             for ax in axes:
@@ -800,57 +901,94 @@ class Tracks(object):
                 particle_xyz = self.particles[track, i, :, 0:3]
                 particle_vxy = self.particles[track, i, :, 3:5] * scales[i]
                 axes[0].quiver(
-                    particle_xyz[:, 0], particle_xyz[:, 1],
-                    particle_vxy[:, 0], particle_vxy[:, 1],
+                    particle_xyz[:, 0],
+                    particle_xyz[:, 1],
+                    particle_vxy[:, 0],
+                    particle_vxy[:, 1],
                     self.weights[track, i],
-                    cmap=matplotlib.pyplot.cm.gnuplot2, alpha=0.25,
-                    angles='xy', scale=1, scale_units='xy', units='xy', clim=clim)
-                    # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label='Weight')
+                    cmap=matplotlib.pyplot.cm.gnuplot2,
+                    alpha=0.25,
+                    angles="xy",
+                    scale=1,
+                    scale_units="xy",
+                    units="xy",
+                    clim=clim,
+                )
+                # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label='Weight')
             if images and particles:
                 # Image: Particles
                 particle_uv = self.tracker.observers[obs].project(particle_xyz, img=img)
                 axes[1].scatter(
-                    particle_uv[:, 0], particle_uv[:, 1],
-                    c=self.weights[track, i], marker='.',
-                    cmap=matplotlib.pyplot.cm.gnuplot2, alpha=0.25, edgecolors='none',
-                    vmin=clim[0], vmax=clim[1])
+                    particle_uv[:, 0],
+                    particle_uv[:, 1],
+                    c=self.weights[track, i],
+                    marker=".",
+                    cmap=matplotlib.pyplot.cm.gnuplot2,
+                    alpha=0.25,
+                    edgecolors="none",
+                    vmin=clim[0],
+                    vmax=clim[1],
+                )
                 # matplotlib.pyplot.colorbar(image_particles, ax=axes[1], label='Weight')
             # Map: Track
-            track_xyz = self.xyz[track, :(i + 1)]
+            track_xyz = self.xyz[track, : (i + 1)]
             map_track.set_data(track_xyz[:, 0], track_xyz[:, 1])
-            axes[0].set_xlim(track_xyz[-1, 0] - map_size[0] / 2, track_xyz[-1, 0] + map_size[0] / 2)
-            axes[0].set_ylim(track_xyz[-1, 1] - map_size[1] / 2, track_xyz[-1, 1] + map_size[1] / 2)
+            axes[0].set_xlim(
+                track_xyz[-1, 0] - map_size[0] / 2, track_xyz[-1, 0] + map_size[0] / 2
+            )
+            axes[0].set_ylim(
+                track_xyz[-1, 1] - map_size[1] / 2, track_xyz[-1, 1] + map_size[1] / 2
+            )
             # Map: Mean
             axes[0].quiver(
-                self.xyz[track, i, 0], self.xyz[track, i, 1],
-                self.vxyz[track, i, 0] * scales[i], self.vxyz[track, i, 1] * scales[i],
-                color='red', alpha=1,
-                angles='xy', scale=1, scale_units='xy', units='xy')
+                self.xyz[track, i, 0],
+                self.xyz[track, i, 1],
+                self.vxyz[track, i, 0] * scales[i],
+                self.vxyz[track, i, 1] * scales[i],
+                color="red",
+                alpha=1,
+                angles="xy",
+                scale=1,
+                scale_units="xy",
+                units="xy",
+            )
             if images:
                 # Image: Track
                 track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
                 image_track.set_data(track_uv[:, 0], track_uv[:, 1])
-                axes[1].set_xlim(track_uv[-1, 0] - img_size[0] / 2, track_uv[-1, 0] + img_size[0] / 2)
-                axes[1].set_ylim(track_uv[-1, 1] + img_size[1] / 2, track_uv[-1, 1] - img_size[1] / 2)
+                axes[1].set_xlim(
+                    track_uv[-1, 0] - img_size[0] / 2, track_uv[-1, 0] + img_size[0] / 2
+                )
+                axes[1].set_ylim(
+                    track_uv[-1, 1] + img_size[1] / 2, track_uv[-1, 1] - img_size[1] / 2
+                )
                 # Image: Mean
                 image_mean.set_data(track_uv[-1, 0], track_uv[-1, 1])
                 # Image: Tile
-                box = self.tracker.observers[obs].tile_box(uv=track_uv[-1, :], size=img_size)
+                box = self.tracker.observers[obs].tile_box(
+                    uv=track_uv[-1, :], size=img_size
+                )
                 tile = self.tracker.observers[obs].extract_tile(box=box, img=img)
                 image_tile.set_data(tile)
                 image_tile.set_extent((box[0], box[2], box[3], box[1]))
             # Map: Basename
             if images:
-                basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
+                basename = helpers.strip_path(
+                    self.tracker.observers[obs].images[img].path
+                )
             else:
-                basename = str(obs) + ' : ' + str(img)
+                basename = str(obs) + " : " + str(img)
             basename = helpers.strip_path(self.tracker.observers[obs].images[img].path)
             map_txt.set_text(basename)
             if images:
                 return map_track, map_txt, image_track, image_tile, image_mean
             else:
                 return map_track, map_txt
-        return matplotlib.animation.FuncAnimation(fig, update_plot, frames=frames, blit=True, **animation)
+
+        return matplotlib.animation.FuncAnimation(
+            fig, update_plot, frames=frames, blit=True, **animation
+        )
+
 
 class MotionModel(object):
     """
@@ -880,6 +1018,7 @@ class MotionModel(object):
         vxyz_sigma (iterable): Standard deviation of velocity
             (dx/dt, dy/dt, dz/dt) in `time_unit` time units
     """
+
     def __init__(self, xy, time_unit, n=1000, vxyz_sigma=(0, 0, 0)):
         self.xy = xy
         self.time_unit = time_unit
@@ -926,6 +1065,7 @@ class MotionModel(object):
         """
         return None
 
+
 class CartesianMotionModel(MotionModel):
     """
     `CartesianModelModel` evolves particles following a Cartesian motion model.
@@ -958,9 +1098,20 @@ class CartesianMotionModel(MotionModel):
         axyz_sigma (iterable): Standard deviation of acceleration
             (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2)
     """
-    def __init__(self, xy, time_unit, dem, dem_sigma=0, n=1000, xy_sigma=(0, 0),
-        vxyz=(0, 0, 0), vxyz_sigma=(0, 0, 0), axyz=(0, 0, 0),
-        axyz_sigma=(0, 0, 0)):
+
+    def __init__(
+        self,
+        xy,
+        time_unit,
+        dem,
+        dem_sigma=0,
+        n=1000,
+        xy_sigma=(0, 0),
+        vxyz=(0, 0, 0),
+        vxyz_sigma=(0, 0, 0),
+        axyz=(0, 0, 0),
+        axyz_sigma=(0, 0, 0),
+    ):
         self.xy = xy
         self.time_unit = time_unit
         self.dem = dem
@@ -985,8 +1136,7 @@ class CartesianMotionModel(MotionModel):
         z = self._sample_dem(particles[:, 0:2])
         z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
         particles[:, 2] = z + z_sigma * np.random.randn(self.n)
-        particles[:, 3:6] = (self.vxyz
-            + self.vxyz_sigma * np.random.randn(self.n, 3))
+        particles[:, 3:6] = self.vxyz + self.vxyz_sigma * np.random.randn(self.n, 3)
         return particles
 
     def evolve_particles(self, particles, dt):
@@ -1001,8 +1151,9 @@ class CartesianMotionModel(MotionModel):
         n = len(particles)
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
         axyz = self.axyz + self.axyz_sigma * np.random.randn(n, 3)
-        particles[:, 0:3] += (time_units * particles[:, 3:6]
-            + 0.5 * axyz * time_units**2)
+        particles[:, 0:3] += (
+            time_units * particles[:, 3:6] + 0.5 * axyz * time_units ** 2
+        )
         particles[:, 3:6] += time_units * axyz
 
     def compute_log_likelihoods(self, particles):
@@ -1027,8 +1178,11 @@ class CartesianMotionModel(MotionModel):
             # Avoid division by zero
             nonzero = np.nonzero(z_sigma)[0]
             log_likelihoods = np.zeros(len(particles), dtype=float)
-            log_likelihoods[nonzero] = (1 / (2 * z_sigma[nonzero]**2) *
-                (z[nonzero] - particles[nonzero, 2])**2)
+            log_likelihoods[nonzero] = (
+                1
+                / (2 * z_sigma[nonzero] ** 2)
+                * (z[nonzero] - particles[nonzero, 2]) ** 2
+            )
             return log_likelihoods
 
     def _sample_dem(self, xy, sigma=False):
@@ -1043,6 +1197,7 @@ class CartesianMotionModel(MotionModel):
             return obj.sample(xy)
         else:
             return np.full(len(xy), obj)
+
 
 class CylindricalMotionModel(CartesianMotionModel):
     """
@@ -1073,9 +1228,20 @@ class CylindricalMotionModel(CartesianMotionModel):
         arthz_sigma (iterable): Standard deviation of acceleration
             (d^2 radius/dt^2, d theta/dt, d^2z/dt^2)
     """
-    def __init__(self, xy, time_unit, dem, dem_sigma=0, n=1000, xy_sigma=(0, 0),
-        vrthz=(0, 0, 0), vrthz_sigma=(0, 0, 0), arthz=(0, 0, 0),
-        arthz_sigma=(0, 0, 0)):
+
+    def __init__(
+        self,
+        xy,
+        time_unit,
+        dem,
+        dem_sigma=0,
+        n=1000,
+        xy_sigma=(0, 0),
+        vrthz=(0, 0, 0),
+        vrthz_sigma=(0, 0, 0),
+        arthz=(0, 0, 0),
+        arthz_sigma=(0, 0, 0),
+    ):
         self.xy = xy
         self.time_unit = time_unit
         self.dem = dem
@@ -1101,12 +1267,15 @@ class CylindricalMotionModel(CartesianMotionModel):
         z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
         particles[:, 2] = z + z_sigma * np.random.randn(self.n)
         v = self.vrthz + self.vrthz_sigma * np.random.randn(self.n, 3)
-        particles[:, 3:6] = np.column_stack((
-            # r' * cos(th)
-            v[:, 0] * np.cos(v[:, 1]),
-            # r' * sin(th)
-            v[:, 0] * np.sin(v[:, 1]),
-            v[:, 2]))
+        particles[:, 3:6] = np.column_stack(
+            (
+                # r' * cos(th)
+                v[:, 0] * np.cos(v[:, 1]),
+                # r' * sin(th)
+                v[:, 0] * np.sin(v[:, 1]),
+                v[:, 2],
+            )
+        )
         return particles
 
     def evolve_particles(self, particles, dt):
@@ -1122,14 +1291,18 @@ class CylindricalMotionModel(CartesianMotionModel):
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
         vx = particles[:, 3]
         vy = particles[:, 4]
-        vr = np.sqrt(vx**2 + vy**2)
+        vr = np.sqrt(vx ** 2 + vy ** 2)
         arthz = self.arthz + self.arthz_sigma * np.random.randn(n, 3)
-        axyz = np.column_stack((
-            # r'' * cos(th) - r' * sin(th) * th'
-            arthz[:, 0] * (vx / vr) - vy * arthz[:, 1],
-            # r'' * sin(th) - r' * cos(th) * th'
-            arthz[:, 0] * (vy / vr) + vx * arthz[:, 1],
-            arthz[:, 2]))
-        particles[:, 0:3] += (time_units * particles[:, 3:6]
-            + 0.5 * axyz * time_units**2)
+        axyz = np.column_stack(
+            (
+                # r'' * cos(th) - r' * sin(th) * th'
+                arthz[:, 0] * (vx / vr) - vy * arthz[:, 1],
+                # r'' * sin(th) - r' * cos(th) * th'
+                arthz[:, 0] * (vy / vr) + vx * arthz[:, 1],
+                arthz[:, 2],
+            )
+        )
+        particles[:, 0:3] += (
+            time_units * particles[:, 3:6] + 0.5 * axyz * time_units ** 2
+        )
         particles[:, 3:6] += time_units * axyz

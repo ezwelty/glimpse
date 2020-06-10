@@ -22,7 +22,7 @@ class _IncomingPoints(object):
         self.cam = cam
         # Cache grid in normalized camera coordinates to avoid inversion errors
         # NOTE: Requires that xcam and cam have the same image size
-        self.xy = cam._image2camera(cam.grid(step=step, mode='points'))
+        self.xy = cam._image2camera(cam.grid(step=step, mode="points"))
 
     @property
     # HACK: Required for optimize.Cameras
@@ -64,7 +64,7 @@ class _OutgoingPoints(_IncomingPoints):
         self.xcam = xcam
         self.cam = cam
         # NOTE: Requires that xcam and cam have the same image size
-        self.uv = cam.grid(step=step, mode='points')
+        self.uv = cam.grid(step=step, mode="points")
         self.xy = xcam._image2camera(self.uv)
 
     # HACK: index required for optimize.Cameras
@@ -100,6 +100,7 @@ class _ExternalCamera(object):
         def fun(x):
             cam.vector[mask] = x
             return (points.predicted() - points.observed()).ravel()
+
         fit = scipy.optimize.least_squares(fun=fun, x0=cam.vector[mask])
         cam.vector[mask] = fit.x
         return cam
@@ -211,15 +212,16 @@ class MatlabCamera(_IncomingCamera):
             sigmas (bool): Whether to read parameter means (False)
                 or standard deviations (True)
         """
-        with open(path, mode='r') as fp:
+        with open(path, mode="r") as fp:
             txt = fp.read()
 
         def parse_param(param, length):
             if length == 1:
-                pattern = r'^{param} = (.*);'.format(param=param)
+                pattern = r"^{param} = (.*);".format(param=param)
             else:
-                pattern = r'^{param} = \[ {groups} \];'.format(
-                    param=param, groups=' ; '.join(['(.*)'] * length))
+                pattern = r"^{param} = \[ {groups} \];".format(
+                    param=param, groups=" ; ".join(["(.*)"] * length)
+                )
             values = re.findall(pattern, txt, flags=re.MULTILINE)[0]
             # Error bounds are ~3 times standard deviations
             scale = 1 / 3 if sigmas else 1
@@ -227,6 +229,7 @@ class MatlabCamera(_IncomingCamera):
                 return float(values) * scale
             else:
                 return [float(value) * scale for value in values]
+
         if sigmas:
             lengths = dict(fc_error=2, cc_error=2, alpha_c_error=1, kc_error=5)
         else:
@@ -235,25 +238,28 @@ class MatlabCamera(_IncomingCamera):
             param: parse_param(param, length) for param, length in lengths.items()
         }
         if sigmas:
-            kwargs = {key.split('_error')[0]: kwargs[key] for key in kwargs}
-            kwargs['nx'], kwargs['ny'] = None, None
+            kwargs = {key.split("_error")[0]: kwargs[key] for key in kwargs}
+            kwargs["nx"], kwargs["ny"] = None, None
         return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
-        r2 = np.sum(xy**2, axis=1)
-        dr = self.kc[0] * r2 + self.kc[1] * r2**2 + self.kc[4] * r2**3
+        r2 = np.sum(xy ** 2, axis=1)
+        dr = self.kc[0] * r2 + self.kc[1] * r2 ** 2 + self.kc[4] * r2 ** 3
         xty = xy[:, 0] * xy[:, 1]
-        dtx = 2 * self.kc[2] * xty + self.kc[3] * (r2 + 2 * xy[:, 0]**2)
-        dty = self.kc[2] * (r2 + 2 * xy[:, 1]**2) + 2 * self.kc[3] * xty
+        dtx = 2 * self.kc[2] * xty + self.kc[3] * (r2 + 2 * xy[:, 0] ** 2)
+        dty = self.kc[2] * (r2 + 2 * xy[:, 1] ** 2) + 2 * self.kc[3] * xty
         # Apply lens distortion
         dxy = xy.copy()
         dxy[:, 0] += dxy[:, 0] * dr + dtx
         dxy[:, 1] += dxy[:, 1] * dr + dty
         # Project to image
-        uv = np.column_stack((
-            self.fc[0] * (dxy[:, 0] + self.alpha_c * dxy[:, 1]) + self.cc[0],
-            self.fc[0] * dxy[:, 1] + self.cc[1]))
+        uv = np.column_stack(
+            (
+                self.fc[0] * (dxy[:, 0] + self.alpha_c * dxy[:, 1]) + self.cc[0],
+                self.fc[0] * dxy[:, 1] + self.cc[1],
+            )
+        )
         # Top left corner of top left pixel is (-0.5, -0.5)
         uv += (0.5, 0.5)
         return uv
@@ -262,12 +268,9 @@ class MatlabCamera(_IncomingCamera):
         return Camera(
             imgsz=(self.nx, self.ny),
             f=self.fc,
-            c=(
-                (self.cc[0] + 0.5) - self.nx / 2,
-                (self.cc[1] + 0.5) - self.ny / 2
-            ),
+            c=((self.cc[0] + 0.5) - self.nx / 2, (self.cc[1] + 0.5) - self.ny / 2),
             k=(self.kc[0], self.kc[1], self.kc[4]),
-            p=(self.kc[2], self.kc[3])
+            p=(self.kc[2], self.kc[3]),
         )
 
     def as_camera(self, step=10):
@@ -278,7 +281,7 @@ class MatlabCamera(_IncomingCamera):
         Otherwise, the conversion is exact.
         """
         if self.alpha_c:
-            params = {'f': True, 'c': True, 'k': True}
+            params = {"f": True, "c": True, "k": True}
             return self._as_camera_estimate(params=params, step=step)
         else:
             return self._as_camera_initial()
@@ -319,37 +322,46 @@ class AgisoftCamera(_IncomingCamera):
     @classmethod
     def from_xml(cls, path):
         tree = xml.etree.ElementTree.parse(path)
-        calibration = next((e for e in tree.iter('calibration')), None)
+        calibration = next((e for e in tree.iter("calibration")), None)
         if not calibration:
-            raise ValueError('No camera model found')
+            raise ValueError("No camera model found")
         params = {}
         for child in calibration:
             params[child.tag] = child.text
-        if params['projection'] != 'frame':
+        if params["projection"] != "frame":
             raise ValueError(
-                'Found unsupported camera model type: ' + params['projection'])
+                "Found unsupported camera model type: " + params["projection"]
+            )
         kwargs = {
             key: float(params[key])
-            for key in inspect.getfullargspec(cls).args[1:] if key in params
+            for key in inspect.getfullargspec(cls).args[1:]
+            if key in params
         }
         return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
-        r2 = np.sum(xy**2, axis=1)
-        dr = self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3 + self.k4 * r2**4
+        r2 = np.sum(xy ** 2, axis=1)
+        dr = self.k1 * r2 + self.k2 * r2 ** 2 + self.k3 * r2 ** 3 + self.k4 * r2 ** 4
         xty = xy[:, 0] * xy[:, 1]
-        dtx = self.p1 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p2 * xty
-        dty = self.p2 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p1 * xty
+        dtx = self.p1 * (r2 + 2 * xy[:, 0] ** 2) + 2 * self.p2 * xty
+        dty = self.p2 * (r2 + 2 * xy[:, 1] ** 2) + 2 * self.p1 * xty
         # Apply lens distortion
         dxy = xy.copy()
         dxy[:, 0] += dxy[:, 0] * dr + dtx
         dxy[:, 1] += dxy[:, 1] * dr + dty
         # Project to image
-        return np.column_stack((
-            (self.width * 0.5 + self.cx + dxy[:, 0] * (self.f + self.b1) +
-                dxy[:, 1] * self.b2),
-            self.height * 0.5 + self.cy + dxy[:, 1] * self.f))
+        return np.column_stack(
+            (
+                (
+                    self.width * 0.5
+                    + self.cx
+                    + dxy[:, 0] * (self.f + self.b1)
+                    + dxy[:, 1] * self.b2
+                ),
+                self.height * 0.5 + self.cy + dxy[:, 1] * self.f,
+            )
+        )
 
     def _as_camera_initial(self):
         return Camera(
@@ -357,7 +369,8 @@ class AgisoftCamera(_IncomingCamera):
             f=(self.f + self.b1, self.f),
             c=(self.cx, self.cy),
             k=(self.k1, self.k2, self.k3),
-            p=(self.p2, self.p1))
+            p=(self.p2, self.p1),
+        )
 
     def as_camera(self, step=10):
         """
@@ -372,11 +385,11 @@ class AgisoftCamera(_IncomingCamera):
         if any((self.k4, self.b2)):
             params = {}
             if self.k4:
-                params['k'] = True
+                params["k"] = True
             if self.b2:
-                params['f'] = True
-                params['c'] = True
-                params['k'] = True
+                params["f"] = True
+                params["c"] = True
+                params["k"] = True
             return self._as_camera_estimate(params=params, step=step)
         else:
             return self._as_camera_initial()
@@ -402,9 +415,7 @@ class PhotoModelerCamera(_OutgoingCamera):
         p2 (float): Decentering distortion coefficient #2
     """
 
-    def __init__(
-        self, imgsz, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0, p2=0
-    ):
+    def __init__(self, imgsz, focal, xp, yp, fw, fh, k1=0, k2=0, k3=0, p1=0, p2=0):
         self.imgsz = imgsz
         self.focal = focal
         self.xp, self.yp = xp, yp
@@ -424,17 +435,22 @@ class PhotoModelerCamera(_OutgoingCamera):
                 standard deviations (True)
         """
         params = dict(
-            focal='Focal Length',
-            xp='Xp', yp='Yp',
-            fw='Fw', fh='Fh',
-            k1='K1', k2='K2', k3='K3',
-            p1='P1', p2='P2'
+            focal="Focal Length",
+            xp="Xp",
+            yp="Yp",
+            fw="Fw",
+            fh="Fh",
+            k1="K1",
+            k2="K2",
+            k3="K3",
+            p1="P1",
+            p2="P2",
         )
-        with open(path, mode='r') as fp:
+        with open(path, mode="r") as fp:
             txt = fp.read()
         if sigmas:
             matches = [
-                re.findall(label + r'.*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)', txt)
+                re.findall(label + r".*\s.*\s*Deviation: .*: ([0-9\-\+\.e]+)", txt)
                 for label in params.values()
             ]
             kwargs = {
@@ -443,7 +459,7 @@ class PhotoModelerCamera(_OutgoingCamera):
             }
         else:
             matches = [
-                re.findall(label + r'.*\s*Value: ([0-9\-\+\.e]+)', txt)
+                re.findall(label + r".*\s*Value: ([0-9\-\+\.e]+)", txt)
                 for label in params.values()
             ]
             kwargs = {
@@ -453,25 +469,27 @@ class PhotoModelerCamera(_OutgoingCamera):
 
     def _image2camera(self, uv):
         # Convert image coordinates to mm relative to principal point
-        xy = np.column_stack((
-            uv[:, 0] * self.fw / self.imgsz[0] - self.xp,
-            uv[:, 1] * self.fh / self.imgsz[1] - self.yp,
-        ))
+        xy = np.column_stack(
+            (
+                uv[:, 0] * self.fw / self.imgsz[0] - self.xp,
+                uv[:, 1] * self.fh / self.imgsz[1] - self.yp,
+            )
+        )
         # Flip y (+y is down in image, but up in PM "photo space")
         xy[:, 1] *= -1
         # Remove lens distortion
-        r2 = np.sum(xy**2, axis=1)
-        dr = self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3
+        r2 = np.sum(xy ** 2, axis=1)
+        dr = self.k1 * r2 + self.k2 * r2 ** 2 + self.k3 * r2 ** 3
         xty = xy[:, 0] * xy[:, 1]
         # NOTE: p1 and p2 are reversed
-        dtx = self.p1 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p2 * xty
-        dty = self.p2 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p1 * xty
+        dtx = self.p1 * (r2 + 2 * xy[:, 0] ** 2) + 2 * self.p2 * xty
+        dty = self.p2 * (r2 + 2 * xy[:, 1] ** 2) + 2 * self.p1 * xty
         xy[:, 0] += xy[:, 0] * dr + dtx
         xy[:, 1] += xy[:, 1] * dr + dty
         # Flip y back
         xy[:, 1] *= -1
         # Normalize
-        xy *= (1 / self.focal)
+        xy *= 1 / self.focal
         return xy
 
     def _as_camera_initial(self):
@@ -479,7 +497,7 @@ class PhotoModelerCamera(_OutgoingCamera):
             imgsz=self.imgsz,
             sensorsz=(self.fw, self.fh),
             fmm=self.focal,
-            cmm=(self.xp - self.fw / 2, self.yp - self.fh / 2)
+            cmm=(self.xp - self.fw / 2, self.yp - self.fh / 2),
         )
 
     def as_camera(self, step=10):
@@ -497,9 +515,9 @@ class PhotoModelerCamera(_OutgoingCamera):
         if any(k + p):
             params = {}
             if any(k):
-                params['k'] = True
+                params["k"] = True
             if any(p):
-                params['p'] = True
+                params["p"] = True
             return self._as_camera_estimate(params=params, step=step)
         else:
             return self._as_camera_initial()
@@ -533,8 +551,24 @@ class OpenCVCamera(_IncomingCamera):
     """
 
     def __init__(
-        self, imgsz, fx, fy, cx=None, cy=None, k1=0, k2=0, k3=0, k4=0,
-        k5=0, k6=0, p1=0, p2=0, s1=0, s2=0, s3=0, s4=0
+        self,
+        imgsz,
+        fx,
+        fy,
+        cx=None,
+        cy=None,
+        k1=0,
+        k2=0,
+        k3=0,
+        k4=0,
+        k5=0,
+        k6=0,
+        p1=0,
+        p2=0,
+        s1=0,
+        s2=0,
+        s3=0,
+        s4=0,
     ):
         self.imgsz = imgsz
         self.fx, self.fy = fx, fy
@@ -557,7 +591,7 @@ class OpenCVCamera(_IncomingCamera):
             dict: fx, fy, cx, and cy
         """
         x = np.asarray(x)
-        return {'fx': x[0, 0], 'fy': x[1, 1], 'cx': x[0, 2], 'cy': x[1, 2]}
+        return {"fx": x[0, 0], "fy": x[1, 1], "cx": x[0, 2], "cy": x[1, 2]}
 
     @staticmethod
     def parse_distortion_coefficients(x):
@@ -570,53 +604,68 @@ class OpenCVCamera(_IncomingCamera):
         """
         x = np.asarray(x)
         labels = (
-            'k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6', 's1', 's2', 's3', 's4',
-            'τx', 'τy'
+            "k1",
+            "k2",
+            "p1",
+            "p2",
+            "k3",
+            "k4",
+            "k5",
+            "k6",
+            "s1",
+            "s2",
+            "s3",
+            "s4",
+            "τx",
+            "τy",
         )
         return {key: x[i] if i < len(x) else 0 for i, key in enumerate(labels)}
 
     @classmethod
     def from_xml(cls, path, imgsz):
         tree = xml.etree.ElementTree.parse(path)
-        params = {'imgsz': imgsz}
-        matrix = next((e for e in tree.iter('camera_matrix')), None)
+        params = {"imgsz": imgsz}
+        matrix = next((e for e in tree.iter("camera_matrix")), None)
         if matrix:
-            txt = matrix.find('data').text
-            x = np.asarray([
-                float(xi) for xi in re.findall(r'([0-9\-\.e\+]+)', txt)
-            ]).reshape(3, 3)
+            txt = matrix.find("data").text
+            x = np.asarray(
+                [float(xi) for xi in re.findall(r"([0-9\-\.e\+]+)", txt)]
+            ).reshape(3, 3)
             params = {**params, **cls.parse_camera_matrix(x)}
         else:
-            raise ValueError('No camera matrix found')
-        coeffs = next((e for e in tree.iter('distortion_coefficients')), None)
+            raise ValueError("No camera matrix found")
+        coeffs = next((e for e in tree.iter("distortion_coefficients")), None)
         if coeffs:
-            txt = coeffs.find('data').text
-            x = np.asarray([float(xi) for xi in re.findall(r'([0-9\-\.e\+]+)', txt)])
+            txt = coeffs.find("data").text
+            x = np.asarray([float(xi) for xi in re.findall(r"([0-9\-\.e\+]+)", txt)])
             params = {**params, **cls.parse_distortion_coefficients(x)}
         kwargs = {
             key: params[key]
-            for key in inspect.getfullargspec(cls).args[1:] if key in params
+            for key in inspect.getfullargspec(cls).args[1:]
+            if key in params
         }
         return cls(**kwargs)
 
     def _camera2image(self, xy):
         # Compute lens distortion
-        r2 = np.sum(xy**2, axis=1)
-        dr = (
-            (1 + self.k1 * r2 + self.k2 * r2**2 + self.k3 * r2**3) /
-            (1 + self.k4 * r2 + self.k5 * r2**2 + self.k6 * r2**2)
+        r2 = np.sum(xy ** 2, axis=1)
+        dr = (1 + self.k1 * r2 + self.k2 * r2 ** 2 + self.k3 * r2 ** 3) / (
+            1 + self.k4 * r2 + self.k5 * r2 ** 2 + self.k6 * r2 ** 2
         )
         xty = xy[:, 0] * xy[:, 1]
-        dtx = self.p2 * (r2 + 2 * xy[:, 0]**2) + 2 * self.p1 * xty
-        dty = self.p1 * (r2 + 2 * xy[:, 1]**2) + 2 * self.p2 * xty
+        dtx = self.p2 * (r2 + 2 * xy[:, 0] ** 2) + 2 * self.p1 * xty
+        dty = self.p1 * (r2 + 2 * xy[:, 1] ** 2) + 2 * self.p2 * xty
         # Apply lens distortion
-        dxy = np.column_stack((
-            dr * xy[:, 0] + dtx + self.s1 * r2 + self.s2 * r2**2,
-            dr * xy[:, 1] + dty + self.s3 * r2 + self.s4 * r2**2))
+        dxy = np.column_stack(
+            (
+                dr * xy[:, 0] + dtx + self.s1 * r2 + self.s2 * r2 ** 2,
+                dr * xy[:, 1] + dty + self.s3 * r2 + self.s4 * r2 ** 2,
+            )
+        )
         # Project to image
-        return np.column_stack((
-            (self.fx * dxy[:, 0] + self.cx),
-            (self.fy * dxy[:, 1] + self.cy)))
+        return np.column_stack(
+            ((self.fx * dxy[:, 0] + self.cx), (self.fy * dxy[:, 1] + self.cy))
+        )
 
     def _as_camera_initial(self):
         return Camera(
@@ -624,7 +673,8 @@ class OpenCVCamera(_IncomingCamera):
             f=(self.fx, self.fy),
             c=(self.cx - self.imgsz[0] / 2, self.cy - self.imgsz[1] / 2),
             k=(self.k1, self.k2, self.k3, self.k4, self.k5, self.k6),
-            p=(self.p1, self.p2))
+            p=(self.p1, self.p2),
+        )
 
     def as_camera(self, step=10):
         """
@@ -638,7 +688,7 @@ class OpenCVCamera(_IncomingCamera):
             step: Sample grid spacing for all (float) or each (iterable) dimension
         """
         if any((self.s1, self.s2, self.s3, self.s4)):
-            params = {'k': True, 'p': True}
+            params = {"k": True, "p": True}
             return self._as_camera_estimate(params=params, step=step)
         else:
             return self._as_camera_initial()
@@ -665,9 +715,9 @@ def as_camera_sigma(mean, sigma, n=100, **kwargs):
     vectors = []
     for _ in range(n):
         args = {
-            key: mean_args[key] + (
-                np.random.normal(scale=sigma_args[key]) if sigma_args[key] else 0
-            ) for key in mean_args
+            key: mean_args[key]
+            + (np.random.normal(scale=sigma_args[key]) if sigma_args[key] else 0)
+            for key in mean_args
         }
         new_mean = type(mean)(**args)
         vectors.append(new_mean.as_camera(**kwargs).vector)

@@ -1,7 +1,7 @@
 from .imports import np
 
-class uarray(object):
 
+class uarray(object):
     def __init__(self, mean, sigma=None, **kwargs):
         self.mean = np.asarray(mean, **kwargs)
         if sigma is None:
@@ -10,9 +10,9 @@ class uarray(object):
             sigma = np.full(self.mean.shape, sigma, dtype=self.mean.dtype)
         self.sigma = np.asarray(sigma, **kwargs)
         if self.mean.shape != self.sigma.shape:
-            raise ValueError('Means and standard deviations are not the same shape')
+            raise ValueError("Means and standard deviations are not the same shape")
         if np.any(self.sigma < 0):
-            raise ValueError('Standard deviations cannot be negative')
+            raise ValueError("Standard deviations cannot be negative")
 
     @property
     def shape(self):
@@ -74,7 +74,7 @@ class uarray(object):
     def __add__(self, other):
         if isinstance(other, self.__class__):
             mean = self.mean + other.mean
-            sigma = np.sqrt(self.sigma**2 + other.sigma**2)
+            sigma = np.sqrt(self.sigma ** 2 + other.sigma ** 2)
         else:
             mean = self.mean + other
             sigma = self.sigma.copy()
@@ -86,20 +86,21 @@ class uarray(object):
     def __sub__(self, other):
         if isinstance(other, self.__class__):
             mean = self.mean - other.mean
-            sigma = np.sqrt(self.sigma**2 + other.sigma**2)
+            sigma = np.sqrt(self.sigma ** 2 + other.sigma ** 2)
         else:
             mean = self.mean - other
             sigma = self.sigma.copy()
         return self.__class__(mean, sigma)
 
     def __rsub__(self, other):
-        return - self + other
+        return -self + other
 
     def __mul__(self, other):
         if isinstance(other, self.__class__):
             mean = self.mean * other.mean
             sigma = np.abs(mean) * np.sqrt(
-                (self.sigma / self.mean)**2 + (other.sigma / other.mean)**2)
+                (self.sigma / self.mean) ** 2 + (other.sigma / other.mean) ** 2
+            )
         else:
             mean = self.mean * other
             sigma = np.abs(other) * self.sigma
@@ -112,7 +113,8 @@ class uarray(object):
         if isinstance(other, self.__class__):
             mean = self.mean / other.mean
             sigma = np.abs(mean) * np.sqrt(
-                (self.sigma / self.mean)**2 + (other.sigma / other.mean)**2)
+                (self.sigma / self.mean) ** 2 + (other.sigma / other.mean) ** 2
+            )
         else:
             return self * (1 / other)
         return self.__class__(mean, sigma)
@@ -121,9 +123,9 @@ class uarray(object):
         if isinstance(other, self.__class__):
             raise NotImplementedError()
         else:
-            mean = self.mean**other
+            mean = self.mean ** other
             sigma = np.abs((mean * other * self.sigma) / self.mean)
         return self.__class__(mean, sigma)
 
     def __rtruediv__(self, other):
-        return other * self**(-1)
+        return other * self ** (-1)

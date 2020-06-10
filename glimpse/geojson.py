@@ -7,10 +7,11 @@ def read(path, crs=None, key=None, **kwargs):
     helpers.apply_geojson_coords(obj, np.atleast_2d)
     if crs:
         helpers.apply_geojson_coords(
-            obj, helpers.sp_transform, current=4326, target=crs)
+            obj, helpers.sp_transform, current=4326, target=crs
+        )
     if key:
-        obj['features'] = dict(
-            (feature['properties'][key], feature) for feature in obj['features']
+        obj["features"] = dict(
+            (feature["properties"][key], feature) for feature in obj["features"]
         )
     return obj
 
@@ -24,14 +25,14 @@ def items(obj):
         if _is_item(obj):
             # NOTE: Return single item as list of items (?)
             return [obj]
-        elif 'features' in obj:
-            return obj['features']
-        elif 'geometries' in obj:
-            return obj['geometries']
+        elif "features" in obj:
+            return obj["features"]
+        elif "geometries" in obj:
+            return obj["geometries"]
     if np.iterable(obj) and _is_item(next(_itervalues(obj))):
         return obj
     else:
-        raise ValueError('Cannot parse items from object')
+        raise ValueError("Cannot parse items from object")
 
 
 def geometries(obj):
@@ -45,20 +46,21 @@ def coordinates(obj):
     """
     Return all Geometry coordinates.
     """
-    return [_geometry(item)['coordinates'] for item in _itervalues(items(obj))]
+    return [_geometry(item)["coordinates"] for item in _itervalues(items(obj))]
 
 
 def properties(obj):
     """
     Return all Feature properties
     """
-    return [item['properties'] for item in items(obj)]
+    return [item["properties"] for item in items(obj)]
+
 
 # ---- Helpers ----
 
 
 def _is_item(obj):
-    return isinstance(obj, dict) and ('geometry' in obj or 'coordinates' in obj)
+    return isinstance(obj, dict) and ("geometry" in obj or "coordinates" in obj)
 
 
 def _itervalues(obj):
@@ -74,8 +76,8 @@ def _geometry(item):
     """
     Return item Geometry.
     """
-    if 'geometry' in item:
-        return item['geometry']
+    if "geometry" in item:
+        return item["geometry"]
     else:
         return item
 
@@ -91,7 +93,7 @@ def _depth(geometry):
     #     MultiLineString=2,
     #     Polygon=2,
     #     MultiPolygon=3)
-    coords = geometry['coordinates']
+    coords = geometry["coordinates"]
     n = -1
     while np.iterable(coords):
         coords = coords[0]
@@ -107,8 +109,9 @@ def _ddepth(geometry, depth=None):
     if depth is None:
         depth = geometry_depth
     elif depth < 0:
-        raise ValueError('depth cannot be negative')
+        raise ValueError("depth cannot be negative")
     return geometry_depth - depth
+
 
 # def _iter_coordinates(geometry, depth=None, pad=False):
 #     n = _ddepth(geometry, depth=depth)
@@ -147,7 +150,7 @@ def coordinates_apply(obj, fun, depth=None, pad=False, **kwargs):
     def apply(geometry):
         n = _ddepth(geometry, depth=depth)
         # Return coordinates to requested depth
-        coords = geometry['coordinates']
+        coords = geometry["coordinates"]
         if n < 0:
             if pad:
                 # Pad to higher depth
@@ -158,9 +161,11 @@ def coordinates_apply(obj, fun, depth=None, pad=False, **kwargs):
             return fun(coords, **kwargs)
         else:
             return apply_level(coords, level=n)
+
     # Apply to all coordinates
     for geometry in geometries(obj):
-        geometry['coordinates'] = apply(geometry)
+        geometry["coordinates"] = apply(geometry)
+
 
 # def _is_item(obj, error=False):
 #     valid = isinstance(obj, dict) and ('geometry' in obj or 'coordinates' in obj)

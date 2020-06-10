@@ -1,6 +1,7 @@
 from .imports import np
 from . import helpers
 
+
 def read(path, crs=None, key=None, **kwargs):
     obj = helpers.read_json(path, **kwargs)
     helpers.apply_geojson_coords(obj, np.atleast_2d)
@@ -8,9 +9,11 @@ def read(path, crs=None, key=None, **kwargs):
         helpers.apply_geojson_coords(
             obj, helpers.sp_transform, current=4326, target=crs)
     if key:
-        obj['features'] = dict((feature['properties'][key], feature)
-            for feature in obj['features'])
+        obj['features'] = dict(
+            (feature['properties'][key], feature) for feature in obj['features']
+        )
     return obj
+
 
 def items(obj):
     """
@@ -30,17 +33,20 @@ def items(obj):
     else:
         raise ValueError('Cannot parse items from object')
 
+
 def geometries(obj):
     """
     Return all Geometries.
     """
     return [_geometry(item) for item in _itervalues(items(obj))]
 
+
 def coordinates(obj):
     """
     Return all Geometry coordinates.
     """
     return [_geometry(item)['coordinates'] for item in _itervalues(items(obj))]
+
 
 def properties(obj):
     """
@@ -50,8 +56,10 @@ def properties(obj):
 
 # ---- Helpers ----
 
+
 def _is_item(obj):
     return isinstance(obj, dict) and ('geometry' in obj or 'coordinates' in obj)
+
 
 def _itervalues(obj):
     """
@@ -61,6 +69,7 @@ def _itervalues(obj):
         obj = obj.values()
     return iter(obj)
 
+
 def _geometry(item):
     """
     Return item Geometry.
@@ -69,6 +78,7 @@ def _geometry(item):
         return item['geometry']
     else:
         return item
+
 
 def _depth(geometry):
     """
@@ -87,6 +97,7 @@ def _depth(geometry):
         coords = coords[0]
         n += 1
     return n
+
 
 def _ddepth(geometry, depth=None):
     """
@@ -122,13 +133,16 @@ def _ddepth(geometry, depth=None):
 #     else:
 #         iter_level(coordinates, n)
 
+
 def coordinates_apply(obj, fun, depth=None, pad=False, **kwargs):
+
     # Define recursion for level >= 0
     def apply_level(x, level):
         if level:
             return [apply_level(xi, level - 1) for xi in x]
         else:
             return fun(x, **kwargs)
+
     # Define apply for each geometry
     def apply(geometry):
         n = _ddepth(geometry, depth=depth)

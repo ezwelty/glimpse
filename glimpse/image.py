@@ -10,6 +10,7 @@ from . import helpers
 from .exif import Exif
 from .camera import Camera
 
+
 class Image(object):
     """
     Photographic image and the settings that gave rise to the image.
@@ -35,7 +36,9 @@ class Image(object):
         if not cam:
             cam = {}
         if isinstance(cam, dict):
-            if not ('imgsz' in cam and 'f' in cam or ('fmm' in cam and 'sensorsz' in cam)):
+            if not (
+                'imgsz' in cam and 'f' in cam or ('fmm' in cam and 'sensorsz' in cam)
+            ):
                 exif = exif or Exif(path)
                 cam = {
                     'imgsz': exif.imgsz,
@@ -76,8 +79,8 @@ class Image(object):
         `None`.
 
         Arguments:
-            box (array-like): Crop extent in image coordinates (left, top, right, bottom)
-                relative to `self.cam.imgsz`.
+            box (array-like): Crop extent in image coordinates
+                (left, top, right, bottom) relative to `self.cam.imgsz`.
                 If `cache=True`, the region is extracted from the cached image.
                 If `cache=False`, the region is extracted directly from the file
                 (faster than reading the entire image).
@@ -103,8 +106,10 @@ class Image(object):
                 args['win_xsize'] = int(round((box[2] - box[0]) * xscale))
                 args['yoff'] = int(round(box[1] * yscale))
                 args['win_ysize'] = int(round((box[3] - box[1]) * yscale))
-            I = np.dstack([ds.GetRasterBand(i + 1).ReadAsArray(**args)
-                for i in range(ds.RasterCount)])
+            I = np.dstack([
+                ds.GetRasterBand(i + 1).ReadAsArray(**args)
+                for i in range(ds.RasterCount)
+            ])
             if I.shape[2] == 1:
                 I = I.squeeze(axis=2)
             if cache:
@@ -162,7 +167,9 @@ class Image(object):
             method (str): Interpolation method, either 'linear' or 'nearest'
         """
         if not all(cam.xyz == self.cam.xyz):
-            raise ValueError("Source and target cameras have different positions ('xyz')")
+            raise ValueError(
+                "Source and target cameras have different positions ('xyz')"
+            )
         # Construct grid in target image
         u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
         v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))
@@ -185,9 +192,13 @@ class Image(object):
         I = self.read()
         if I.ndim < 3:
             I = np.expand_dims(I, axis=2)
-        pI = np.full((int(cam.imgsz[1]), int(cam.imgsz[0]), I.shape[2]), np.nan, dtype=I.dtype)
+        pI = np.full(
+            (int(cam.imgsz[1]), int(cam.imgsz[0]), I.shape[2]), np.nan, dtype=I.dtype
+        )
         # Sample source image at target grid
         for i in range(pI.shape[2]):
-            f = scipy.interpolate.RegularGridInterpolator((pv, pu), I[:, :, i], method=method, bounds_error=False)
+            f = scipy.interpolate.RegularGridInterpolator(
+                (pv, pu), I[:, :, i], method=method, bounds_error=False
+            )
             pI[:, :, i] = f(pvu).reshape(pI.shape[0:2])
         return pI

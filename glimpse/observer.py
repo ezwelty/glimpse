@@ -13,7 +13,8 @@ class Observer(object):
         images (list): Image objects with equal camera position (xyz),
             focal length (f), image size (imgsz) and
             strictly increasing in time (`datetime`)
-        datetimes (array): Image capture times, by default read from `images[i].datetime`
+        datetimes (array): Image capture times,
+            by default read from `images[i].datetime`
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
         correction: Curvature and refraction correction (see `Camera.project()`)
@@ -134,14 +135,14 @@ class Observer(object):
         if any(np.abs(duv) > 0.5):
             raise ValueError("Shift larger than 0.5 pixels")
         # Cell center coordinates (arbitrary origin)
-        cu = self.grid.x[0 : tile.shape[0]]  # x|cols
-        cv = self.grid.y[0 : tile.shape[1]]  # y|rows
+        cu = self.grid.x[0:tile.shape[0]]  # x|cols
+        cv = self.grid.y[0:tile.shape[1]]  # y|rows
         # Interpolate at shifted center coordinates
         tile = np.atleast_3d(tile)
         for i in range(tile.shape[2]):
             f = scipy.interpolate.RectBivariateSpline(cv, cu, tile[:, :, i], **kwargs)
             tile[:, :, i] = f(cv + duv[1], cu + duv[0], grid=True)
-        if tile.shape[2] is 1:
+        if tile.shape[2] == 1:
             return tile.squeeze(axis=2)
         else:
             return tile
@@ -180,8 +181,9 @@ class Observer(object):
 
         Arguments:
             tile (array): 2-d or 3-d array
-            box (array-like): Boundaries of tile in image coordinates (left, top, right, bottom).
-                If `None`, the upper-left corner of the upper-left pixel is placed at (0, 0).
+            box (array-like): Boundaries of tile in image coordinates
+                (left, top, right, bottom). If `None`, the upper-left corner of the
+                upper-left pixel is placed at (0, 0).
             axes (`matplotlib.axes.Axes`): Matplotlib axes to plot on
             **kwargs: Optional arguments to matplotlib.pyplot.imshow
 
@@ -225,7 +227,8 @@ class Observer(object):
         Set the x,y limits of the current matplotlib axes.
 
         Arguments:
-            box (array-like): Plot limits in image coordinates (left, top, right, bottom).
+            box (array-like): Plot limits in image coordinates
+                (left, top, right, bottom).
                 If `None`, uses the full extent of the images.
         """
         if box is None:
@@ -274,9 +277,9 @@ class Observer(object):
         The right subplot does not shift tiles; this represents the original
         uncorrected image alignment.
 
-        NOTE: The frame label ('<image index>: <image basename>') is drawn inside the axes
-        due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
-        See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
+        NOTE: The frame label ('<image index>: <image basename>') is drawn inside the
+        axes due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'. See
+        https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
 
         Arguments:
             uv (iterable): Image coordinate (u, v) of the center of the tile in
@@ -285,7 +288,8 @@ class Observer(object):
             size (iterable): Size of the image tiles to plot
             interval (number): Delay between frames in milliseconds
             subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
-            animation (dict): Additional arguments to 'matplotlib.animation.FuncAnimation()'
+            animation (dict): Additional arguments to
+                'matplotlib.animation.FuncAnimation()'
 
         Returns:
             `matplotlib.animation.FuncAnimation`
@@ -312,6 +316,7 @@ class Observer(object):
         )
         ax[1].set_xlim(uv[0] - halfsize[0], uv[0] + halfsize[0])
         ax[1].set_ylim(uv[1] + halfsize[1], uv[1] - halfsize[0])
+
         # Update plot
         def update_plot(i):
             puv = self.images[i].cam.project(dxyz, directions=True)[0]
@@ -359,13 +364,12 @@ class Observer(object):
         Animate image tiles tracking a moving point.
 
         The left subplot shows the first image centered on the first point position
-        (marked as a red dot).
-        The right subplot shows the nth image centered on the nth point position
-        (marked as a red dot) alongside previous positions
-        (marked as a yellow line with dots).
+        (marked as a red dot). The right subplot shows the nth image centered on the nth
+        point position (marked as a red dot) alongside previous positions (marked as a
+        yellow line with dots).
 
-        NOTE: The frame labels (('<image index>: <image basename>')) are drawn inside the axes
-        due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
+        NOTE: The frame labels (('<image index>: <image basename>')) are drawn inside
+        the axes due to limitations of 'matplotlib.animation.FuncAnimation(blit=True)'.
         See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
 
         Arguments:
@@ -375,7 +379,8 @@ class Observer(object):
             size (iterable): Size of the image tiles to plot
             interval (number): Delay between frames in milliseconds
             subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
-            animation (dict): Additional arguments to 'matplotlib.animation.FuncAnimation()'
+            animation (dict): Additional arguments to
+                'matplotlib.animation.FuncAnimation()'
 
         Returns:
             `matplotlib.animation.FuncAnimation`
@@ -415,6 +420,7 @@ class Observer(object):
             zorder=4,
             transform=ax[1].transAxes,
         )
+
         # Update plot
         def update_plot(i):
             j = np.where(frames == i)[0][0]

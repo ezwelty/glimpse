@@ -532,10 +532,15 @@ class _Points:
         Only vertices are preserved, so all curvature information is discarded.
         See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path
         """
-        commands = re.findall(r"[a-zA-Z]+", d)
+        regex = {
+            "cmd": re.compile(r"[a-zA-Z]+"),
+            "seq": re.compile(r"[^a-zA-Z]+"),
+            "coord": re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)")
+        }
+        commands = regex["cmd"].findall(d)
         parameters = [
-            [_num(si) for si in re.split(r"\s+|,", re.sub(r"^\s+|\s$", "", s))]
-            for s in re.findall(r"[0-9\-\.\,\s]+", d)
+            [_num(coord) for coord in regex["coord"].findall(seq)]
+            for seq in regex["seq"].findall(d)
         ]
         if commands and commands[-1] in ("Z", "z"):
             parameters.append([])

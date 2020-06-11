@@ -18,7 +18,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.6.1"
+python = "^3.6.1, <= 3.7.7"
 numpy = "^1.18.5"
 lmfit = "^1.0.1"
 pandas = "^1.0.4"
@@ -30,8 +30,8 @@ matplotlib = "^3.2.1"
 scikit-learn = "^0.23.1"
 shapely = "^1.7.0"
 pyproj = "^2.6.1"
-opencv-contrib-python-headless = "^4.2.0"
 GDAL = "2.4.4"
+opencv-contrib-python-nonfree-headless = "^4.1.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.4.3"

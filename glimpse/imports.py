@@ -16,8 +16,6 @@ import sys
 import time
 import traceback
 import warnings
-
-warnings.formatwarning = lambda msg, *args, **kwargs: f"[warning] {msg}\n"
 import xml.etree.ElementTree
 import inspect
 

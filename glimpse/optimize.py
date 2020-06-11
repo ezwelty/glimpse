@@ -1463,7 +1463,7 @@ class Cameras(object):
             # TODO: Map index to subindices for each control
             if index is None:
                 index = slice(None)
-            return np.vstack((control.observed() for control in self.controls))[index]
+            return np.vstack([control.observed() for control in self.controls])[index]
 
     def predicted(self, params=None, index=None):
         """
@@ -1486,7 +1486,7 @@ class Cameras(object):
             # TODO: Map index to subindices for each control
             if index is None:
                 index = slice(None)
-            result = np.vstack((control.predicted() for control in self.controls))[
+            result = np.vstack([control.predicted() for control in self.controls])[
                 index
             ]
         if params is not None:

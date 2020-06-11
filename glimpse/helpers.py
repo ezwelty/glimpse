@@ -1460,7 +1460,7 @@ def interpolate_line(
         vertices = vertices[sort_index, :]
     # Interpolate each dimension and combine
     result = np.column_stack(
-        (np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1]))
+        [np.interp(xi, x, vertices[:, i]) for i in range(vertices.shape[1])]
     )
     if fill == "endpoints":
         if error is False:

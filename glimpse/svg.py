@@ -73,7 +73,7 @@ def read(path, key=None, imgsz=None):
     svg = svgs[0]
     # Check <image> tags
     images = list(tree.iter("image"))
-    if imgsz and not images:
+    if imgsz is not None and not images:
         raise ValueError("Cannot apply `imgsz` since no <image> found")
     if len(svgs) > 1:
         warnings.warn("Transforming coordinates to first of multiple <image>")
@@ -115,8 +115,8 @@ def read(path, key=None, imgsz=None):
     # Scale to image size
     if imgsz is None and img:
         imgsz = img["o"]["width"], img["o"]["height"]
-    if imgsz and img:
-        if imgsz != (img["t"]["width"], img["t"]["height"]):
+    if imgsz is not None and img:
+        if imgsz[0] != img["t"]["width"] or imgsz[1] != img["t"]["height"]:
             scale = imgsz[0] / img["t"]["width"], imgsz[1] / img["t"]["height"]
 
     def transform(e):

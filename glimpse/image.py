@@ -98,7 +98,7 @@ class Image(object):
             args = {}
             if resize:
                 args["buf_xsize"], args["buf_ysize"] = cam_size
-            if box and not cache:
+            if box is not None and not cache:
                 # Resize box to actual image size
                 xscale, yscale = size[0] / cam_size[0], size[1] / cam_size[1]
                 # Read image subset

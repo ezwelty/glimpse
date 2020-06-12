@@ -2051,6 +2051,12 @@ class KeypointMatcher(object):
         self.keypoints = None
         self.matches = None
 
+    def _prepare_image_basenames(self):
+        basenames = [helpers.strip_path(img.path) for img in self.images]
+        if len(basenames) != len(set(basenames)):
+            raise ValueError("Image basenames are not unique")
+        return basenames
+
     def _prepare_image(self, I):
         """
         Prepare image data for keypoint detection.
@@ -2094,9 +2100,10 @@ class KeypointMatcher(object):
             **params: Additional arguments to `optimize.detect_keypoints()`
         """
         if clear_keypoints and not path:
-            raise ValueError("path is required if clear_keypoints is True")
+            raise ValueError("path is required when clear_keypoints is True")
         if path and os.path.isfile(path):
             raise ValueError("path must be a directory")
+        basenames = self._prepare_image_basenames()
         # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks,) * len(self.images)
@@ -2108,7 +2115,7 @@ class KeypointMatcher(object):
         def process(i, img):
             print(img.path)
             if path:
-                outpath = os.path.join(path, helpers.strip_path(img.path) + ".pkl")
+                outpath = os.path.join(path, basenames[i] + ".pkl")
                 written = os.path.isfile(outpath)
             else:
                 written = False
@@ -2145,9 +2152,9 @@ class KeypointMatcher(object):
         min_nearest=0,
         seq=None,
         imgs=None,
+        keypoints_path=None,
         path=None,
         overwrite=False,
-        skip_missing=False,
         clear_keypoints=True,
         clear_matches=False,
         parallel=False,
@@ -2175,13 +2182,11 @@ class KeypointMatcher(object):
             imgs (iterable): Index of images to require at least one of
                 in each matched image pair. If `None`, all image pairs meeting
                 the criteria are matched.
-            path (str): Directory for match files.
-                If `None`, no files are written.
+            keypoints_path (str): Directory with keypoint files.
+            path (str): Directory for match files. If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing match files
-            skip_missing (bool): Whether to skip building and writing a match if
-                file is missing
             clear_keypoints (bool): Whether to clear cached keypoints
-                (`Image.keypoints`)
+                (`self.keypoints`)
             clear_matches (bool): Whether to clear matches rather than return them
                 (requires `path`). Useful for avoiding memory overruns when
                 processing very large image sets.
@@ -2196,18 +2201,18 @@ class KeypointMatcher(object):
             **params: Additional arguments to `optimize.match_keypoints()`
         """
         if clear_matches and not path:
-            raise ValueError("path must be set when clear_matches=True")
+            raise ValueError("path is required when clear_keypoints is True")
+        if path and os.path.isfile(path):
+            raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)
         params = helpers.merge_dicts(params, dict(return_ratios=weights))
-        # Compute basenames
-        if path:
-            basenames = [helpers.strip_path(img.path) for img in self.images]
-            if len(basenames) != len(set(basenames)):
-                raise ValueError("Image basenames are not unique")
+        basenames = self._prepare_image_basenames()
+        if self.keypoints is None:
+            self.keypoints = [None] * len(self.images)
         # Match images
         n = len(self.images)
         if maxdt is None:
-            matching_images = [tuple(range(i + 1, n)) for i in range(n)]
+            matching_images = [np.arange(i + 1, n) for i in range(n)]
         else:
             datetimes = np.array([img.datetime for img in self.images])
             ends = np.searchsorted(datetimes, datetimes + maxdt, side="right")
@@ -2235,8 +2240,16 @@ class KeypointMatcher(object):
                 print("Matching", i, "->", ", ".join(js.astype(str)))
             matches = []
             imgA = self.images[i]
+            if self.keypoints[i] is None and keypoints_path:
+                self.keypoints[i] = helpers.read_pickle(
+                    os.path.join(keypoints_path, basenames[i] + ".pkl")
+                )
             for j in js:
                 imgB = self.images[j]
+                if self.keypoints[j] is None and keypoints_path:
+                    self.keypoints[j] = helpers.read_pickle(
+                        os.path.join(keypoints_path, basenames[j] + ".pkl")
+                    )
                 if path:
                     outfile = os.path.join(
                         path, basenames[i] + "-" + basenames[j] + ".pkl"
@@ -2249,11 +2262,9 @@ class KeypointMatcher(object):
                         if as_type:
                             match = match.as_type(as_type)
                         matches.append(match)
-                elif skip_missing:
-                    matches.append(False)
                 else:
                     result = match_keypoints(
-                        imgA.read_keypoints(), imgB.read_keypoints(), **params
+                        self.keypoints[i], self.keypoints[j], **params
                     )
                     match = Matches(
                         cams=(imgA.cam, imgB.cam),
@@ -2267,7 +2278,7 @@ class KeypointMatcher(object):
                             match = match.as_type(as_type)
                         matches.append(match)
             if clear_keypoints:
-                imgA.keypoints = None
+                self.keypoints[i] = None
             return None if clear_matches else matches
 
         def reduce(matches):
@@ -2296,8 +2307,6 @@ class KeypointMatcher(object):
                 )  # row ranges
                 # Convert to Coordinate Format (COO) matrix
                 matches = matches.tocoo()
-                if skip_missing:
-                    matches.eliminate_zeros()
         if clear_matches:
             self.matches = None
         else:

@@ -19,7 +19,7 @@ def _strip_etree_namespaces(tree):
     for e in tree.iter():
         e.tag = regex.sub("", e.tag)
         attrib = {}
-        for key in e.attrib.keys():
+        for key in e.attrib:
             new_key = regex.sub("", key)
             new_value = regex.sub("", e.attrib[key])
             attrib[new_key] = new_value

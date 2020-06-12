@@ -292,7 +292,7 @@ class Camera(object):
             A :class:`Camera` object
         """
         json_args = helpers.read_json(path)
-        for key in json_args.keys():
+        for key in json_args:
             # Conversion to float converts None to nan
             value = np.array(json_args[key], dtype=float)
             if np.isnan(value).all():

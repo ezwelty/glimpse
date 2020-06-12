@@ -1419,10 +1419,10 @@ class Cameras(object):
         for i, idx in enumerate(self.group_indices):
             for j in idx:
                 self.cams[j].vector[self.group_masks[i]] = params[
-                    self.group_breaks[i]:self.group_breaks[i + 1]
+                    self.group_breaks[i] : self.group_breaks[i + 1]
                 ]
                 self.cams[j].vector[self.cam_masks[j]] = params[
-                    self.cam_breaks[j]:self.cam_breaks[j + 1]
+                    self.cam_breaks[j] : self.cam_breaks[j + 1]
                 ]
 
     def reset_cameras(self, vectors=None, save=False):
@@ -2136,9 +2136,7 @@ class KeypointMatcher(object):
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
             self.keypoints = pool.map(
-                func=process,
-                sequence=tuple(enumerate(self.images)),
-                star=True
+                func=process, sequence=tuple(enumerate(self.images)), star=True
             )
 
     def build_matches(

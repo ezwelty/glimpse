@@ -10,9 +10,9 @@ def read(path, crs=None, key=None, **kwargs):
             obj, helpers.sp_transform, current=4326, target=crs
         )
     if key:
-        obj["features"] = dict(
-            (feature["properties"][key], feature) for feature in obj["features"]
-        )
+        obj["features"] = {
+            feature["properties"][key]: feature for feature in obj["features"]
+        }
     return obj
 
 
@@ -86,13 +86,13 @@ def _depth(geometry):
     """
     Return Geometry coordinate depth.
     """
-    # depths = dict(
-    #     Point=0,
-    #     MultiPoint=1,
-    #     LineString=1,
-    #     MultiLineString=2,
-    #     Polygon=2,
-    #     MultiPolygon=3)
+    # depths = {
+    #     "Point": 0,
+    #     "MultiPoint": 1,
+    #     "LineString": 1,
+    #     "MultiLineString": 2,
+    #     "Polygon": 2,
+    #     "MultiPolygon": 3}
     coords = geometry["coordinates"]
     n = -1
     while np.iterable(coords):

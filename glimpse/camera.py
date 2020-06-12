@@ -879,7 +879,7 @@ class Camera(object):
                 else:
                     tile_values = depth[is_in, None]
             # Build DataFrame for fast groupby operation
-            df = pandas.DataFrame(dict(row=rc[:, 0], col=rc[:, 1]))
+            df = pandas.DataFrame({"row": rc[:, 0], "col": rc[:, 1]})
             for i in range(tile_values.shape[1]):
                 df.insert(df.shape[1], i, tile_values[:, i])
             # Aggregate values
@@ -1196,7 +1196,7 @@ class Camera(object):
         else:
             dxyz = xyz - self.xyz
             if correction is True:
-                correction = dict()
+                correction = {}
             if isinstance(correction, dict):
                 # Apply elevation correction
                 dxyz[:, 2] += helpers.elevation_corrections(

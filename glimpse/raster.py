@@ -946,7 +946,7 @@ class Raster(Grid):
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
 
     def fill_crevasses(
-        self, maximum=dict(size=5), gaussian=dict(sigma=5), mask=None, fill=False
+        self, maximum={"size": 5}, gaussian={"sigma": 5}, mask=None, fill=False
     ):
         """
         Apply a maximum filter to `Z`, then perform Gaussian smoothing.
@@ -998,7 +998,7 @@ class Raster(Grid):
         dz = self.Z.ravel() - origin[2]
         dxy = dx ** 2 + dy ** 2  # wait to square root
         if correction is True:
-            correction = dict()
+            correction = {}
         if isinstance(correction, dict):
             dz += helpers.elevation_corrections(squared_distances=dxy, **correction)
         dxy = np.sqrt(dxy)
@@ -1086,7 +1086,7 @@ class Raster(Grid):
         """
         n = len(headings)
         if correction is True:
-            correction = dict()
+            correction = {}
         # Compute ray directions (2d)
         headings = np.array(headings, dtype=float)
         thetas = -(headings - 90) * (np.pi / 180)

@@ -36,9 +36,9 @@ class Tracker(object):
         observers,
         viewshed=None,
         resample_method="systematic",
-        grayscale=dict(method="average"),
-        highpass=dict(size=(5, 5)),
-        interpolation=dict(kx=3, ky=3),
+        grayscale={"method": "average"},
+        highpass={"size": (5, 5)},
+        interpolation={"kx": 3, "ky": 3},
     ):
         self.observers = observers
         self.viewshed = viewshed
@@ -348,17 +348,17 @@ class Tracker(object):
         else:
             means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
-        kwargs = dict(
-            datetimes=datetimes,
-            means=means,
-            particles=particles,
-            weights=weights,
-            tracker=self,
-            images=matching_images,
-            params=params,
-            errors=errors,
-            warnings=all_warnings,
-        )
+        kwargs = {
+            "datetimes": datetimes,
+            "means": means,
+            "particles": particles,
+            "weights": weights,
+            "tracker": self,
+            "images": matching_images,
+            "params": params,
+            "errors": errors,
+            "warnings": all_warnings,
+        }
         if return_covariances:
             kwargs["covariances"] = sigmas
         else:
@@ -486,9 +486,12 @@ class Tracker(object):
         uv = self.observers[obs].project(xyz, img=img).ravel()
         box = self.observers[obs].tile_box(uv, size=tile_size)
         # Build template
-        template = dict(
-            obs=obs, img=img, box=box, duv=uv - box.reshape(2, -1).mean(axis=0)
-        )
+        template = {
+            "obs": obs,
+            "img": img,
+            "box": box,
+            "duv": uv - box.reshape(2, -1).mean(axis=0),
+        }
         template["tile"], template["histogram"] = self.extract_tile(
             obs=obs, img=img, box=box, return_histogram=True
         )
@@ -704,16 +707,16 @@ class Tracks(object):
             tracks = slice(None)
         if mean:
             if mean is True:
-                mean = dict()
-            default = dict(color="black")
+                mean = {}
+            default = {"color": "black"}
             mean = {**default, **mean}
             matplotlib.pyplot.plot(
                 self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean
             )
         if start:
             if start is True:
-                start = dict()
-            default = dict(color="black", marker=".", linestyle="none")
+                start = {}
+            default = {"color": "black", "marker": ".", "linestyle": "none"}
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
             start = {**default, **start}
@@ -722,8 +725,8 @@ class Tracks(object):
             )
         if sigma:
             if sigma is True:
-                sigma = dict()
-            default = dict(color="black", alpha=0.25)
+                sigma = {}
+            default = {"color": "black", "alpha": 0.25}
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
             sigma = {**default, **sigma}
@@ -747,7 +750,7 @@ class Tracks(object):
         """
         if tracks is None:
             tracks = slice(None)
-        default = dict(angles="xy")
+        default = {"angles": "xy"}
         kwargs = {**default, **kwargs}
         for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
             matplotlib.pyplot.quiver(
@@ -774,14 +777,14 @@ class Tracks(object):
             tracks = slice(None)
         if mean:
             if mean is True:
-                mean = dict()
-            default = dict(color="black")
+                mean = {}
+            default = {"color": "black"}
             mean = {**default, **mean}
             matplotlib.pyplot.plot(self.datetimes, self.vxyz[tracks, :, dim].T, **mean)
         if sigma:
             if sigma is True:
-                sigma = dict()
-            default = dict(facecolor="black", edgecolor="none", alpha=0.25)
+                sigma = {}
+            default = {"facecolor": "black", "edgecolor": "none", "alpha": 0.25}
             if isinstance(mean, dict) and "color" in mean:
                 default["facecolor"] = mean["color"]
             sigma = {**default, **sigma}
@@ -802,8 +805,8 @@ class Tracks(object):
         particles=None,
         map_size=(20, 20),
         img_size=(100, 100),
-        subplots=dict(),
-        animation=dict(),
+        subplots={},
+        animation={},
     ):
         """
         Animate track.

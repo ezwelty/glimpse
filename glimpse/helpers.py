@@ -719,9 +719,9 @@ def read_geojson(path, key=None, crs=None, **kwargs):
     if crs:
         apply_geojson_coords(obj, sp_transform, current=4326, target=crs)
     if key:
-        obj["features"] = dict(
-            (feature["properties"][key], feature) for feature in obj["features"]
-        )
+        obj["features"] = {
+            feature["properties"][key]: feature for feature in obj["features"]
+        }
     return obj
 
 
@@ -1687,7 +1687,7 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
         array: Float array of shape `shape` with aggregated point values
             where available and `NaN` elsewhere
     """
-    df = pandas.DataFrame(dict(row=rows, col=cols, value=values))
+    df = pandas.DataFrame({"row": rows, "col": cols, "value": values})
     groups = df.groupby(("row", "col")).aggregate(fun).reset_index()
     idx = np.ravel_multi_index((groups.row.values, groups.col.values), shape)
     grid = np.full(shape, np.nan)

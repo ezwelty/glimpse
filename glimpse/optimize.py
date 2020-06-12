@@ -107,12 +107,17 @@ class Points(object):
         uv = self.observed()
         puv = self.predicted()
         duv = scale * (puv - uv)
-        defaults = dict(
-            scale=1, scale_units="xy", angles="xy", units="xy", width=width, color="red"
-        )
+        defaults = {
+            "scale": 1,
+            "scale_units": "xy",
+            "angles": "xy",
+            "units": "xy",
+            "width": width,
+            "color": "red",
+        }
         if unselected is not None:
             if not isinstance(unselected, dict):
-                unselected = dict(color=unselected)
+                unselected = {"color": unselected}
             unselected = {**defaults, **unselected}
             matplotlib.pyplot.quiver(
                 uv[other_index, 0],
@@ -123,7 +128,7 @@ class Points(object):
             )
         if selected is not None:
             if not isinstance(selected, dict):
-                selected = dict(color=selected)
+                selected = {"color": selected}
             selected = {**defaults, **selected}
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
@@ -307,15 +312,15 @@ class Lines(object):
         # Plot image lines
         if observed is not None:
             if not isinstance(observed, dict):
-                observed = dict(color=observed)
-            observed = {**dict(color="green"), **observed}
+                observed = {"color": observed}
+            observed = {**{"color": "green"}, **observed}
             for uv in self.uvs:
                 matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
         # Plot world lines
         if predicted is not None:
             if not isinstance(predicted, dict):
-                predicted = dict(color=predicted)
-            predicted = {**dict(color="yellow"), **predicted}
+                predicted = {"color": predicted}
+            predicted = {**{"color": "yellow"}, **predicted}
             puvs = self.project()
             for puv in puvs:
                 matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
@@ -330,17 +335,17 @@ class Lines(object):
             distances = helpers.pairwise_distance(uv, puv)
             min_index = np.argmin(distances, axis=1)
             duv = scale * (puv[min_index, :] - uv)
-            defaults = dict(
-                scale=1,
-                scale_units="xy",
-                angles="xy",
-                units="xy",
-                width=width,
-                color="red",
-            )
+            defaults = {
+                "scale": 1,
+                "scale_units": "xy",
+                "angles": "xy",
+                "units": "xy",
+                "width": width,
+                "color": "red",
+            }
             if unselected is not None:
                 if not isinstance(unselected, dict):
-                    unselected = dict(color=unselected)
+                    unselected = {"color": unselected}
                 unselected = {**defaults, **unselected}
                 matplotlib.pyplot.quiver(
                     uv[index, 0],
@@ -351,7 +356,7 @@ class Lines(object):
                 )
             if selected is not None:
                 if not isinstance(selected, dict):
-                    selected = dict(color=selected)
+                    selected = {"color": selected}
                 selected = {**defaults, **selected}
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
@@ -495,12 +500,17 @@ class Matches(object):
         uv = self.observed(cam=cam)
         puv = self.predicted(cam=cam)
         duv = scale * (puv - uv)
-        defaults = dict(
-            scale=1, scale_units="xy", angles="xy", units="xy", width=width, color="red"
-        )
+        defaults = {
+            "scale": 1,
+            "scale_units": "xy",
+            "angles": "xy",
+            "units": "xy",
+            "width": width,
+            "color": "red",
+        }
         if unselected is not None:
             if not isinstance(unselected, dict):
-                unselected = dict(color=unselected)
+                unselected = {"color": unselected}
             unselected = {**defaults, **unselected}
             matplotlib.pyplot.quiver(
                 uv[other_index, 0],
@@ -511,7 +521,7 @@ class Matches(object):
             )
         if selected is not None:
             if not isinstance(selected, dict):
-                selected = dict(color=selected)
+                selected = {"color": selected}
             selected = {**defaults, **selected}
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
@@ -980,13 +990,13 @@ class Cameras(object):
         self.controls = controls
         ncams = len(self.cams)
         if cam_params is None:
-            cam_params = [dict()] * ncams
+            cam_params = [{}] * ncams
         self.cam_params = cam_params
         if group_indices is None:
             group_indices = [range(ncams)]
         self.group_indices = group_indices
         if group_params is None:
-            group_params = [dict()] * len(self.group_indices)
+            group_params = [{}] * len(self.group_indices)
         self.group_params = group_params
         self.weights = weights
         # Build lmfit parameters
@@ -1218,7 +1228,7 @@ class Cameras(object):
             array: Parameter min and max bounds (20, 2)
         """
         if params is None:
-            params = dict()
+            params = {}
         attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
         indices = (0, 3, 6, 8, 10, 12, 18, 20)
         mask = np.zeros(20, dtype=bool)
@@ -1614,7 +1624,7 @@ class Cameras(object):
         result = lmfit.minimize(
             params=self.params,
             fcn=self.residuals,
-            kws=dict(index=index),
+            kws={"index": index},
             iter_cb=callback,
             method=method,
             nan_policy=nan_policy,
@@ -1955,8 +1965,8 @@ def match_keypoints(
     mask=None,
     max_ratio=None,
     max_distance=None,
-    indexParams=dict(algorithm=1, trees=5),
-    searchParams=dict(checks=50),
+    indexParams={"algorithm": 1, "trees": 5},
+    searchParams={"checks": 50},
     return_ratios=False,
 ):
     """
@@ -2045,7 +2055,7 @@ class KeypointMatcher(object):
             self.clahe = None
         else:
             if clahe is True:
-                clahe = dict()
+                clahe = {}
             self.clahe = cv2.createCLAHE(**clahe)
         # Placeholders
         self.keypoints = None
@@ -2205,7 +2215,7 @@ class KeypointMatcher(object):
         if path and os.path.isfile(path):
             raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)
-        params = {**params, **dict(return_ratios=weights)}
+        params = {**params, **{"return_ratios": weights}}
         basenames = self._prepare_image_basenames()
         if self.keypoints is None:
             self.keypoints = [None] * len(self.images)

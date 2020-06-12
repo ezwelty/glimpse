@@ -29,7 +29,7 @@ def test_ransac_camera_viewdir(tol=0.1):
     )
     matches = glimpse.optimize.Matches(cams=(imgA.cam, imgB.cam), uvs=(uvA, uvB))
     model = glimpse.optimize.Cameras(
-        cams=[imgB.cam], controls=[matches], cam_params=[dict(viewdir=True)]
+        cams=[imgB.cam], controls=[matches], cam_params=[{"viewdir": True}]
     )
     values = model.fit()
     assert any(abs(values - viewdir) > tol)

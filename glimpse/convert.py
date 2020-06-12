@@ -231,9 +231,9 @@ class MatlabCamera(_IncomingCamera):
                 return [float(value) * scale for value in values]
 
         if sigmas:
-            lengths = dict(fc_error=2, cc_error=2, alpha_c_error=1, kc_error=5)
+            lengths = {"fc_error": 2, "cc_error": 2, "alpha_c_error": 1, "kc_error": 5}
         else:
-            lengths = dict(fc=2, cc=2, alpha_c=1, kc=5, nx=1, ny=1)
+            lengths = {"fc": 2, "cc": 2, "alpha_c": 1, "kc": 5, "nx": 1, "ny": 1}
         kwargs = {
             param: parse_param(param, length) for param, length in lengths.items()
         }
@@ -434,18 +434,18 @@ class PhotoModelerCamera(_OutgoingCamera):
             sigmas (bool): Whether to read parameter means (False) or
                 standard deviations (True)
         """
-        params = dict(
-            focal="Focal Length",
-            xp="Xp",
-            yp="Yp",
-            fw="Fw",
-            fh="Fh",
-            k1="K1",
-            k2="K2",
-            k3="K3",
-            p1="P1",
-            p2="P2",
-        )
+        params = {
+            "focal": "Focal Length",
+            "xp": "Xp",
+            "yp": "Yp",
+            "fw": "Fw",
+            "fh": "Fh",
+            "k1": "K1",
+            "k2": "K2",
+            "k3": "K3",
+            "p1": "P1",
+            "p2": "P2",
+        }
         with open(path, mode="r") as fp:
             txt = fp.read()
         if sigmas:

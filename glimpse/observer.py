@@ -266,8 +266,8 @@ class Observer(object):
         frames=None,
         size=(100, 100),
         interval=200,
-        subplots=dict(),
-        animation=dict(),
+        subplots={},
+        animation={},
     ):
         """
         Animate image tiles centered around a target point.
@@ -357,8 +357,8 @@ class Observer(object):
         frames=None,
         size=(100, 100),
         interval=200,
-        subplots=dict(),
-        animation=dict(),
+        subplots={},
+        animation={},
     ):
         """
         Animate image tiles tracking a moving point.

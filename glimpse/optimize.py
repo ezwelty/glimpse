@@ -2032,6 +2032,8 @@ class KeypointMatcher(object):
         images (array): Image objects in ascending temporal order
         clahe (cv2.CLAHE): CLAHE object
         matches (scipy.sparse.coo.coo_matrix): Sparse matrix of image-image `Matches`
+        keypoints (list): List of image keypoints
+            (see `optimize.detect_keypoints()`).
     """
 
     def __init__(self, images, clahe=False):
@@ -2046,6 +2048,7 @@ class KeypointMatcher(object):
                 clahe = dict()
             self.clahe = cv2.createCLAHE(**clahe)
         # Placeholders
+        self.keypoints = None
         self.matches = None
 
     def _prepare_image(self, I):
@@ -2061,6 +2064,7 @@ class KeypointMatcher(object):
     def build_keypoints(
         self,
         masks=None,
+        path=None,
         overwrite=False,
         clear_images=True,
         clear_keypoints=False,
@@ -2070,51 +2074,72 @@ class KeypointMatcher(object):
         """
         Build image keypoints and their descriptors.
 
-        The result for each `Image` is stored in `Image.keypoints`
-        and written to a binary `pickle` file if `Image.keypoints_path` is set.
-        If `parallel == True`, `Image` attributes are not modified (for speed),
-        so `Image.keypoints_path` must be set for all images.
+        Results are stored in `self.keypoints` and/or written to a binary
+        `pickle` file with name `basename.pkl`.
 
         Arguments:
             masks (iterable): Boolean array(s) (uint8) indicating regions in which to
                 detect keypoints
-            overwrite (bool): Whether to recompute and overwrite existing keypoints
+            path (str): Directory path for keypoint files.
+                If `None`, no files are written.
+            overwrite (bool): Whether to recompute and overwrite existing file or
+                in-memory keypoints.
             clear_images (bool): Whether to clear cached image data
-                (`self.observer.images[i].I`)
+                (`self.images[i].I`).
             clear_keypoints (bool): Whether to clear cached keypoints
-                (`Image.keypoints`).
-                Ignored if `Image.keypoints_path` is `None`.
+                (`self.keypoints[i]`).
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
                 defaults to `os.cpu_count()`.
             **params: Additional arguments to `optimize.detect_keypoints()`
         """
+        if clear_keypoints and not path:
+            raise ValueError("path is required if clear_keypoints is True")
+        if path and os.path.isfile(path):
+            raise ValueError("path must be a directory")
         # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
             masks = (masks,) * len(self.images)
         parallel = helpers._parse_parallel(parallel)
-        if parallel and any((img.keypoints_path is None for img in self.images)):
-            raise ValueError("Image.keypoints_path must be set for parallel processing")
+        if not self.keypoints:
+            self.keypoints = [None] * len(self.images)
 
         # Define parallel process
-        def process(img, mask):
+        def process(i, img):
             print(img.path)
-            no_keypoints_file = img.keypoints_path is None or not os.path.isfile(
-                img.keypoints_path
-            )
-            if overwrite or (img.keypoints is None and no_keypoints_file):
+            if path:
+                outpath = os.path.join(path, helpers.strip_path(img.path) + ".pkl")
+                written = os.path.isfile(outpath)
+            else:
+                written = False
+            keypoints = self.keypoints[i]
+            read = keypoints is not None
+            if not read and written and not clear_keypoints:
+                # Read keypoints from file
+                keypoints = helpers.read_pickle(outpath)
+            elif read and not written and path:
+                # Write keypoints to file
+                helpers.write_pickle(keypoints, path=outpath)
+            elif (not read and not written) or overwrite:
+                # Detect keypoints
                 I = self._prepare_image(img.read())
-                img.keypoints = detect_keypoints(I, mask=mask, **params)
-                if img.keypoints_path:
-                    img.write_keypoints()
-                    if clear_keypoints:
-                        img.keypoints = None
+                keypoints = detect_keypoints(I, mask=masks[i], **params)
+                if path:
+                    # Write keypoints to file
+                    helpers.write_pickle(keypoints, path=outpath)
                 if clear_images:
                     img.I = None
+            if clear_keypoints:
+                keypoints = None
+            return keypoints
 
         # Run process in parallel
         with config._MapReduce(np=parallel) as pool:
-            pool.map(process, tuple(zip(self.images, masks)), star=True)
+            self.keypoints = pool.map(
+                func=process,
+                sequence=tuple(enumerate(self.images)),
+                star=True
+            )
 
     def build_matches(
         self,

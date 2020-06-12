@@ -1173,7 +1173,7 @@ class CartesianMotionModel(MotionModel):
         Returns:
             array: Particle log likelihoods, or `None`
         """
-        if self.dem_sigma is 0:
+        if self.dem_sigma == 0:
             return None
         else:
             z = self._sample_dem(particles[:, 0:2])

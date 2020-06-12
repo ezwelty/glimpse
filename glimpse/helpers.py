@@ -982,7 +982,7 @@ def boolean_split(x, mask, axis=0, circular=False, include="all"):
         index = slice(1, None, 2) if mask[0] else slice(0, None, 2)
         return splits[index]
     else:
-        return list()
+        return []
 
 
 def project_points_plane(points, plane):

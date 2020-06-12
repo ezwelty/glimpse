@@ -27,21 +27,6 @@ from .imports import (
 # ---- General ---- #
 
 
-def merge_dicts(*args):
-    """
-    Merge dictionaries.
-
-    Precedence goes to the latter value for each key.
-
-    Arguments:
-        *args: Dictionaries
-    """
-    merge = dict()
-    for d in args:
-        merge.update(d)
-    return merge
-
-
 def format_list(x, length=None, default=None, dtype=None):
     """
     Return object as a formatted list.

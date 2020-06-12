@@ -298,7 +298,7 @@ class Camera(object):
             if np.isnan(value).all():
                 value = None
             json_args[key] = value
-        args = helpers.merge_dicts(json_args, kwargs)
+        args = {**json_args, **kwargs}
         return cls(**args)
 
     # ---- Methods (static) ----

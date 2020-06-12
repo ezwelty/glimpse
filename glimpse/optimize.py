@@ -113,7 +113,7 @@ class Points(object):
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected = dict(color=unselected)
-            unselected = helpers.merge_dicts(defaults, unselected)
+            unselected = {**defaults, **unselected}
             matplotlib.pyplot.quiver(
                 uv[other_index, 0],
                 uv[other_index, 1],
@@ -124,7 +124,7 @@ class Points(object):
         if selected is not None:
             if not isinstance(selected, dict):
                 selected = dict(color=selected)
-            selected = helpers.merge_dicts(defaults, selected)
+            selected = {**defaults, **selected}
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
             )
@@ -308,14 +308,14 @@ class Lines(object):
         if observed is not None:
             if not isinstance(observed, dict):
                 observed = dict(color=observed)
-            observed = helpers.merge_dicts(dict(color="green"), observed)
+            observed = {**dict(color="green"), **observed}
             for uv in self.uvs:
                 matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
         # Plot world lines
         if predicted is not None:
             if not isinstance(predicted, dict):
                 predicted = dict(color=predicted)
-            predicted = helpers.merge_dicts(dict(color="yellow"), predicted)
+            predicted = {**dict(color="yellow"), **predicted}
             puvs = self.project()
             for puv in puvs:
                 matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
@@ -341,7 +341,7 @@ class Lines(object):
             if unselected is not None:
                 if not isinstance(unselected, dict):
                     unselected = dict(color=unselected)
-                unselected = helpers.merge_dicts(defaults, unselected)
+                unselected = {**defaults, **unselected}
                 matplotlib.pyplot.quiver(
                     uv[index, 0],
                     uv[index, 1],
@@ -352,7 +352,7 @@ class Lines(object):
             if selected is not None:
                 if not isinstance(selected, dict):
                     selected = dict(color=selected)
-                selected = helpers.merge_dicts(defaults, selected)
+                selected = {**defaults, **selected}
                 matplotlib.pyplot.quiver(
                     uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
                 )
@@ -501,7 +501,7 @@ class Matches(object):
         if unselected is not None:
             if not isinstance(unselected, dict):
                 unselected = dict(color=unselected)
-            unselected = helpers.merge_dicts(defaults, unselected)
+            unselected = {**defaults, **unselected}
             matplotlib.pyplot.quiver(
                 uv[other_index, 0],
                 uv[other_index, 1],
@@ -512,7 +512,7 @@ class Matches(object):
         if selected is not None:
             if not isinstance(selected, dict):
                 selected = dict(color=selected)
-            selected = helpers.merge_dicts(defaults, selected)
+            selected = {**defaults, **selected}
             matplotlib.pyplot.quiver(
                 uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
             )
@@ -2205,7 +2205,7 @@ class KeypointMatcher(object):
         if path and os.path.isfile(path):
             raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)
-        params = helpers.merge_dicts(params, dict(return_ratios=weights))
+        params = {**params, **dict(return_ratios=weights)}
         basenames = self._prepare_image_basenames()
         if self.keypoints is None:
             self.keypoints = [None] * len(self.images)

@@ -706,7 +706,7 @@ class Tracks(object):
             if mean is True:
                 mean = dict()
             default = dict(color="black")
-            mean = helpers.merge_dicts(default, mean)
+            mean = {**default, **mean}
             matplotlib.pyplot.plot(
                 self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean
             )
@@ -716,7 +716,7 @@ class Tracks(object):
             default = dict(color="black", marker=".", linestyle="none")
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
-            start = helpers.merge_dicts(default, start)
+            start = {**default, **start}
             matplotlib.pyplot.plot(
                 self.xyz[tracks, 0, 0], self.xyz[tracks, 0, 1], **start
             )
@@ -726,7 +726,7 @@ class Tracks(object):
             default = dict(color="black", alpha=0.25)
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
-            sigma = helpers.merge_dicts(default, sigma)
+            sigma = {**default, **sigma}
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
                 matplotlib.pyplot.errorbar(
                     self.xyz[i, :, 0],
@@ -748,7 +748,7 @@ class Tracks(object):
         if tracks is None:
             tracks = slice(None)
         default = dict(angles="xy")
-        kwargs = helpers.merge_dicts(default, kwargs)
+        kwargs = {**default, **kwargs}
         for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
             matplotlib.pyplot.quiver(
                 self.xyz[i, :, 0],
@@ -776,7 +776,7 @@ class Tracks(object):
             if mean is True:
                 mean = dict()
             default = dict(color="black")
-            mean = helpers.merge_dicts(default, mean)
+            mean = {**default, **mean}
             matplotlib.pyplot.plot(self.datetimes, self.vxyz[tracks, :, dim].T, **mean)
         if sigma:
             if sigma is True:
@@ -784,7 +784,7 @@ class Tracks(object):
             default = dict(facecolor="black", edgecolor="none", alpha=0.25)
             if isinstance(mean, dict) and "color" in mean:
                 default["facecolor"] = mean["color"]
-            sigma = helpers.merge_dicts(default, sigma)
+            sigma = {**default, **sigma}
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
                 matplotlib.pyplot.fill_between(
                     self.datetimes,

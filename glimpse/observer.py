@@ -135,8 +135,8 @@ class Observer(object):
         if any(np.abs(duv) > 0.5):
             raise ValueError("Shift larger than 0.5 pixels")
         # Cell center coordinates (arbitrary origin)
-        cu = self.grid.x[0:tile.shape[0]]  # x|cols
-        cv = self.grid.y[0:tile.shape[1]]  # y|rows
+        cu = self.grid.x[0 : tile.shape[0]]  # x|cols
+        cv = self.grid.y[0 : tile.shape[1]]  # y|rows
         # Interpolate at shifted center coordinates
         tile = np.atleast_3d(tile)
         for i in range(tile.shape[2]):

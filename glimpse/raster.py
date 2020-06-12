@@ -859,7 +859,7 @@ class Raster(Grid):
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
-            self.Z = self.Z[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
+            self.Z = self.Z[rows[0] : rows[1] + 1, cols[0] : cols[1] + 1]
             self.xlim = xlim
             self.ylim = ylim
         if zlim is not None:
@@ -1023,7 +1023,7 @@ class Raster(Grid):
                 return np.ones(self.Z.shape, dtype=bool)
         rings = np.append(rings, len(ix))
         # Compute elevation ratio
-        first_ring = ix[rings[0]:rings[1]]
+        first_ring = ix[rings[0] : rings[1]]
         is_zero = np.where(dxy[first_ring] == 0)[0]
         dxy[first_ring[is_zero]] = np.nan
         elevation = dz / dxy
@@ -1037,7 +1037,7 @@ class Raster(Grid):
         max_elevations = False
         max_elevations_has_nan = False
         for k in range(len(rings) - 1):
-            rix = ix[rings[k]:rings[k + 1]]
+            rix = ix[rings[k] : rings[k + 1]]
             rheading = heading[rix]
             relev = elevation[rix]
             # Test visibility
@@ -1125,7 +1125,7 @@ class Raster(Grid):
             else:
                 maxi = np.nanargmax(dz / np.sqrt(dxy))
             # Save point if not last non-nan value
-            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1:])):
+            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1 :])):
                 hxyz[i, 0:2] = xy[maxi, :]
                 hxyz[i, 2] = dz[maxi]
         hxyz[:, 2] += origin[2]

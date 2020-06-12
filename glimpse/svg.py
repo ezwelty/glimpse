@@ -535,7 +535,7 @@ class _Points:
         regex = {
             "cmd": re.compile(r"[a-zA-Z]+"),
             "seq": re.compile(r"[^a-zA-Z]+"),
-            "coord": re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)")
+            "coord": re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)"),
         }
         commands = regex["cmd"].findall(d)
         parameters = [

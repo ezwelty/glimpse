@@ -2184,7 +2184,8 @@ class KeypointMatcher(object):
 
         Arguments:
             maxdt (`datetime.timedelta`): Maximum time separation between
-                pairs of images to match. If `None`, all pairs are matched.
+                pairs of images to match.
+                If `None` and `seq` is `None`, all pairs are matched.
             min_nearest (int): Minimum nearest neighbors to match on either side
                 of image (overrides `maxdt`)
             seq (iterable): Positive index of neighbors to match to each image
@@ -2221,9 +2222,9 @@ class KeypointMatcher(object):
             self.keypoints = [None] * len(self.images)
         # Match images
         n = len(self.images)
-        if maxdt is None:
+        if maxdt is None and seq is None:
             matching_images = [np.arange(i + 1, n) for i in range(n)]
-        else:
+        elif maxdt is not None:
             datetimes = np.array([img.datetime for img in self.images])
             ends = np.searchsorted(datetimes, datetimes + maxdt, side="right")
             if min_nearest:
@@ -2231,6 +2232,8 @@ class KeypointMatcher(object):
                 min_ends = [min(i + shift, n) for i in range(n)]
                 ends = np.maximum(ends, min_ends)
             matching_images = [np.arange(i + 1, end) for i, end in enumerate(ends)]
+        elif seq is not None:
+            matching_images = [np.array([], dtype=int) for i in range(n)]
         # Add match sequence
         if seq is not None:
             seq = np.asarray(seq)

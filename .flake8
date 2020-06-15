@@ -1,5 +1,5 @@
 [flake8]
-select = BLK, C, E, F, I, W
+select = ANN, BLK, C, E, F, I, W
 # E203 whitespace before ':'
 # W503 line break before binary operator
 ignore = E203, W503

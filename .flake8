@@ -1,6 +1,8 @@
 [flake8]
 select = ANN, BLK, C, E, F, I, W
+# ANN101: Missing type annotation for self in method
+# ANN102: Missing type annotation for cls in classmethod
 # E203 whitespace before ':'
 # W503 line break before binary operator
-ignore = E203, W503
+ignore = ANN101, ANN102, E203, W503
 max-line-length = 88

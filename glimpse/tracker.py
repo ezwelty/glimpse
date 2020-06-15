@@ -11,14 +11,16 @@ class Tracker(object):
         observers (list): Observer objects
         viewshed (Raster): Binary viewshed with the same extent as `dem`
         resample_method (str): Particle resampling method
-            ('systematic', 'stratified', 'residual', 'choice': np.random.choice with replacement)
+            ('systematic', 'stratified', 'residual',
+            'choice': np.random.choice with replacement)
         grayscale (dict): Grayscale conversion
             (arguments to glimpse.helpers.rgb_to_gray)
         highpass (dict): Median high-pass filter
             (arguments to scipy.ndimage.filters.median_filter)
         interpolation (dict): Subpixel interpolation
             (arguments to scipy.interpolate.RectBivariateSpline)
-        particles (array): Positions and velocities of particles (n, 6) [[x, y, z, vx, vy vz], ...]
+        particles (array): Positions and velocities of particles (n, 6)
+            [[x, y, z, vx, vy vz], ...]
         weights (array): Particle likelihoods (n, )
         particle_mean (array): Weighted mean of `particles` (6, ) [x, y, z, vx, vy, vz]
         particle_covariance (array): Weighted covariance matrix of `particles` (6, 6)
@@ -27,7 +29,8 @@ class Tracker(object):
             Templates are dictionaries that include at least
 
             - 'tile': Image tile used as a template for image cross-correlation
-            - 'histogram': Histogram (values, quantiles) of the 'tile' used for histogram matching
+            - 'histogram': Histogram (values, quantiles) of the 'tile' used for
+                histogram matching
             - 'duv': Subpixel offset of 'tile' (desired - sampled)
     """
 
@@ -146,6 +149,7 @@ class Tracker(object):
         n = len(self.particles)
         # Systematic resample (vectorized)
         # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+
         def systematic():
             positions = (np.arange(n) + np.random.random()) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
@@ -275,7 +279,8 @@ class Tracker(object):
             try:
                 with warnings.catch_warnings(record=True) as caught:
                     # Skip datetimes before first and after last available image
-                    # NOTE: Track thus starts from initial particle state at first available image
+                    # NOTE: Track thus starts from initial particle state at first
+                    # available image
                     observed = np.any(matching_images[:, observer_mask] != None, axis=1)
                     first = np.argmax(observed)
                     last = len(observed) - 1 - np.argmax(observed[::-1])
@@ -419,8 +424,8 @@ class Tracker(object):
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
 
         Returns:
-            array: Grid of matching image indices ([i, j] for datetimes[i], observers[j]),
-                or `None` for no match
+            array: Grid of matching image indices (i, j)
+                for datetimes[i] and observers[j], or `None` for no match
         """
         matches = np.full((len(datetimes), len(self.observers)), None)
         for i, observer in enumerate(self.observers):
@@ -446,7 +451,8 @@ class Tracker(object):
             obs (int): Observer index
             img (int): Image index of Observer `obs`
             box (iterable): Tile boundaries (see `Observer.extract_tile()`)
-            histogram (iterable): Template for histogram matching (see `helpers.match_histogram`)
+            histogram (iterable): Template for histogram matching
+                (see `helpers.match_histogram`)
             return_histogram (bool): Whether to return a tile histogram.
                 The histogram is computed before the low-pass filter.
 
@@ -917,7 +923,7 @@ class Tracks(object):
                     units="xy",
                     clim=clim,
                 )
-                # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label='Weight')
+                # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label="Weight")
             if images and particles:
                 # Image: Particles
                 particle_uv = self.tracker.observers[obs].project(particle_xyz, img=img)
@@ -932,7 +938,9 @@ class Tracks(object):
                     vmin=clim[0],
                     vmax=clim[1],
                 )
-                # matplotlib.pyplot.colorbar(image_particles, ax=axes[1], label='Weight')
+                # matplotlib.pyplot.colorbar(
+                #   image_particles, ax=axes[1], label="Weight"
+                # )
             # Map: Track
             track_xyz = self.xyz[track, : (i + 1)]
             map_track.set_data(track_xyz[:, 0], track_xyz[:, 1])

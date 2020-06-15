@@ -3,7 +3,8 @@ Read and write exchangeable image file format (exif) metadata.
 """
 import copy
 import datetime
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
+
 import piexif
 
 SENSOR_SIZES = {

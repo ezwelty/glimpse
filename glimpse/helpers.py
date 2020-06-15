@@ -1,26 +1,38 @@
-from .imports import (
-    require,
-    np,
-    pickle,
-    pyproj,
-    json,
-    collections,
-    copy,
-    pandas,
-    scipy,
-    gzip,
-    PIL,
-    sklearn,
-    cv2,
-    copyreg,
-    os,
-    re,
-    datetime,
-    matplotlib,
-    shapely,
-    progress,
-    osgeo,
-)
+import collections
+import copy
+import copyreg
+import datetime
+import gzip
+import json
+import os
+import pickle
+import re
+
+import PIL
+
+import cv2
+
+import matplotlib.path
+
+import numpy as np
+
+import osgeo.gdal
+import osgeo.gdal_array
+import osgeo.osr
+
+import pandas
+
+import progress
+
+import pyproj
+
+import scipy.ndimage
+import scipy.spatial
+import scipy.stats
+
+import shapely.geometry
+
+import sklearn.decomposition
 
 # ---- General ---- #
 
@@ -646,7 +658,6 @@ def match_histogram(source, template):
 # ---- GIS ---- #
 
 
-@require("osgeo")
 def crs_to_wkt(crs):
     """
     Convert coordinate reference system (CRS) to well-known text (WKT).

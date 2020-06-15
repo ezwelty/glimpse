@@ -1,5 +1,21 @@
-from .imports import np, scipy, cv2, lmfit, matplotlib, sys, os, warnings, datetime
-from . import helpers, config, image
+import datetime
+import os
+import sys
+import warnings
+
+import cv2
+
+import lmfit
+
+import matplotlib.pyplot
+
+import numpy as np
+
+import scipy.optimize
+import scipy.sparse
+
+from . import config, helpers
+from .camera import Camera
 
 # ---- Controls ----
 
@@ -1029,7 +1045,7 @@ class Cameras(object):
 
     @staticmethod
     def _as_lists(cams, controls, cam_params, group_indices, group_params):
-        if isinstance(cams, image.Camera):
+        if isinstance(cams, Camera):
             cams = [cams]
         if isinstance(controls, (Points, Lines, Matches)):
             controls = [controls]

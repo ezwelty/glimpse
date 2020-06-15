@@ -1,6 +1,19 @@
-from .imports import np, cv2, warnings, datetime, scipy, matplotlib, sys, traceback
+import datetime
+import sys
+import traceback
+import warnings
+
+import cv2
+
+import matplotlib.animation
+import matplotlib.pyplot
+
+import numpy as np
+
+import scipy.ndimage
+
+from . import config, helpers
 from .raster import Raster
-from . import helpers, config
 
 
 class Tracker(object):

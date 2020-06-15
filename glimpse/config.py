@@ -1,4 +1,4 @@
-from .imports import sharedmem
+import sharedmem
 
 _MapReduce = sharedmem.MapReduce
 _UseMatMul = True

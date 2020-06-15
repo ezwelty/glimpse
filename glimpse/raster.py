@@ -1,14 +1,18 @@
-from .imports import (
-    require,
-    np,
-    scipy,
-    osgeo,
-    matplotlib,
-    datetime,
-    copy,
-    warnings,
-    numbers,
-)
+import copy
+import datetime
+import numbers
+import warnings
+
+import matplotlib.colors
+import matplotlib.pyplot
+
+import numpy as np
+
+import osgeo.gdal
+
+import scipy.interpolate
+import scipy.ndimage
+
 from . import helpers
 
 
@@ -151,7 +155,6 @@ class Grid(object):
         return self._Y
 
     @classmethod
-    @require("osgeo")
     def read(cls, path, d=None, xlim=None, ylim=None):
         """
         Read Grid from raster file.
@@ -529,7 +532,6 @@ class Raster(Grid):
         return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
-    @require("osgeo")
     def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None, nan=None):
         """
         Read Raster from gdal raster file.
@@ -1150,7 +1152,6 @@ class Raster(Grid):
         dzdy, dzdx = np.gradient(self.Z, self.d[1], self.d[0])
         return dzdx, dzdy
 
-    @require("osgeo")
     def write(self, path, driver=None, nan=None, crs=None):
         """
         Write to file.

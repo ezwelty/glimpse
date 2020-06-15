@@ -1,4 +1,4 @@
-from .imports import np
+import numpy as np
 
 
 class uarray(object):

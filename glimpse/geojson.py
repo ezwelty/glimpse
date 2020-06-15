@@ -1,4 +1,5 @@
-from .imports import np
+import numpy as np
+
 from . import helpers
 
 

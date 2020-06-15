@@ -1,5 +1,13 @@
-from .imports import np, re, xml, inspect, scipy
-from . import Camera, optimize
+import inspect
+import re
+import xml
+
+import numpy as np
+
+import scipy.optimize
+
+from . import optimize
+from .camera import Camera
 
 
 class _IncomingPoints(object):

@@ -1,6 +1,14 @@
-from .imports import np, scipy, datetime, matplotlib
-from .raster import Grid
+import datetime
+
+import matplotlib.patches
+import matplotlib.pyplot
+
+import numpy as np
+
+import scipy.interpolate
+
 from . import helpers
+from .raster import Grid
 
 
 class Observer(object):

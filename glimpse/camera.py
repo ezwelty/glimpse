@@ -1,9 +1,12 @@
 import numpy as np
-import scipy.ndimage
-import scipy.interpolate
-import scipy.optimize
+
 import pandas
-from . import helpers, config
+
+import scipy.interpolate
+import scipy.ndimage
+import scipy.optimize
+
+from . import config, helpers
 
 
 class Camera(object):

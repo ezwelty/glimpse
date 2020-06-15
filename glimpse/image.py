@@ -1,14 +1,19 @@
 """
 Read, write, and manipulate photographic images.
 """
-import numpy as np
-import scipy.interpolate
 import matplotlib.pyplot
+
+import numpy as np
+
 import osgeo.gdal
+
+import scipy.interpolate
+
 import sharedmem
+
 from . import helpers
-from .exif import Exif
 from .camera import Camera
+from .exif import Exif
 
 
 class Image(object):

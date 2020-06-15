@@ -1,11 +1,11 @@
 """
 Read and write image annotations in scalable vector graphics (svg) files.
 """
-import re
 import inspect
+import re
+import warnings
 import xml.etree.ElementTree as ET
 from collections import defaultdict
-import warnings
 
 
 def _strip_etree_namespaces(tree):

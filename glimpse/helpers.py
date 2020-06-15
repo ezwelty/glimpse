@@ -18,8 +18,6 @@ from .imports import (
     datetime,
     matplotlib,
     shapely,
-    sharedmem,
-    sys,
     progress,
     osgeo,
 )
@@ -463,7 +461,8 @@ def gaussian_filter(array, mask=None, fill=False, **kwargs):
         mask (array): Boolean mask of cells to include (True) or exclude (False).
             If `None`, all cells are included.
         fill (bool): Whether to fill cells excluded by `mask` with interpolated values
-        **kwargs (dict): Additional arguments to `scipy.ndimage.filters.gaussian_filter()`
+        **kwargs (dict): Additional arguments to
+            `scipy.ndimage.filters.gaussian_filter()`
     """
     if mask is None:
         return scipy.ndimage.filters.gaussian_filter(array, **kwargs)
@@ -490,7 +489,8 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
         mask (array): Boolean mask of cells to include (True) or exclude (False).
             If `None`, all cells are included.
         fill (bool): Whether to fill cells excluded by `mask` with interpolated values
-        **kwargs (dict): Additional arguments to `scipy.ndimage.filters.maximum_filter()`
+        **kwargs (dict): Additional arguments to
+            `scipy.ndimage.filters.maximum_filter()`
     """
     if mask is None:
         return scipy.ndimage.filters.maximum_filter(array, **kwargs)
@@ -624,7 +624,8 @@ def compute_cdf(array, return_inverse=False):
 
 def match_histogram(source, template):
     """
-    Adjust the values of an array such that its histogram matches that of a target array.
+    Adjust the values of an array such that its histogram matches that of a target
+    array.
 
     Arguments:
         source (array): Array to transform.
@@ -1048,7 +1049,8 @@ def clip_polyline_box(line, box, t=False):
     Arguments:
         line (array): 2 or 3D point coordinates (npts, ndim)
         box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
-        t (bool): Last column of `line` are distances along line, linearly interpolated at splits
+        t (bool): Last column of `line` are distances along line, linearly interpolated
+            at splits
     """
     if t:
         cols = slice(None, -1)
@@ -1097,14 +1099,15 @@ def intersect_rays_box(origin, directions, box, t=False):
     """
     Return intersections of rays with a(n axis-aligned) box.
 
-    Works in both 2 and 3 dimensions.
-    Vectorized version of algorithm by Williams et al. (2011) optimized for rays with a common origin.
-    Also inspired by https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
+    Works in both 2 and 3 dimensions. Vectorized version of algorithm by Williams et al.
+    (2011) optimized for rays with a common origin. Also inspired by
+    https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 
     Arguments:
         origin (iterable): Common origin of rays [x, y(, z)]
         directions (array): Directions of rays [[dx, dy(, dz)], ...]
-        box (iterable): Box min and max vertices [xmin, ymin(, zmin), xmax, ymax(, zmax)]
+        box (iterable): Box min and max vertices
+            [xmin, ymin(, zmin), xmax, ymax(, zmax)]
 
     Returns:
         array: Entrance coordinates (`nan` if a miss or `origin` inside `box`)
@@ -1159,14 +1162,15 @@ def intersect_rays_box(origin, directions, box, t=False):
         return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
 
 
-# TODO: Implement faster run-slice (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
+# TODO: Implement faster run-slice
+# (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
 def bresenham_line(start, end):
     """
     Return grid indices along a line between two grid indices.
 
-    Uses Bresenham's run-length algorithm.
-    Not all intersected grid cells are returned, only those with centers closest to the line.
-    Code modified for speed from http://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm.
+    Uses Bresenham's run-length algorithm. Not all intersected grid cells are returned,
+    only those with centers closest to the line. Code modified for speed from
+    http://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm.
 
     Arguments:
         start (iterable): Start position (xi, yi)
@@ -1296,8 +1300,8 @@ def inverse_kernel_distance(data, bandwidth=None, function="gaussian"):
         bandwidth (float): Kernel bandwidth.
             If `None`, the maximum pairwwise distance between `data`
             observations is used.
-        function (str): Kernel function, either 'triangular', 'uniform', 'quadratic', 'quartic', 'gaussian'.
-            See http://pysal.readthedocs.io/en/latest/library/weights/Distance.html#pysal.weights.Distance.Kernel.
+        function (str): Kernel function, either 'triangular', 'uniform', 'quadratic',
+            'quartic', or 'gaussian'.
     """
     nd = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(data))
     if bandwidth is None:

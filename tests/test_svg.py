@@ -1,11 +1,11 @@
 import os
 import tempfile
+
 import glimpse.svg
-from .context import test_dir
 
 
 def test_gets_image_coordinates():
-    path = os.path.join(test_dir, "simple.svg")
+    path = os.path.join("tests", "simple.svg")
     xy = glimpse.svg.read(path, imgsz=(10, 10))
     assert xy["path"] == [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]
     assert xy["polygon"] == [(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]
@@ -19,7 +19,7 @@ def test_gets_image_coordinates():
 
 
 def test_sets_element_attribute_as_tag():
-    path = os.path.join(test_dir, "simple.svg")
+    path = os.path.join("tests", "simple.svg")
     xy = glimpse.svg.read(path, key=None)
     xyid = glimpse.svg.read(path, key="id")
     assert xy["path"] == xyid["land"]

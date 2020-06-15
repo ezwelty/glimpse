@@ -1,5 +1,8 @@
-from .context import glimpse, os, test_dir
-from glimpse.imports import np
+import os
+
+import glimpse.convert
+
+import numpy as np
 
 # ---- Matlab ----
 
@@ -23,14 +26,14 @@ matlab_report_sigmas = {
 
 
 def test_matlab_report_means():
-    path = os.path.join(test_dir, "Calib_Results.m")
+    path = os.path.join("tests", "Calib_Results.m")
     xcam_auto = glimpse.convert.MatlabCamera.from_report(path, sigmas=False)
     xcam_manual = glimpse.convert.MatlabCamera(**matlab_report_means)
     assert xcam_auto.__dict__ == xcam_manual.__dict__
 
 
 def test_matlab_report_sigmas():
-    path = os.path.join(test_dir, "Calib_Results.m")
+    path = os.path.join("tests", "Calib_Results.m")
     xcam_auto = glimpse.convert.MatlabCamera.from_report(path, sigmas=True)
     xcam_manual = glimpse.convert.MatlabCamera(**matlab_report_sigmas)
     assert xcam_auto.__dict__ == xcam_manual.__dict__
@@ -81,7 +84,7 @@ agisoft_xml = {
 
 
 def test_agisoft_xml():
-    path = os.path.join(test_dir, "agisoft.xml")
+    path = os.path.join("tests", "agisoft.xml")
     xcam_auto = glimpse.convert.AgisoftCamera.from_xml(path)
     xcam_manual = glimpse.convert.AgisoftCamera(**agisoft_xml)
     assert xcam_auto.__dict__ == xcam_manual.__dict__
@@ -163,7 +166,7 @@ pm_report_sigmas = {
 
 
 def test_photomodeler_report_means():
-    path = os.path.join(test_dir, "CalibrationReport.txt")
+    path = os.path.join("tests", "CalibrationReport.txt")
     xcam_auto = glimpse.convert.PhotoModelerCamera.from_report(
         path, imgsz=pm_imgsz, sigmas=False
     )
@@ -172,7 +175,7 @@ def test_photomodeler_report_means():
 
 
 def test_photomodeler_report_sigmas():
-    path = os.path.join(test_dir, "CalibrationReport.txt")
+    path = os.path.join("tests", "CalibrationReport.txt")
     xcam_auto = glimpse.convert.PhotoModelerCamera.from_report(
         path, imgsz=pm_imgsz, sigmas=True
     )
@@ -237,7 +240,7 @@ opencv_xml = {
 
 
 def test_opencv_xml():
-    path = os.path.join(test_dir, "opencv.xml")
+    path = os.path.join("tests", "opencv.xml")
     xcam_auto = glimpse.convert.OpenCVCamera.from_xml(path, imgsz=opencv_imgsz)
     xcam_manual = glimpse.convert.OpenCVCamera(imgsz=opencv_imgsz, **opencv_xml)
     assert xcam_auto.__dict__ == xcam_manual.__dict__

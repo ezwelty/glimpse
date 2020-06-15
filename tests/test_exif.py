@@ -1,12 +1,13 @@
-import os
 import datetime
+import os
 import shutil
 import tempfile
-from .context import glimpse, test_dir
+
+import glimpse
 
 
 def test_parses_file_exif():
-    path = os.path.join(test_dir, "AK10b_20141013_020336.JPG")
+    path = os.path.join("tests", "AK10b_20141013_020336.JPG")
     exif = glimpse.Exif(path)
     assert exif.imgsz == (800, 536)
     assert all(isinstance(x, int) for x in exif.imgsz)
@@ -26,7 +27,7 @@ def test_parses_file_exif():
 
 
 def test_inserts_exif_into_file():
-    old = os.path.join(test_dir, "AK10b_20141013_020336.JPG")
+    old = os.path.join("tests", "AK10b_20141013_020336.JPG")
     _, new = tempfile.mkstemp()
     shutil.copy2(old, new)
     exif = glimpse.Exif(old)

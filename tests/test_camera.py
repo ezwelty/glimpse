@@ -1,5 +1,6 @@
-from .context import *
-from glimpse.imports import np
+import glimpse
+
+import numpy as np
 
 
 def test_init_fmm(fmm=(20, 10), sensorsz=(20, 10)):

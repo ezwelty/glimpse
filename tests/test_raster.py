@@ -1,7 +1,14 @@
-from .context import *
-from glimpse.imports import np, datetime, osgeo
-import pytest
+import datetime
 import itertools
+import os
+
+import glimpse
+
+import numpy as np
+
+import osgeo.osr
+
+import pytest
 
 
 def test_raster_defaults():
@@ -158,8 +165,8 @@ def test_raster_io():
 def test_raster_interpolant():
     # Read rasters
     mean_paths = [
-        os.path.join(test_dir, "000nan.tif"),
-        os.path.join(test_dir, "11-1nan.tif"),
+        os.path.join("tests", "000nan.tif"),
+        os.path.join("tests", "11-1nan.tif"),
     ]
     means = [glimpse.Raster.read(path) for path in mean_paths]
     Zs = [mean.Z for mean in means]

@@ -1,6 +1,6 @@
 import inspect
 import re
-import xml
+import xml.etree.ElementTree
 
 import numpy as np
 

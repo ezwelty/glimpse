@@ -86,7 +86,7 @@ class Exif:
             their article https://dpreview.com/articles/8095816568/sensorsizes.
     """
 
-    def __init__(self, path: str, thumbnail: bool = False):
+    def __init__(self, path: str, thumbnail: bool = False) -> None:
         self.tags = piexif.load(path, key_is_name=True)
         if not thumbnail:
             self.tags.pop("thumbnail", None)
@@ -194,7 +194,7 @@ class Exif:
         # Encode to bytes
         return piexif.dump(tags)
 
-    def insert(self, path: str):
+    def insert(self, path: str) -> None:
         """
         Insert :attr:`tags` into an image.
 

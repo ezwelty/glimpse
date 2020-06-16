@@ -31,8 +31,6 @@ class Exif:
     embedded in an image file using :doc:`piexif <piexif:index>`.
 
     Example:
-
-        >>> from glimpse import Exif
         >>> exif = Exif('tests/AK10b_20141013_020336.JPG')
         >>> exif.imgsz
         (800, 536)
@@ -167,11 +165,30 @@ class Exif:
         return value
 
     def dump(self) -> bytes:
-        """
+        r"""
         Return :attr:`tags` as a byte string.
 
         Returns:
             Exif tags encoded as a byte string.
+
+        Raises:
+            ValueError: :attr:`tags` contains an invalid key.
+
+        Example:
+            >>> exif = Exif('tests/AK10b_20141013_020336.JPG')
+            >>> exif.tags = {'Exif': {}}
+            >>> exif.dump()
+            b'Exif\x00\x00MM\x00*\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00'
+            >>> exif.tags = {'Unknown': {}}
+            >>> exif.dump()
+            Traceback (most recent call last):
+                ...
+            ValueError: Invalid group 'Unknown'
+            >>> exif.tags = {'Exif': {'Unknown': 0}}
+            >>> exif.dump()
+            Traceback (most recent call last):
+                ...
+            ValueError: Invalid tag 'Unknown' in group 'Exif'
         """
         # Copy tags before modifying inplace
         tags = copy.deepcopy(self.tags)
@@ -200,5 +217,20 @@ class Exif:
 
         Arguments:
             path: Path to JPEG or WebP image.
+
+        Example:
+            >>> # Copy image file
+            >>> import shutil, tempfile
+            >>> path = tempfile.NamedTemporaryFile().name
+            >>> shutil.copy('tests/AK10b_20141013_020336.JPG', path)
+            >>> # Read image exif
+            >>> exif = Exif(path)
+            >>> exif.iso
+            200
+            >>> # Edit image exif
+            >>> exif.tags['Exif']['ISOSpeedRatings'] = 100
+            >>> exif.insert(path)
+            >>> Exif(path).iso
+            100
         """
         piexif.insert(self.dump(), path)

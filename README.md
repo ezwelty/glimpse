@@ -85,11 +85,3 @@ Unit tests are written for [pytest](https://docs.pytest.org/en/latest/getting-st
 ```bash
 pytest tests
 ```
-
-### Doctests
-
-To run all [doctests](https://docs.python.org/3/library/doctest.html), use:
-
-```bash
-python run_doctests.py
-```

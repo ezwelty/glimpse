@@ -1,6 +1,4 @@
-"""
-Read and write exchangeable image file format (exif) metadata.
-"""
+"""Read and write exchangeable image file format (exif) metadata."""
 import copy
 import datetime
 from typing import Optional, Tuple, Union
@@ -92,50 +90,65 @@ class Exif:
 
     @property
     def imgsz(self) -> Optional[Tuple[int, int]]:
+        """Image size in pixels (nx, ny)."""
         width = self.parse_tag("PixelXDimension")
         height = self.parse_tag("PixelYDimension")
         if width and height:
-            return width, height
+            return int(width), int(height)
         return None
 
     @property
     def datetime(self) -> Optional[datetime.datetime]:
-        datetime_str = self.parse_tag("DateTimeOriginal")
-        if not datetime_str:
+        """Capture date and time."""
+        ymdhms = self.parse_tag("DateTimeOriginal")
+        if not ymdhms:
             return None
-        subsec_str = self.parse_tag("SubSecTimeOriginal")
-        if subsec_str:
-            return datetime.datetime.strptime(
-                datetime_str + "." + subsec_str, "%Y:%m:%d %H:%M:%S.%f"
-            )
-        return datetime.datetime.strptime(datetime_str, "%Y:%m:%d %H:%M:%S")
+        ss = self.parse_tag("SubSecTimeOriginal")
+        if not ss:
+            return datetime.datetime.strptime(str(ymdhms), "%Y:%m:%d %H:%M:%S")
+        return datetime.datetime.strptime(
+            str(ymdhms) + "." + str(ss), "%Y:%m:%d %H:%M:%S.%f"
+        )
 
     @property
     def exposure(self) -> Optional[float]:
-        return self.parse_tag("ExposureTime")
+        """Exposure time in seconds."""
+        value = self.parse_tag("ExposureTime")
+        return float(value) if value else None
 
     @property
     def aperture(self) -> Optional[float]:
-        return self.parse_tag("FNumber")
+        """Aperture size as the f-number."""
+        value = self.parse_tag("FNumber")
+        return float(value) if value else None
 
     @property
     def iso(self) -> Optional[int]:
-        return self.parse_tag("ISOSpeedRatings")
+        """Film speed following the ISO system."""
+        value = self.parse_tag("ISOSpeedRatings")
+        return int(value) if value else None
 
     @property
     def fmm(self) -> Optional[float]:
-        return self.parse_tag("FocalLength")
+        """Focal length in millimeters."""
+        value = self.parse_tag("FocalLength")
+        return float(value) if value else None
 
     @property
     def make(self) -> Optional[str]:
-        return self.parse_tag("Make", group="0th")
+        """Camera make."""
+        value = self.parse_tag("Make", group="0th")
+        return str(value) if value else None
 
     @property
     def model(self) -> Optional[str]:
-        return self.parse_tag("Model", group="0th")
+        """Camera model."""
+        value = self.parse_tag("Model", group="0th")
+        return str(value) if value else None
 
     @property
     def sensorsz(self) -> Optional[Tuple[float, float]]:
+        """Sensor size in millimeters (nx, ny)."""
         if self.make and self.model:
             make_model = self.make.strip() + " " + self.model.strip()
             return SENSOR_SIZES.get(make_model)

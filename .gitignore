@@ -23,5 +23,8 @@ __pycache__/
 docs/build
 docs/autosummary
 
+# Coverage.y
+.coverage
+
 # Data
 data

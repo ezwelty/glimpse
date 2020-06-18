@@ -32,6 +32,7 @@ shapely = "^1.7.0"
 pyproj = "^2.6.1"
 GDAL = "2.4.4"
 opencv-contrib-python-nonfree = "^4.1.1"
+typing_extensions = "^3.7.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.4.3"

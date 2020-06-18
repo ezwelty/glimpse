@@ -1,20 +1,31 @@
-"""
-Read and write image annotations in scalable vector graphics (svg) files.
-"""
+"""Read and write image annotations in scalable vector graphics (svg) files."""
+import copy
 import inspect
 import re
 import warnings
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from typing import Any, Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Union
+
+from typing_extensions import TypedDict
+
+Number = Union[int, float]
+Numeric = Union[str, Number]
+Coordinates = List[Tuple[Number, Number]]
+Box = TypedDict("Box", {"x": Number, "y": Number, "width": Number, "height": Number})
+Polyline = TypedDict("Polyline", {"points": str})
+Polygon = TypedDict("Polygon", {"points": str})
+Line = TypedDict("Line", {"x1": str, "y1": str, "x2": str, "y2": str})
+Circle = TypedDict("Circle", {"cx": str, "cy": str})
+Rect = TypedDict("Rect", {"x": str, "y": str, "width": str, "height": str})
+SVG = TypedDict("SVG", {"viewBox": str}, total=False)
+Path = TypedDict("Path", {"d": str})
+
+COORD_REGEX = re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)")
 
 
-def _strip_etree_namespaces(tree):
-    """
-    Strip namespaces from tags and attributes.
-
-    Arguments:
-        tree (xml.etree.ElementTree)
-    """
+def _strip_etree_namespaces(tree: ET.ElementTree) -> None:
+    """Strip namespaces from tags and attributes."""
     regex = re.compile(r"\{.*\}")
     for e in tree.iter():
         e.tag = regex.sub("", e.tag)
@@ -26,7 +37,9 @@ def _strip_etree_namespaces(tree):
         e.attrib = attrib
 
 
-def read(path, key=None, imgsz=None):
+def read(
+    path: Union[str, TextIO], key: str = None, imgsz: Optional[Tuple[int, int]] = None
+) -> dict:
     """
     Get SVG element vertices as image coordinates.
 
@@ -39,21 +52,21 @@ def read(path, key=None, imgsz=None):
 
     - Does not support multiple `svg` elements.
     - Only extracts coordinates from elements `path` (ignoring curvature),
-      `polyline`, `polygon`, `rect`, `circle` (as point), and `image` (as
+      `polyline`, `polygon`, `rect`, `circle` (as center point), and `image` (as
       bounding box).
     - Only recognizes `svg` and `g` as grouping elements.
     - Does not support percent (e.g. "100%") or unit (e.g. "10px") dimensions.
-    - Transform functions `rotate`, `skewX`, and `skewY` are not supported (see
+    - Only supports transform functions `translate`, `scale`, and `matrix` (see
       https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform).
 
     Arguments:
-        path (str): Path to SVG file
-        key (str): Name of the element attribute whose value should be used as
+        path: Path or file object pointing to the SVG file
+        key: Name of the element attribute whose value should be used as
             the dictionary key. If `None` (default) or if the attribute is not
             defined, the SVG element tag is used (e.g. "path").
-        imgsz (iterable): Target image size (nx, ny). If `None` (default), uses
-            the width and height of the first `image` element (before any
-            transformations).
+        imgsz: Target image size (nx, ny). If `None` (default), uses
+            the width and height of the last (top) `image` element (before any
+            transformations), if present.
 
     Returns:
         dict: Image coordinates [(x, y), ...].
@@ -61,6 +74,31 @@ def read(path, key=None, imgsz=None):
             the element `key` attribute (e.g. "id"). If multiple elements share the
             same tag, their values are given in a list (e.g. 'path': [[(x, y), ...],
             [(x, y), ...]]).
+
+    Raises:
+        ValueError: No or multiple <svg> tag(s) found.
+        ValueError: No <image> tag found and imgsz not provided.
+
+    Example:
+        >>> import io
+        >>> xml = '''
+        >>> <svg xmlns="http://www.w3.org/2000/svg">
+        >>>     <image width="6" height="4" />
+        >>>     <g id="gcp">
+        >>>         <circle id="flag" cx="1" cy="2" />
+        >>>         <circle id="cairn" cx="1.1" cy="1.5" />
+        >>>     </g>
+        >>>     <g id="horizon">
+        >>>         <path d="M 0,0 L 1,0" />
+        >>>         <path d="M 2,1 L 3,1" />
+        >>>     </g>
+        >>> </svg>
+        >>> '''
+        >>> xy = read(io.StringIO(xml), key='id')
+        >>> xy['gcp']
+        {'flag': [(1, 2)], 'cairn': [(1.1, 1.5)]}
+        >>> xy['horizon']['path']
+        [[(0, 0), (1, 0)], [(2, 1), (3, 1)]]
     """
     tree = ET.parse(path)
     _strip_etree_namespaces(tree)
@@ -75,25 +113,27 @@ def read(path, key=None, imgsz=None):
     images = list(tree.iter("image"))
     if imgsz is not None and not images:
         raise ValueError("Cannot apply `imgsz` since no <image> found")
-    if len(svgs) > 1:
-        warnings.warn("Transforming coordinates to first of multiple <image>")
+    if len(images) > 1:
+        warnings.warn("Transforming coordinates to last (top) of multiple <image>")
     # Iterate over tree
     img = {}
 
-    def parse_elements(e, key=None, transform=""):
+    def parse_elements(
+        e: ET.Element, key: Optional[str] = None, transform: str = ""
+    ) -> dict:
         nonlocal img
         # Choose element name for dictionary
-        tag = e.get(key) or e.tag
-        d = {tag: {}}
+        tag = (e.get(key) if key else None) or e.tag
+        d: Dict[str, Any] = {tag: {}}
         # Grow transform
         transform += e.get("transform", "")
         # Parse coordinates
         if e.tag in ("image", "path", "polyline", "polygon", "line", "circle", "rect"):
-            points = _Points.from_element(e.tag, **e.attrib)
+            points = Points.from_element(e.tag, **e.attrib)
             bbox = points.bbox()
-            points.transform(transform)
+            points = points.transform(transform)
             d[tag] = points.xy
-            if e.tag == "image" and not img:
+            if e.tag == "image":
                 img = {"o": bbox, "t": points.bbox()}
         elif e.tag in ("svg", "g") and e:
             dd = defaultdict(list)
@@ -119,13 +159,13 @@ def read(path, key=None, imgsz=None):
         if imgsz[0] != img["t"]["width"] or imgsz[1] != img["t"]["height"]:
             scale = imgsz[0] / img["t"]["width"], imgsz[1] / img["t"]["height"]
 
-    def transform(e):
+    def transform(e: Union[dict, list]) -> None:
         keys = e.keys() if isinstance(e, dict) else range(len(e))
         for key in keys:
             if not e[key]:
                 pass
             elif isinstance(e[key], list) and isinstance(e[key][0], tuple):
-                e[key] = _Points(e[key]).translate(*translate).scale(*scale).xy
+                e[key] = Points(e[key]).translate(*translate).scale(*scale).xy
             else:
                 transform(e[key])
 
@@ -133,97 +173,147 @@ def read(path, key=None, imgsz=None):
     return next(iter(points.values()))
 
 
-def _chunks(x, n):
+def _chunks(x: Sequence, n: int) -> Iterable:
     """
     Generate a zip that returns sequential chunks.
 
     Incomplete trailing chunks (of length < n) are ignored.
 
     Arguments:
-        x (iterable)
-        n (int): Number of elements in each chunk
+        x: Sequence from which to build chunks
+        n: Number of items in each chunk
 
     Returns:
-        zip: Zip object that returns sequential tuples of length `n`
+        Zip object that returns sequential tuples of length `n`
             (x0, ..., xn-1), (xn, ..., x2n-1), ...
     """
     each = iter(x)
     return zip(*([each] * n))
 
 
-def _num(string):
+def _num(x: Numeric) -> Number:
     """
-    Cast string to integer or float.
+    Cast to integer or float.
+
+    Arguments:
+        x: Value to cast as number.
+
+    Example:
+        >>> _num('1')
+        1
+        >>> _num(1)
+        1
+        >>> _num('1.0')
+        1.0
+        >>> _num(1.0)
+        1.0
     """
-    try:
-        return int(string)
-    except ValueError:
-        return float(string)
+    if isinstance(x, str):
+        try:
+            return int(x)
+        except ValueError:
+            return float(x)
+    return x
 
 
-def svg(*children, width, height, **attrib):
+def svg(*children: ET.Element, **attrib: str,) -> ET.Element:
     """
     Create `svg` element.
 
     See https://developer.mozilla.org/en-US/docs/Web/SVG/element/svg.
 
+    If not provided, attributes `width` and `height` are populated to fit the last
+    <image> child element, if present.
+
     Arguments:
-        *children (iterable): Children elements
-        width,height (float): Width and height of the canvas
-        **attrib (dict): Additional element attributes
+        *children: Child elements
+        **attrib: Additional element attributes
 
     Returns:
-        Element
+        <svg> element with attributes.
+
+    Example:
+        >>> e = svg(path(), image(width=12, height=8))
+        >>> e.tag
+        'svg'
+        >>> len(e)
+        2
+        >>> e.attrib
+        {'xmlns': '.../svg', 'xmlns:xlink': '.../xlink', 'width': '12', 'height': '8'}
     """
-    attrib = {
+    e = ET.Element("svg")
+    e.extend(children)
+    if "width" not in attrib and "height" not in attrib:
+        images = list(e.iter("image"))
+        if images:
+            width, height = images[-1].get("width"), images[-1].get("height")
+            if width and height:
+                attrib = {"width": width, "height": height, **attrib}
+    e.attrib = {
         "xmlns": "http://www.w3.org/2000/svg",
         "xmlns:xlink": "http://www.w3.org/1999/xlink",
-        "width": str(width),
-        "height": str(height),
         **attrib,
     }
-    e = ET.Element("svg", attrib=attrib)
-    e.extend(children)
     return e
 
 
-def g(*children, **attrib):
+def g(*children: ET.Element, **attrib: str) -> ET.Element:
     """
     Create `g` element.
 
     See https://developer.mozilla.org/en-US/docs/Web/SVG/element/g.
 
     Arguments:
-        *children (iterable): Children elements
-        **attrib (dict): Element attributes
+        *children: Child elements
+        **attrib: Element attributes
 
     Returns:
-        Element
+        <g> element with attributes.
+
+    Example:
+        >>> e = g(path(), id='horizon')
+        >>> e.tag
+        'g'
+        >>> len(e)
+        1
+        >>> e.attrib
+        {'id': 'horizon'}
     """
     e = ET.Element("g", attrib=attrib)
     e.extend(children)
     return e
 
 
-def image(href, width, height, **attrib):
+def image(
+    width: Numeric, height: Numeric, href: Optional[str] = None, **attrib: str
+) -> ET.Element:
     """
     Create `image` element.
 
     See https://developer.mozilla.org/en-US/docs/Web/SVG/element/image.
 
     Arguments:
-        href (str): Path to image file
-        width,height (float): Display width and height of the image
-        **attrib (dict): Additional element attributes
+        width: Display width of the image
+        height: Display height of the image
+        href: Path to image file (either absolute or relative to target SVG path)
+        **attrib: Additional element attributes
 
     Returns:
-        Element
+        <image> element with attributes.
+
+    Example:
+        >>> e = image(width=12, height=8, href='photo.jpg')
+        >>> e.tag
+        'image'
+        >>> e.attrib
+        {'width': '12', 'height': '8', 'xlink:href': 'photo.jpg'}
     """
-    attrib = {"xlink:href": href, "width": str(width), "height": str(height), **attrib}
+    optional = {"xlink:href": href} if href else {}
+    attrib = {"width": str(width), "height": str(height), **optional, **attrib}
     return ET.Element("image", attrib=attrib)
 
 
-def path(d="", **attrib):
+def path(d: Union[str, Coordinates] = "", **attrib: str) -> ET.Element:
     """
     Create `path` element.
 
@@ -233,60 +323,133 @@ def path(d="", **attrib):
         d: Shape of the path. Either pre-formatted as a str (e.g. 'M 0,0 L 1,1')
             or an iterable of point coordinates (e.g. [(0, 0), (1, 1)]). See
             https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/d.
-        **attrib (dict): Additional element attributes
+        **attrib: Additional element attributes
 
     Returns:
-        Element
+        <path> element with attributes.
+
+    Example:
+        >>> e = path(d=[(0, 0), (0, 1), (1, 1)], id='horizon')
+        >>> e.tag
+        'path'
+        >>> e.attrib
+        {'d': 'M 0,0 L 0,1 1,1', 'id': 'horizon'}
     """
     if not isinstance(d, str):
-        d = _Points(d).to_element("path")["d"]
+        d = Points(d).to_element("path")["d"]
     attrib = {"d": d, **attrib}
     return ET.Element("path", attrib=attrib)
 
 
-def write(e, path=None):
-    """
+def _indent_etree(
+    e: ET.Element,
+    level: int = 0,
+    indent: Optional[Union[int, str]] = 4,
+    last: bool = False,
+) -> None:
+    if indent is None:
+        sep, tab = "", ""
+    else:
+        sep, tab = "\n", (indent if isinstance(indent, str) else indent * " ")
+    if len(e):
+        if not e.text or not e.text.strip():
+            e.text = sep + tab * (level + 1)
+        if not e.tail or not e.tail.strip():
+            e.tail = sep + tab * level
+        for i, child in enumerate(e, start=1):
+            _indent_etree(child, level=level + 1, indent=indent, last=i == len(e))
+        if not e.tail or not e.tail.strip():
+            e.tail = sep + tab * (level - 1)
+    else:
+        if level and (not e.tail or not e.tail.strip()):
+            e.tail = sep + tab * (level - last)
+    if level == 0:
+        e.tail = None
+
+
+def _etree_to_string(e: ET.Element, indent: Optional[Union[int, str]] = 4) -> str:
+    e = copy.deepcopy(e)
+    _indent_etree(e, indent=indent)
+    return ET.tostring(e, encoding="unicode")
+
+
+def write(
+    e: ET.Element, path: Optional[str] = None, indent: Optional[Union[int, str]] = None
+) -> Optional[str]:
+    r"""
     Returns XML as a string or writes it to file.
 
     Arguments:
-        e (Element)
+        e: Element to write
         path: Path to file
+        indent: If an integer or string, XML elements are pretty-printed with that
+            indent level.
+            A negative integer, 0, or "" only inserts line breaks.
+            A positive integer indents that many spaces per level.
+            A string (e.g. "\t") indents that string per level.
+            `None` (the default) prints on a single line.
 
     Returns:
-        str: If path is None
+        String representation of XML (if `path` is not provided).
+
+    Example:
+        >>> children = (
+        >>>     path([(0, 0), (1, 1)], id='horizon'),
+        >>>     image(href='photo.jpeg', width=12, height=8)
+        >>> )
+        >>> e = svg(*children)
+        >>> print(write(e, indent=4))
+        <svg height="8" width="12" xmlns=".../svg" xmlns:xlink=".../xlink">
+            <path d="M 0,0 L 1,1" id="horizon" />
+            <image height="8" width="12" xlink:href="photo.jpeg" />
+        </svg>
     """
-    if path is None:
-        return ET.tostring(e, encoding="unicode")
-    else:
-        ET.ElementTree(e).write(path, encoding="unicode")
+    txt = _etree_to_string(e, indent=indent)
+    if not path:
+        return txt
+    with open(path, "w") as fp:
+        fp.write(txt)
+    return None
 
 
-class _Points:
+class Points:
     """
     Reader and writer of SVG element point coordinates.
 
     Attributes:
-        xy (array-like): Point coordinates [(x, y), ...]
+        xy: Point coordinates [(x, y), ...]
     """
 
-    def __init__(self, xy):
+    def __init__(self, xy: Coordinates) -> None:
         self.xy = xy
 
-    def closed(self):
+    def closed(self) -> bool:
         """
-        Whether the last point is equal to the first point.
+        Test whether the last point is equal to the first point.
+
+        Example:
+            >>> Points([(0, 0), (1, 1), (2, 2)]).closed()
+            False
+            >>> Points([(0, 0), (1, 1), (0, 0)]).closed()
+            True
+            >>> Points([(0, 0)]).closed()
+            True
+            >>> Points([]).closed()
+            True
         """
         if len(self.xy) > 1:
             return self.xy[0] == self.xy[-1]
-        else:
-            return True
+        return True
 
-    def bbox(self):
+    def bbox(self) -> Optional[Box]:
         """
         Return the box bounding the points.
 
-        Returns:
-            dict: Bounding box (x, y, width, height)
+        Example:
+            >>> Points([(0, 0), (1, 1)]).bbox()
+            {'x': 0, 'y': 0, 'width': 1, 'height': 1}
+            >>> Points([]).bbox() is None
+            True
         """
         if not self.xy:
             return None
@@ -298,244 +461,210 @@ class _Points:
         w, h = max(xs) - x, max(ys) - y
         return {"x": x, "y": y, "width": w, "height": h}
 
-    def scale(self, x, y=None):
+    def scale(self, x: Number, y: Optional[Number] = None) -> "Points":
         """
         Scale coordinates.
 
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform.
 
         Arguments:
-            x (float): Scale in x
-            y (float): Scale in y. Equal to `x` if not specified.
+            x: Scale in x
+            y: Scale in y. Equal to `x` if not specified.
 
-        Returns:
-            Points: Points with scaled coordinates.
+        Example:
+            >>> points = Points([(1, 2)])
+            >>> points.scale(2).xy
+            [(2, 4)]
+            >>> points.scale(2, 1).xy
+            [(2, 2)]
         """
         if y is None:
             y = x
-        self.xy = [(xo * x, yo * y) for xo, yo in self.xy]
-        return self
+        xy = [(xo * x, yo * y) for xo, yo in self.xy]
+        return type(self)(xy)
 
-    def translate(self, x, y=0):
+    def translate(self, x: Number, y: Number = 0) -> "Points":
         """
         Translate coordinates.
 
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform.
 
         Arguments:
-            x,y (float): Translation in x,y
+            x: Translation in x
+            y: Translation in y
 
-        Returns:
-            Points: Points with translated coordinates.
+        Example:
+            >>> Points([(1, 2)]).translate(1, 2).xy
+            [(2, 4)]
         """
-        self.xy = [(xo + x, yo + y) for xo, yo in self.xy]
-        return self
+        xy = [(xo + x, yo + y) for xo, yo in self.xy]
+        return type(self)(xy)
 
-    def matrix(self, a, b, c, d, e, f):
+    def matrix(
+        self, a: Number, b: Number, c: Number, d: Number, e: Number, f: Number
+    ) -> "Points":
         """
         Matrix transform coordinates.
 
         Transform original coordinates xo, yo such that x, y =
         a * xo + c * yo + e, b * xo + d * yo + f.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform.
 
         Arguments:
-            a,b,c,d,e,f (float): Matrix components
+            a: First component (0, 0)
+            b: Second component (1, 0)
+            c: Third component (0, 1)
+            d: Fourth component (1, 1)
+            e: Fifth component (0, 2)
+            f: Sixth component (1, 2)
 
-        Returns:
-            Points: Points with transformed coordinates.
+        Example:
+            >>> Points([(1, 2)]).matrix(1, 2, 3, 4, 5, 6).xy
+            [(12, 16)]
         """
-        self.xy = [(a * xo + c * yo + e, b * xo + d * yo + f) for xo, yo in self.xy]
-        return self
+        xy = [(a * xo + c * yo + e, b * xo + d * yo + f) for xo, yo in self.xy]
+        return type(self)(xy)
 
-    def transform(self, transform):
+    def transform(self, transform: str) -> "Points":
         """
-        Apply `transform` attribute.
+        Apply `transform` attribute to coordinates.
 
         Supports only `matrix`, `scale`, and `translate` functions.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/transform.
 
         Arguments:
             transform (str): `transform` attribute
 
-        Returns:
-            Points: Points with transformed coordinates.
+        Raises:
+            ValueError: Unsupported or invalid transform function.
+
+        Example:
+            >>> points = Points([(1, 2)])
+            >>> points.transform('translate(1)').xy
+            [(2, 2)]
+            >>> points.transform('translate(1 2)').xy
+            [(2, 4)]
+            >>> points.transform('translate(1,2)scale(2)').xy
+            [(4, 8)]
+            >>> points.transform('translate(1, 2)scale(1-1)').xy
+            [(2, -4)]
+            >>> points.transform('magic()')
+            Traceback (most recent call last):
+                ...
+            ValueError: Unsupported (or invalid) transform function: magic
         """
-        for func, params in re.findall(r"([A-Za-z]+)\(([^\)]+)\)", transform):
-            method = getattr(self, func, None)
+        points = self
+        for func, params in re.findall(r"([A-Za-z]+)\(([^\)]*)\)", transform):
+            method = getattr(points, func, None)
             if not method:
-                raise ValueError("Unsupported (or invalid) transform function:", func)
-            args = [_num(s) for s in re.split(r"\s+|,", params)]
-            method(*args)
-        return self
+                raise ValueError(f"Unsupported (or invalid) transform function: {func}")
+            args = [_num(s) for s in COORD_REGEX.findall(params)]
+            points = method(*args)
+        return points
 
     @staticmethod
-    def _points_to_xy(points):
-        numbers = re.findall(r"[0-9\.\-]+", points)
+    def _points_to_xy(points: str) -> Coordinates:
+        numbers = COORD_REGEX.findall(points)
         return [(_num(x), _num(y)) for x, y in _chunks(numbers, 2)]
 
     @staticmethod
-    def _xy_to_points(xy):
-        return " ".join(["{0},{1}".format(x, y) for x, y in xy])
+    def _xy_to_points(xy: Coordinates) -> str:
+        return " ".join([f"{x},{y}" for x, y in xy])
 
     @classmethod
-    def _from_polyline(cls, points=""):
-        """
-        From `polyline` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-        """
+    def _from_polyline(cls, points: str = "") -> "Points":
         xy = cls._points_to_xy(points)
         return cls(xy)
 
-    def _to_polyline(self):
-        """
-        To `polyline` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-        """
+    def _to_polyline(self) -> Polyline:
         return {"points": self._xy_to_points(self.xy)}
 
     @classmethod
-    def _from_polygon(cls, points=""):
-        """
-        From `polygon` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-        """
+    def _from_polygon(cls, points: str = "") -> "Points":
         xy = cls._points_to_xy(points)
         pts = cls(xy)
         if not pts.closed():
             pts.xy.append(xy[0])
         return pts
 
-    def _to_polygon(self):
-        """
-        To `polygon` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/points.
-        """
+    def _to_polygon(self) -> Polygon:
         xy = self.xy[:-1] if self.closed() else self.xy
         return {"points": self._xy_to_points(xy)}
 
     @classmethod
-    def _from_line(cls, x1=0, y1=0, x2=0, y2=0):
-        """
-        From `line` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line
-        """
+    def _from_line(
+        cls, x1: Numeric = 0, y1: Numeric = 0, x2: Numeric = 0, y2: Numeric = 0
+    ) -> "Points":
         xy = [(_num(x1), _num(y1)), (_num(x2), _num(y2))]
         return cls(xy)
 
-    def _to_line(self):
-        """
-        To `line` attributes.
-
-        Uses the first and last points as the line endpoints.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/line
-        """
+    def _to_line(self) -> Line:
+        # NOTE: Uses first and last points as line endpoints, or (0, 0) if empty.
         x1, y1 = [str(i) for i in (self.xy[0] if self.xy else (0, 0))]
         x2, y2 = [str(i) for i in (self.xy[-1] if self.xy else (0, 0))]
         return {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
 
     @classmethod
-    def _from_circle(cls, cx=0, cy=0):
-        """
-        From `circle` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/circle
-        """
+    def _from_circle(cls, cx: Numeric = 0, cy: Numeric = 0) -> "Points":
         xy = [(_num(cx), _num(cy))]
         return cls(xy)
 
-    def _to_circle(self):
-        """
-        To `circle` attributes.
-
-        Uses the first point as the circle center.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/circle
-        """
+    def _to_circle(self) -> Circle:
+        # NOTE: Uses the first point as the circle center, or (0, 0) if empty.
         cx, cy = [str(i) for i in (self.xy[0] if self.xy else (0, 0))]
         return {"cx": cx, "cy": cy}
 
     @classmethod
-    def _from_rect(cls, width, height, x=0, y=0):
-        """
-        From `rect` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect
-        """
-        x, y, width, height = [_num(arg) for arg in (x, y, width, height)]
-        xy = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
-        xy.append(xy[0])
+    def _from_rect(
+        cls, width: Numeric, height: Numeric, x: Numeric = 0, y: Numeric = 0
+    ) -> "Points":
+        x, y, w, h = [_num(arg) for arg in (x, y, width, height)]
+        xy = [(x, y), (x + w, y), (x + w, y + h), (x, y + h), (x, y)]
         return cls(xy)
 
-    def _to_rect(self):
-        """
-        To `rect` attributes.
-
-        Returns the bounding box of all points.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect
-        """
+    def _to_rect(self) -> Rect:
+        # NOTE: Returns the bounding box of all points.
         box = self.bbox()
-        return {key: str(box[key]) for key in box}
+        if not box:
+            box = {"x": 0, "y": 0, "width": 0, "height": 0}
+        return {
+            "x": str(box["x"]),
+            "y": str(box["y"]),
+            "width": str(box["width"]),
+            "height": str(box["height"]),
+        }
 
     @classmethod
-    def _from_svg(cls, viewBox=None):
-        """
-        From `svg` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/svg
-        """
+    def _from_svg(cls, viewBox: Optional[str] = None) -> "Points":
         if viewBox:
-            x, y, w, h = re.split(r"[\s,]+", viewBox)
+            x, y, w, h = COORD_REGEX.findall(viewBox)
             return cls._from_rect(w, h, x, y)
         else:
             return cls([])
 
-    def _to_svg(self):
-        """
-        To `svg` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/svg
-        """
+    def _to_svg(self) -> SVG:
+        # NOTE: Returns the bounding box of all points.
         box = self.bbox()
         if box:
-            viewbox = [str(box[key]) for key in ("x", "y", "width", "height")]
-            return {"viewBox": " ".join(viewbox)}
-        else:
-            return {}
+            return {"viewBox": f"{box['x']} {box['y']} {box['width']} {box['height']}"}
+        return {}
 
     @classmethod
-    def _from_image(cls, width, height, x=0, y=0):
-        """
-        From `image` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image
-        """
+    def _from_image(
+        cls, width: Numeric, height: Numeric, x: Numeric = 0, y: Numeric = 0
+    ) -> "Points":
         return cls._from_rect(width, height, x, y)
 
-    def _to_image(self):
-        """
-        To `image` attributes.
-
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/image
-        """
+    def _to_image(self) -> Rect:
         return self._to_rect()
 
     @classmethod
-    def _from_path(cls, d=""):
-        """
-        From `path` attributes.
-
-        Only vertices are preserved, so all curvature information is discarded.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path
-        """
+    def _from_path(cls, d: str = "") -> "Points":
+        # NOTE: Only vertices are preserved. All curvature information is discarded.
         regex = {
             "cmd": re.compile(r"[a-zA-Z]+"),
             "seq": re.compile(r"[^a-zA-Z]+"),
-            "coord": re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)"),
+            "coord": COORD_REGEX,
         }
         commands = regex["cmd"].findall(d)
         parameters = [
@@ -598,58 +727,107 @@ class _Points:
             elif cmd in ("Z", "z"):
                 xy.append(xy[0])
             else:
-                raise ValueError("Invalid command encountered:", cmd)
+                raise ValueError(f"Invalid command encountered: {cmd}")
         return cls(xy)
 
-    def _to_path(self):
-        """
-        To `path` attributes.
-
-        Uses only absolute moveTo (`M`) and lineTo (`L`) commands, as well as
-        closePath (`Z`) if closed.
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/path
-        """
+    def _to_path(self) -> Path:
+        # NOTE: Uses only moveTo (`M`), lineTo (`L`), and closePath (`Z`) if closed.
         commands = []
         for i, xy in enumerate(self.xy[:-1] if self.closed() else self.xy):
+            x, y = xy
             if i == 0:
-                cmd = "M {0},{1}".format(*xy)
+                cmd = f"M {x},{y}"
             elif i == 1:
-                cmd = "L {0},{1}".format(*xy)
+                cmd = f"L {x},{y}"
             else:
-                cmd = "{0},{1}".format(*xy)
+                cmd = f"{x},{y}"
             commands.append(cmd)
         if self.closed():
             commands.append("Z")
         return {"d": " ".join(commands)}
 
     @classmethod
-    def from_element(cls, tag, **attrs):
+    def from_element(cls, tag: str, **attrs: Numeric) -> "Points":
         """
-        From element tag and attributes.
+        Extract coordinates from an element's tag and attributes.
 
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element.
 
         Arguments:
-            tag (str): Element tag (e.g. 'path')
-            **attrs (dict): Element attributes
+            tag: Element tag (e.g. 'path')
+            **attrs: Element attributes
+
+        Raises:
+            ValueError: Unsupported or invalid element tag or attribute value.
+
+        Example:
+            >>> Points.from_element('path', d='M 0,0 l 1,0 0,1 z').xy
+            [(0, 0), (1, 0), (1, 1), (0, 0)]
+            >>> Points.from_element('polygon', points='0,0 1,0 1,1').xy
+            [(0, 0), (1, 0), (1, 1), (0, 0)]
+            >>> Points.from_element('polyline', points='0,0 1,0 1,1').xy
+            [(0, 0), (1, 0), (1, 1)]
+            >>> Points.from_element('line', x1='0', y1='1', x2='1', y2='2').xy
+            [(0, 1), (1, 2)]
+            >>> Points.from_element('circle', cx='0', cy='1').xy
+            [(0, 1)]
+            >>> Points.from_element('rect', x='0', y='1', width='1', height='2').xy
+            [(0, 1), (1, 1), (1, 3), (0, 3), (0, 1)]
+            >>> Points.from_element('image', x='0', y='1', width='1', height='2').xy
+            [(0, 1), (1, 1), (1, 3), (0, 3), (0, 1)]
+            >>> Points.from_element('svg', viewBox='0 1 1 2').xy
+            [(0, 1), (1, 1), (1, 3), (0, 3), (0, 1)]
+            >>> Points.from_element('magic')
+            Traceback (most recent call last):
+                ...
+            ValueError: Unsupported (or invalid) element tag: magic
         """
         method = getattr(cls, "_from_" + tag, None)
         if not method:
-            raise ValueError("Unsupported (or invalid) element tag:", tag)
+            raise ValueError(f"Unsupported (or invalid) element tag: {tag}")
         args = inspect.getfullargspec(method).args[1:]
         attrs = {key: attrs[key] for key in attrs if key in args}
         return method(**attrs)
 
-    def to_element(self, tag):
+    def to_element(self, tag: str) -> Dict[str, str]:
         """
-        To element attributes.
+        Convert coordinates to element attributes.
 
-        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element
+        See https://developer.mozilla.org/en-US/docs/Web/SVG/Element.
 
         Arguments:
-            tag (str): Element tag (e.g. 'path')
+            tag: Element tag (e.g. 'path')
+
+        Raises:
+            ValueError: Unsupported or invalid element tag.
+
+        Example:
+            >>> points = Points([(0, 0), (0, 1), (1, 1), (0, 0)])
+            >>> points.to_element('path')
+            {'d': 'M 0,0 L 0,1 1,1 Z'}
+            >>> points.to_element('polygon')
+            {'points': '0,0 0,1 1,1'}
+            >>> points.to_element('polyline')
+            {'points': '0,0 0,1 1,1 0,0'}
+            >>> # Returns a line from the first to the last point
+            >>> points.to_element('line')
+            {'x1': '0', 'y1': '0', 'x2': '0', 'y2': '0'}
+            >>> # Returns a circle centered at the first point
+            >>> points.to_element('circle')
+            {'cx': '0', 'cy': '0'}
+            >>> # Returns a rectangle bounding the points
+            >>> points.to_element('rect')
+            {'x': '0', 'y': '0', 'width': '1', 'height': '1'}
+            >>> points.to_element('image')
+            {'x': '0', 'y': '0', 'width': '1', 'height': '1'}
+            >>> points.to_element('svg')
+            {'viewBox': '0 0 1 1'}
+            >>> points.to_element('magic')
+            Traceback (most recent call last):
+                ...
+            ValueError: Unsupported (or invalid) element tag: magic
         """
         method = getattr(self, "_to_" + tag, None)
         if not method:
-            raise ValueError("Unsupported (or invalid) element tag:", tag)
+            raise ValueError(f"Unsupported (or invalid) element tag: {tag}")
         return method()

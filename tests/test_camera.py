@@ -1,5 +1,4 @@
 import glimpse
-
 import numpy as np
 
 

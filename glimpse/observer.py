@@ -2,9 +2,7 @@ import datetime
 
 import matplotlib.patches
 import matplotlib.pyplot
-
 import numpy as np
-
 import scipy.interpolate
 
 from . import helpers

@@ -2,7 +2,6 @@ import datetime
 import os
 
 import glimpse
-
 import numpy as np
 
 

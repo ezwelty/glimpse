@@ -1,7 +1,6 @@
 import os
 
 import glimpse.convert
-
 import numpy as np
 
 # ---- Matlab ----

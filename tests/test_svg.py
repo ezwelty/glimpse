@@ -3,7 +3,6 @@ import io
 from typing import Tuple, Union
 
 import glimpse.svg
-
 import pytest
 
 

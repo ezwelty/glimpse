@@ -2,13 +2,9 @@
 Read, write, and manipulate photographic images.
 """
 import matplotlib.pyplot
-
 import numpy as np
-
 import osgeo.gdal
-
 import scipy.interpolate
-
 import sharedmem
 
 from . import helpers

@@ -8,30 +8,20 @@ import os
 import pickle
 import re
 
-import PIL
-
 import cv2
-
 import matplotlib.path
-
 import numpy as np
-
 import osgeo.gdal
 import osgeo.gdal_array
 import osgeo.osr
-
 import pandas
-
+import PIL
 import progress
-
 import pyproj
-
 import scipy.ndimage
 import scipy.spatial
 import scipy.stats
-
 import shapely.geometry
-
 import sklearn.decomposition
 
 # ---- General ---- #

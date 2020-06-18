@@ -3,7 +3,6 @@ import os
 
 import glimpse
 import glimpse.optimize
-
 import numpy as np
 
 

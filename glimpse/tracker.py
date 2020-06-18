@@ -4,12 +4,9 @@ import traceback
 import warnings
 
 import cv2
-
 import matplotlib.animation
 import matplotlib.pyplot
-
 import numpy as np
-
 import scipy.ndimage
 
 from . import config, helpers

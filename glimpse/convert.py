@@ -3,7 +3,6 @@ import re
 import xml.etree.ElementTree
 
 import numpy as np
-
 import scipy.optimize
 
 from . import optimize

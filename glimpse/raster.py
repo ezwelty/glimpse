@@ -5,11 +5,8 @@ import warnings
 
 import matplotlib.colors
 import matplotlib.pyplot
-
 import numpy as np
-
 import osgeo.gdal
-
 import scipy.interpolate
 import scipy.ndimage
 

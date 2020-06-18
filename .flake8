@@ -10,3 +10,4 @@ select = ANN, BLK, C, D, DAR, E, F, I, W
 ignore = ANN101, ANN102, DAR201, D107, D212, E203, W503
 max-line-length = 88
 docstring-convention = google
+import-order-style = google

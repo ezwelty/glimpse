@@ -4,13 +4,9 @@ import sys
 import warnings
 
 import cv2
-
 import lmfit
-
 import matplotlib.pyplot
-
 import numpy as np
-
 import scipy.optimize
 import scipy.sparse
 

@@ -3,11 +3,8 @@ import itertools
 import os
 
 import glimpse
-
 import numpy as np
-
 import osgeo.osr
-
 import pytest
 
 

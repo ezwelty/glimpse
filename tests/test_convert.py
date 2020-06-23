@@ -317,3 +317,19 @@ def test_converts_to_opencv_and_back_by_optimization() -> None:
     residuals = Converter(xcam, cam).residuals()
     assert np.sum(residuals ** 2) < np.sum(residuals_initial ** 2)
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-2)
+
+
+# ---- Converter ----
+
+
+def test_plots_residuals_as_quivers() -> None:
+    """Plots residuals as quivers."""
+    cam = Camera(imgsz=(4288, 2848), f=(3100, 3200), c=(5, -4), k=(0.1, -0.05, 0.02))
+    xcam = MatlabCamera(imgsz=(4288, 2848), fc=(3100, 3200))
+    converter = Converter(xcam, cam, uv=100)
+    quivers = converter.plot()
+    np.testing.assert_equal(quivers.X, converter.uv[:, 0])
+    np.testing.assert_equal(quivers.Y, converter.uv[:, 1])
+    residuals = converter.residuals()
+    np.testing.assert_equal(quivers.U, residuals[:, 0])
+    np.testing.assert_equal(quivers.V, residuals[:, 1])

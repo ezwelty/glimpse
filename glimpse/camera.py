@@ -1,3 +1,4 @@
+"""Convert between world and image coordinates using a distorted camera model."""
 import copy
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
@@ -48,10 +49,8 @@ class Camera:
         p (numpy.ndarray): Tangential distortion coefficients (p1, p2)
         sensorsz (numpy.ndarray): Sensor size in millimeters (nx, ny)
         fmm (numpy.ndarray): Focal length in millimeters (fx, fy).
-            Computed from :attr:`f` and :attr:`sensorsz` (if set).
         cmm (numpy.ndarray): Principal point offset from the image center in millimeters
             (dx, dy).
-            Computed from :attr:`c` and :attr:`sensorsz` (if set).
         R (numpy.ndarray): Rotation matrix equivalent of :attr:`viewdir` (3, 3).
             Assumes an initial camera orientation with +z pointing up, +x east,
             and +y north.
@@ -103,6 +102,7 @@ class Camera:
 
     @property
     def xyz(self) -> np.ndarray:
+        """Position in world coordinates (x, y, z)."""
         return self.vector[0:3]
 
     @xyz.setter
@@ -111,6 +111,13 @@ class Camera:
 
     @property
     def viewdir(self) -> np.ndarray:
+        """
+        View direction in degrees (yaw, pitch, roll).
+
+        - yaw: clockwise rotation about z-axis (0 = look north).
+        - pitch: rotation from horizon (+ look up, - look down).
+        - roll: rotation about optical axis (+ down right, - down left, from behind).
+        """
         return self.vector[3:6]
 
     @viewdir.setter
@@ -119,6 +126,7 @@ class Camera:
 
     @property
     def imgsz(self) -> np.ndarray:
+        """Image size in pixels (nx, ny)."""
         return self.vector[6:8]
 
     @imgsz.setter
@@ -127,6 +135,7 @@ class Camera:
 
     @property
     def f(self) -> np.ndarray:
+        """Focal length in pixels (fx, fy)."""
         return self.vector[8:10]
 
     @f.setter
@@ -135,6 +144,7 @@ class Camera:
 
     @property
     def c(self) -> np.ndarray:
+        """Principal point offset from the image center in pixels (dx, dy)."""
         return self.vector[10:12]
 
     @c.setter
@@ -143,6 +153,7 @@ class Camera:
 
     @property
     def k(self) -> np.ndarray:
+        """Radial distortion coefficients (k1, k2, k3, k4, k5, k6)."""
         return self.vector[12:18]
 
     @k.setter
@@ -151,6 +162,7 @@ class Camera:
 
     @property
     def p(self) -> np.ndarray:
+        """Tangential distortion coefficients (p1, p2)."""
         return self.vector[18:20]
 
     @p.setter
@@ -159,6 +171,7 @@ class Camera:
 
     @property
     def sensorsz(self) -> np.ndarray:
+        """Sensor size in millimeters (nx, ny)."""
         if self._sensorsz is not None:
             return self._sensorsz
         else:
@@ -172,14 +185,22 @@ class Camera:
 
     @property
     def fmm(self) -> np.ndarray:
+        """Focal length in millimeters (fx, fy)."""
         return self.f * self.sensorsz / self.imgsz
 
     @property
     def cmm(self) -> np.ndarray:
+        """Principal point offset from the image center in millimeters (dx, dy)."""
         return self.c * self.sensorsz / self.imgsz
 
     @property
     def R(self) -> np.ndarray:
+        """
+        Rotation matrix equivalent of :attr:`viewdir` (3, 3).
+
+        Assumes an initial camera orientation with
+        +z pointing up, +x pointing east, and +y pointing north.
+        """
         # Initial rotations of camera reference frame
         # (camera +z pointing up, with +x east and +y north)
         # Point camera north: -90 deg counterclockwise rotation about x-axis
@@ -217,6 +238,12 @@ class Camera:
 
     @property
     def Rprime(self) -> np.ndarray:
+        """
+        Derivative of :attr:`R` with respect to :attr:`viewdir`.
+
+        Used for fast Jacobian (gradient) calculations by
+        :class:`optimize.ObserverCameras`.
+        """
         radians = np.deg2rad(self.viewdir)
         C = np.cos(radians)
         S = np.sin(radians)
@@ -260,10 +287,12 @@ class Camera:
 
     @property
     def original_imgsz(self) -> np.ndarray:
+        """Original image size in pixels (nx, ny)."""
         return self.original_vector[6:8]
 
     @property
     def shape(self) -> Tuple[int, int]:
+        """Image shape in pixels (ny, nx)."""
         return int(self.imgsz[1]), int(self.imgsz[0])
 
     # ----- Methods (class) ----
@@ -317,7 +346,7 @@ class Camera:
         if scale_bounds[0] == scale_bounds[1]:
             return scale_bounds[0]
 
-        def err(scale):
+        def err(scale: float) -> float:
             return np.sum(np.abs(np.floor(scale * old + 0.5) - new_size))
 
         fit = scipy.optimize.minimize(
@@ -416,6 +445,9 @@ class Camera:
                 or target image size (iterable)
             force: Whether to use `size` even if it does not preserve
                 the original aspect ratio
+
+        Raises:
+            ValueError: Target image size does not preserve the original aspect ratio.
         """
         scale1d = np.atleast_1d(size)
         if len(scale1d) > 1 and force:
@@ -538,20 +570,21 @@ class Camera:
         return self.inframe(uv)
 
     def grid(
-        self, step: Vector, snap: Sequence[int] = None, mode: str = "vectors"
+        self, step: Vector, snap: Sequence[int] = (0, 0), mode: str = "vectors"
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Return grid of image coordinates.
 
         Arguments:
-            step: Grid spacing for all (float) or each (iterable) dimension
+            step: Grid spacing for all (float) or each (iterable) dimension.
             snap: Point (x, y) to align grid to.
-                If `None`, (0, 0) is used.
             mode: Return format
-
                 - 'vectors': x (nx, ) and y (ny, ) coordinates
                 - 'grids': x (ny, nx) and y (ny, nx) coordinates
                 - 'points': x, y coordinates (ny * nx, 2)
+
+        Raises:
+            ValueError: Unsupported mode.
         """
         box = (0, 0, self.imgsz[0], self.imgsz[1])
         vectors = helpers.box_to_grid(box, step=step, snap=snap, mode="vectors")
@@ -699,6 +732,20 @@ class Camera:
         return xyz
 
     def xyz_to_spherical(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
+        """
+        Convert world coordinates to spherical coordinates.
+
+        Args:
+            xyz: World coordinates (n, [x, y, z]).
+            directions: Whether `xyz` are absolute coordinates (False)
+                or ray directions (True).
+
+        Returns:
+            Spherical coordinates (n, [azimuth, altitude(, distance)]), where
+                - azimuth: degrees clockwise from north
+                - altitude: degrees above horizon
+                - distance: distance from camera (only if `directions` is False)
+        """
         if not directions:
             xyz = xyz - self.xyz
         r = np.sqrt(np.sum(xyz ** 2, axis=1))
@@ -764,6 +811,11 @@ class Camera:
             Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
                 and 3rd dimension corresponding to each layer in `values`.
                 If `return_depth` is True, it is appended as an additional layer.
+
+        Raises:
+            ValueError: `values` does not have same 2-d shape as `dem`.
+            ValueError: `mask` does not have the same 2-d shape as `dem.
+            ValueError: `values` is missing and `return_depth` is false.
         """
         has_values = False
         if values is not None:
@@ -793,7 +845,9 @@ class Camera:
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)
 
-        def process(ij):
+        def process(
+            ij: Tuple[slice, slice]
+        ) -> Tuple[Tuple[Sequence[int], Sequence[int]], Sequence[Number]]:
             tile_mask = mask[ij]
             if not np.count_nonzero(tile_mask):
                 # No cells selected
@@ -858,7 +912,10 @@ class Camera:
             )
             return idx, groups.iloc[:, 2:].as_matrix()
 
-        def reduce(idx, values=None):
+        def reduce(
+            idx: Tuple[Sequence[int], Sequence[int]] = None,
+            values: Sequence[Number] = None,
+        ) -> None:
             bar.next()
             if idx is not None:
                 I[idx] = values
@@ -937,10 +994,19 @@ class Camera:
         Remove distortion from camera coordinates.
 
         TODO: Quadtree 2-D bisection
-        https://stackoverflow.com/questions/3513660/multivariate-bisection-method
+        https://stackoverflow.com/questions/3513660/multivariate-bisection-method.
 
         Arguments:
-            xy: Camera coordinates (n, 2)
+            xy: Camera coordinates (n, 2).
+            method: Undistort method to use if undistorted coordinates must be estimated
+                numerically ("lookup", "oulu", or "regulafalsi").
+            **kwargs: Optional arguments to the undistort method.
+
+        Returns:
+            Undistorted camera coordinates (n, 2).
+
+        Raises:
+            ValueError: Undistort method not supported.
         """
         # X = (X' - dt) / dr
         if not any(self.k) and not any(self.p):

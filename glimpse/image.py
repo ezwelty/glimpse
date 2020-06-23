@@ -1,6 +1,4 @@
-"""
-Read, write, and manipulate photographic images.
-"""
+"""Read, write, and manipulate photographic images."""
 import datetime
 from typing import Any, Optional, Sequence, Tuple, Union
 
@@ -141,6 +139,8 @@ class Image:
             path (str): File path to write to.
             I (array): Image data.
                 If `None` (default), the original image data is read.
+            driver: GDAL drivers to use (see https://gdal.org/drivers/raster).
+                If `None`, tries to guess the driver based on the file extension.
         """
         if I is None:
             I = self.read()
@@ -161,9 +161,7 @@ class Image:
         matplotlib.pyplot.imshow(I, **kwargs)
 
     def set_plot_limits(self) -> None:
-        """
-        Set limits of current plot to image extent.
-        """
+        """Set limits of current plot to image extent."""
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
@@ -174,6 +172,9 @@ class Image:
         Arguments:
             cam (Camera): Target `Camera`
             method (str): Interpolation method, either 'linear' or 'nearest'
+
+        Raises:
+            ValueError: Camera positions are not equal.
         """
         if not all(cam.xyz == self.cam.xyz):
             raise ValueError(

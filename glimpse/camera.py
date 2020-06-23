@@ -384,36 +384,6 @@ class Camera(object):
         obj = self.to_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
-    def normal(self, sigma):
-        """
-        Return a new camera sampled from a normal distribution centered on this
-        camera.
-
-        Arguments:
-            sigma (:class:`Camera` or :obj:`dict`):
-
-        Returns:
-            A :class:`Camera` object
-        """
-        if isinstance(sigma, self.__class__):
-            sigma = sigma.vector
-        if isinstance(sigma, dict):
-            mean = self.as_dict()
-            args = {
-                key: np.add(
-                    mean[key],
-                    np.random.normal(scale=sigma[key]) if sigma.get(key) else 0,
-                )
-                for key in mean
-            }
-            if "f" in sigma:
-                args.pop("fmm", None)
-            if "c" in sigma:
-                args.pop("cmm", None)
-        else:
-            args = {"vector": self.vector + np.random.normal(scale=sigma)}
-        return self.__class__(**args)
-
     def idealize(self):
         """
         Set distortion to zero.

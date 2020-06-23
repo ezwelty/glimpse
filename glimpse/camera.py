@@ -55,32 +55,38 @@ class Camera(object):
 
     def __init__(
         self,
-        xyz=(0, 0, 0),
-        viewdir=(0, 0, 0),
-        imgsz=(100, 100),
-        f=(100, 100),
-        c=(0, 0),
-        k=(0, 0, 0, 0, 0, 0),
-        p=(0, 0),
+        imgsz,
+        f=None,
+        c=None,
         sensorsz=None,
         fmm=None,
         cmm=None,
+        k=(0, 0, 0, 0, 0, 0),
+        p=(0, 0),
+        xyz=(0, 0, 0),
+        viewdir=(0, 0, 0),
     ):
+        if (fmm is not None or cmm is not None) and sensorsz is None:
+            raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
+        if f is not None and fmm is not None:
+            raise ValueError("'f' and 'fmm' cannot both be provided")
+        if c is not None and cmm is not None:
+            raise ValueError("'c' and 'cmm' cannot both be provided")
         self.vector = np.full(20, np.nan, dtype=float)
-        self.sensorsz = sensorsz
         self.xyz = xyz
         self.viewdir = viewdir
         self.imgsz = imgsz
-        if (fmm is not None or cmm is not None) and sensorsz is None:
-            raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
-        if sensorsz is not None and fmm is not None:
-            self.f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
-        else:
-            self.f = f
-        if sensorsz is not None and cmm is not None:
-            self.c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
-        else:
-            self.c = c
+        self.sensorsz = sensorsz
+        if fmm is not None:
+            f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
+        if f is None:
+            raise ValueError("Either 'f' or 'fmm' must be provided")
+        self.f = f
+        if cmm is not None:
+            c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
+        if c is None:
+            c = (0, 0)
+        self.c = c
         self.k = k
         self.p = p
         self.original_vector = self.vector.copy()

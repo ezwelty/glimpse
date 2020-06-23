@@ -11,6 +11,7 @@ from glimpse.convert import (
 )
 from glimpse.convert import Converter
 import numpy as np
+import pytest
 
 # ---- Matlab ----
 
@@ -333,3 +334,11 @@ def test_plots_residuals_as_quivers() -> None:
     residuals = converter.residuals()
     np.testing.assert_equal(quivers.U, residuals[:, 0])
     np.testing.assert_equal(quivers.V, residuals[:, 1])
+
+
+def test_errors_for_unequal_image_size() -> None:
+    """Raises error when camera image size are not equal."""
+    cam = Camera(imgsz=(100, 200), f=(10, 10))
+    xcam = MatlabCamera(imgsz=(100, 100), fc=(10, 10))
+    with pytest.raises(ValueError):
+        Converter(xcam, cam)

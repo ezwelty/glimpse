@@ -19,9 +19,7 @@ class Camera(object):
     `numpy.ndarray` during initialization or when individually set. The focal length in
     pixels (:attr:`f`) is calculated from :attr:`fmm` and :attr:`sensorsz` if both are
     provided. The principal point offset in pixels (:attr:`c`) is calculated from
-    :attr:`cmm` and :attr:`sensorsz` if both are provided. If :attr:`vector` is
-    provided, all arguments are ignored except :attr:`sensorsz`, which is saved for
-    later calculation of :attr:`fmm` and :attr:`cmm`.
+    :attr:`cmm` and :attr:`sensorsz` if both are provided.
 
     Attributes:
         vector (numpy.ndarray): Vector of the core camera attributes
@@ -57,7 +55,6 @@ class Camera(object):
 
     def __init__(
         self,
-        vector=None,
         xyz=(0, 0, 0),
         viewdir=(0, 0, 0),
         imgsz=(100, 100),
@@ -71,24 +68,21 @@ class Camera(object):
     ):
         self.vector = np.full(20, np.nan, dtype=float)
         self.sensorsz = sensorsz
-        if vector is not None:
-            self.vector = np.asarray(vector, dtype=float)[0:20]
+        self.xyz = xyz
+        self.viewdir = viewdir
+        self.imgsz = imgsz
+        if (fmm is not None or cmm is not None) and sensorsz is None:
+            raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
+        if sensorsz is not None and fmm is not None:
+            self.f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
         else:
-            self.xyz = xyz
-            self.viewdir = viewdir
-            self.imgsz = imgsz
-            if (fmm is not None or cmm is not None) and sensorsz is None:
-                raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
-            if sensorsz is not None and fmm is not None:
-                self.f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
-            else:
-                self.f = f
-            if sensorsz is not None and cmm is not None:
-                self.c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
-            else:
-                self.c = c
-            self.k = k
-            self.p = p
+            self.f = f
+        if sensorsz is not None and cmm is not None:
+            self.c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
+        else:
+            self.c = c
+        self.k = k
+        self.p = p
         self.original_vector = self.vector.copy()
 
     # ---- Properties (dependent) ----
@@ -364,7 +358,9 @@ class Camera(object):
         Returns:
             A :class:`Camera` object
         """
-        return Camera(vector=self.vector.copy(), sensorsz=self.sensorsz)
+        cam = copy.deepcopy(self)
+        cam.original_vector = cam.vector.copy()
+        return cam
 
     def reset(self):
         """

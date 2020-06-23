@@ -53,9 +53,6 @@ class Camera(object):
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
         original_vector (numpy.ndarray): Value of :attr:`vector` when first initialized
-        cameraMatrix (numpy.ndarray): Camera matrix in OpenCV format
-        distCoeffs (numpy.ndarray): Distortion coefficients (:attr:`k`, :attr:`p`) in
-            OpenCV format
     """
 
     def __init__(
@@ -256,20 +253,6 @@ class Camera(object):
     @property
     def original_imgsz(self):
         return self.original_vector[6:8]
-
-    @property
-    def cameraMatrix(self):
-        return np.array(
-            [
-                [self.f[0], 0, self.c[0] + self.imgsz[0] / 2],
-                [0, self.f[1], self.c[1] + self.imgsz[1] / 2],
-                [0, 0, 1],
-            ]
-        )
-
-    @property
-    def distCoeffs(self):
-        return np.hstack((self.k[0:2], self.p[0:2], self.k[2:]))
 
     @property
     def shape(self):

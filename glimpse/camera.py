@@ -1,3 +1,6 @@
+import copy
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+
 import numpy as np
 import pandas
 import scipy.interpolate
@@ -5,9 +8,14 @@ import scipy.ndimage
 import scipy.optimize
 
 from . import config, helpers
+from .raster import Raster
+
+Number = Union[int, float]
+Array = Union[Sequence[Number], np.ndarray]
+Vector = Union[Number, Array]
 
 
-class Camera(object):
+class Camera:
     """
     Distorted camera model.
 
@@ -55,17 +63,17 @@ class Camera(object):
 
     def __init__(
         self,
-        imgsz,
-        f=None,
-        c=None,
-        sensorsz=None,
-        fmm=None,
-        cmm=None,
-        k=(0, 0, 0, 0, 0, 0),
-        p=(0, 0),
-        xyz=(0, 0, 0),
-        viewdir=(0, 0, 0),
-    ):
+        imgsz: Vector,
+        f: Vector = None,
+        c: Vector = None,
+        sensorsz: Vector = None,
+        fmm: Vector = None,
+        cmm: Vector = None,
+        k: Vector = (0, 0, 0, 0, 0, 0),
+        p: Vector = (0, 0),
+        xyz: Vector = (0, 0, 0),
+        viewdir: Vector = (0, 0, 0),
+    ) -> None:
         if (fmm is not None or cmm is not None) and sensorsz is None:
             raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
         if f is not None and fmm is not None:
@@ -94,84 +102,84 @@ class Camera(object):
     # ---- Properties (dependent) ----
 
     @property
-    def xyz(self):
+    def xyz(self) -> np.ndarray:
         return self.vector[0:3]
 
     @xyz.setter
-    def xyz(self, value):
+    def xyz(self, value: Vector) -> None:
         self.vector[0:3] = helpers.format_list(value, length=3, default=0)
 
     @property
-    def viewdir(self):
+    def viewdir(self) -> np.ndarray:
         return self.vector[3:6]
 
     @viewdir.setter
-    def viewdir(self, value):
+    def viewdir(self, value: Vector) -> None:
         self.vector[3:6] = helpers.format_list(value, length=3, default=0)
 
     @property
-    def imgsz(self):
+    def imgsz(self) -> np.ndarray:
         return self.vector[6:8]
 
     @imgsz.setter
-    def imgsz(self, value):
+    def imgsz(self, value: Vector) -> None:
         self.vector[6:8] = helpers.format_list(value, length=2)
 
     @property
-    def f(self):
+    def f(self) -> np.ndarray:
         return self.vector[8:10]
 
     @f.setter
-    def f(self, value):
+    def f(self, value: Vector) -> None:
         self.vector[8:10] = helpers.format_list(value, length=2)
 
     @property
-    def c(self):
+    def c(self) -> np.ndarray:
         return self.vector[10:12]
 
     @c.setter
-    def c(self, value):
+    def c(self, value: Vector) -> None:
         self.vector[10:12] = helpers.format_list(value, length=2, default=0)
 
     @property
-    def k(self):
+    def k(self) -> np.ndarray:
         return self.vector[12:18]
 
     @k.setter
-    def k(self, value):
+    def k(self, value: Vector) -> None:
         self.vector[12:18] = helpers.format_list(value, length=6, default=0)
 
     @property
-    def p(self):
+    def p(self) -> np.ndarray:
         return self.vector[18:20]
 
     @p.setter
-    def p(self, value):
+    def p(self, value: Vector) -> None:
         self.vector[18:20] = helpers.format_list(value, length=2, default=0)
 
     @property
-    def sensorsz(self):
+    def sensorsz(self) -> np.ndarray:
         if self._sensorsz is not None:
             return self._sensorsz
         else:
             return np.full(2, np.nan)
 
     @sensorsz.setter
-    def sensorsz(self, value):
+    def sensorsz(self, value: Vector = None) -> np.ndarray:
         if value is not None:
             value = np.array(helpers.format_list(value, length=2), dtype=float)
         self._sensorsz = value
 
     @property
-    def fmm(self):
+    def fmm(self) -> np.ndarray:
         return self.f * self.sensorsz / self.imgsz
 
     @property
-    def cmm(self):
+    def cmm(self) -> np.ndarray:
         return self.c * self.sensorsz / self.imgsz
 
     @property
-    def R(self):
+    def R(self) -> np.ndarray:
         # Initial rotations of camera reference frame
         # (camera +z pointing up, with +x east and +y north)
         # Point camera north: -90 deg counterclockwise rotation about x-axis
@@ -208,7 +216,7 @@ class Camera(object):
         )
 
     @property
-    def Rprime(self):
+    def Rprime(self) -> np.ndarray:
         radians = np.deg2rad(self.viewdir)
         C = np.cos(radians)
         S = np.sin(radians)
@@ -251,17 +259,17 @@ class Camera(object):
         return Rprime * (np.pi / 180)
 
     @property
-    def original_imgsz(self):
+    def original_imgsz(self) -> np.ndarray:
         return self.original_vector[6:8]
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, int]:
         return int(self.imgsz[1]), int(self.imgsz[0])
 
     # ----- Methods (class) ----
 
     @classmethod
-    def from_json(cls, path, **kwargs):
+    def from_json(cls, path: str, **kwargs: Any) -> "Camera":
         """
         Read Camera from JSON.
 
@@ -288,52 +296,51 @@ class Camera(object):
     # ---- Methods (static) ----
 
     @staticmethod
-    def get_scale_from_size(old_size, new_size):
+    def get_scale_from_size(
+        old_size: Sequence[int], new_size: Sequence[int]
+    ) -> Optional[float]:
         """
         Return the scale factor that achieves a target image size.
 
         Arguments:
-            old_size (iterable of :obj:`int`): Initial image size (nx, ny)
-            new_size (iterable of :obj:`int`): Target image size (nx, ny)
+            old_size: Initial image size (nx, ny)
+            new_size: Target image size (nx, ny)
 
         Returns:
-            float: Scale factor, or `None` if **new_size** cannot
-            be achieved exactly
+            Scale factor, or `None` if **new_size** cannot be achieved exactly
         """
-        if all(new_size == old_size):
+        old = np.asarray(old_size)
+        new = np.asarray(new_size)
+        if all(new == old):
             return 1.0
-        scale_bounds = new_size / old_size
+        scale_bounds = new / old
         if scale_bounds[0] == scale_bounds[1]:
             return scale_bounds[0]
 
         def err(scale):
-            return np.sum(np.abs(np.floor(scale * old_size + 0.5) - new_size))
+            return np.sum(np.abs(np.floor(scale * old + 0.5) - new_size))
 
         fit = scipy.optimize.minimize(
             err, x0=scale_bounds.mean(), bounds=[scale_bounds]
         )
         if err(fit["x"]) == 0:
             return fit["x"]
-        else:
-            return None
+        return None
 
     # ---- Methods (public) ----
 
-    def copy(self):
+    def copy(self) -> "Camera":
         """
         Return a copy of this camera.
 
         The :attr:`original_vector` of the new :class:`Camera` object is set to
         the current value of :attr:`vector`.
-
-        Returns:
-            A :class:`Camera` object
         """
         cam = copy.deepcopy(self)
         cam.original_vector = cam.vector.copy()
         return cam
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Reset core attributes to their original values.
 
@@ -341,18 +348,18 @@ class Camera(object):
         """
         self.vector = self.original_vector.copy()
 
-    def to_dict(self, attributes=None):
+    def to_dict(self, attributes: Sequence[str] = None) -> Dict[str, list]:
         """
         Return this camera as a dictionary.
 
         Arguments:
-            attributes (iterable of :obj:`str`): Attributes to include.
+            attributes: Attributes to include.
                 If `None`, defaults to the core attributes
                 (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
                 :attr:`k`, :attr:`p`).
 
         Returns:
-            dict: Attribute names and values
+            Attribute names and values
         """
         if attributes is None:
             attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
@@ -362,29 +369,31 @@ class Camera(object):
             if hasattr(self, name)
         }
 
-    def to_json(self, path=None, attributes=None, **kwargs):
+    def to_json(
+        self, path: str = None, attributes: Sequence[str] = None, **kwargs: Any
+    ) -> Optional[str]:
         """
         Write or return this camera as JSON.
 
         See :meth:`from_json` for the reverse.
 
         Arguments:
-            path (str): Path of file to write to.
+            path: Path of file to write to.
                 If `None`, a JSON-formatted string is returned.
-            attributes (:obj:`list` of :obj:`str`): Attributes to include.
+            attributes: Attributes to include.
                 If `None`, defaults to the core attributes
                 (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
                 :attr:`k`, :attr:`p`).
             **kwargs: Additional arguments to :func:`helpers.write_json()`
 
         Returns:
-            str: Attribute names and values as a JSON-formatted string,
-            or `None` if **path** is specified.
+            Attribute names and values as a JSON-formatted string,
+                or `None` if **path** is specified.
         """
         obj = self.to_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
-    def idealize(self):
+    def idealize(self) -> None:
         """
         Set distortion to zero.
 
@@ -395,7 +404,7 @@ class Camera(object):
         self.p = np.zeros(2, dtype=float)
         self.c = np.zeros(2, dtype=float)
 
-    def resize(self, size=1, force=False):
+    def resize(self, size: Vector = 1, force: bool = False) -> None:
         """
         Resize the camera.
 
@@ -405,7 +414,7 @@ class Camera(object):
         Arguments:
             size: Scale factor relative to original size (float)
                 or target image size (iterable)
-            force (bool): Whether to use `size` even if it does not preserve
+            force: Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
         scale1d = np.atleast_1d(size)
@@ -427,23 +436,29 @@ class Camera(object):
         self.f *= scale2d
         self.c *= scale2d
 
-    def project(self, xyz, directions=False, correction=False, return_depth=False):
+    def project(
+        self,
+        xyz: np.ndarray,
+        directions: bool = False,
+        correction: Union[bool, dict] = False,
+        return_depth: bool = False,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to image coordinates.
 
         Arguments:
-            xyz (array): World coordinates (n, 3)
-            directions (bool): Whether `xyz` are absolute coordinates (False)
+            xyz: World coordinates (n, 3)
+            directions: Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
             correction: Arguments to `helpers.elevation_corrections()` (dict),
-                `True` for default arguments, or `None` or `False` to skip.
+                `True` for default arguments, or `False` to skip.
                 Only applies if `directions` is `False`.
-            return_depth (bool): Whether to return the distance of each point
+            return_depth: Whether to return the distance of each point
                 along the camera's optical axis.
 
         Returns:
-            array: Image coordinates (n, 2)
-            array (optional): Point depth (n, )
+            Image coordinates (n, 2)
+            (optional) Point depth (n, )
         """
         xy = self._world2camera(
             xyz, directions=directions, correction=correction, return_depth=return_depth
@@ -453,36 +468,40 @@ class Camera(object):
         uv = self._camera2image(xy)
         if return_depth:
             return uv, depth
-        else:
-            return uv
+        return uv
 
-    def invproject(self, uv, directions=True, depth=1):
+    def invproject(
+        self, uv: np.ndarray, directions: bool = True, depth: Vector = 1,
+    ) -> np.ndarray:
         """
         Project image coordinates to world coordinates or ray directions.
 
         Arguments:
-            uv (array): Image coordinates (n, 2)
-            directions (bool): Whether to return world ray directions relative
+            uv: Image coordinates (n, 2)
+            directions: Whether to return world ray directions relative
                 to the camera position (True) or absolute coordinates by adding
                 on the camera position (False)
             depth: Distance of rays along the camera's optical axis, as either a
                 scalar or a vector (n, )
 
         Returns:
-            array: World coordinates or ray directions (n, 3)
+            World coordinates or ray directions (n, 3)
         """
         xy = self._image2camera(uv)
         xyz = self._camera2world(xy, directions=directions, depth=depth)
         return xyz
 
-    def infront(self, xyz, directions=False):
+    def infront(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
         """
         Test whether world coordinates are in front of the camera.
 
         Arguments:
-            xyz (array): World coordinates (n, 3)
-            directions (bool): Whether `xyz` are ray directions (True)
+            xyz: World coordinates (n, 3)
+            directions: Whether `xyz` are ray directions (True)
                 or absolute coordinates (False)
+
+        Returns:
+            Boolean mask (n, )
         """
         if directions:
             dxyz = xyz
@@ -491,36 +510,44 @@ class Camera(object):
         z = np.dot(dxyz, self.R.T[:, 2])
         return z > 0
 
-    def inframe(self, uv):
+    def inframe(self, uv: np.ndarray) -> np.ndarray:
         """
         Test whether image coordinates are in or on the image frame.
 
         Arguments:
-            uv (array) Image coordinates (n, 2)
+            uv: Image coordinates (n, 2)
+
+        Returns:
+            Boolean mask (n, )
         """
         return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
 
-    def inview(self, xyz, directions=False):
+    def inview(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
         """
         Test whether world coordinates are within view.
 
         Arguments:
-            xyz (array): World coordinates (n, 3)
-            directions (bool): Whether `xyz` are ray directions (True)
+            xyz: World coordinates (n, 3)
+            directions: Whether `xyz` are ray directions (True)
                 or absolute coordinates (False)
+
+        Returns:
+            Boolean mask (n, )
         """
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
 
-    def grid(self, step, snap=None, mode="vectors"):
+    def grid(
+        self, step: Vector, snap: Sequence[int] = None, mode: str = "vectors"
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Return grid of image coordinates.
 
         Arguments:
             step: Grid spacing for all (float) or each (iterable) dimension
-            snap (iterable): Point (x, y) to align grid to.
+            snap: Point (x, y) to align grid to.
                 If `None`, (0, 0) is used.
-            mode (str): Return format
+            mode: Return format
 
                 - 'vectors': x (nx, ) and y (ny, ) coordinates
                 - 'grids': x (ny, nx) and y (ny, nx) coordinates
@@ -535,20 +562,24 @@ class Camera(object):
             return grid
         if mode == "points":
             return helpers.grid_to_points(grid)
+        raise ValueError(f"Unsupported mode: {mode}")
 
-    def edges(self, step=(1, 1)):
+    def edges(self, step: Vector = (1, 1)) -> np.ndarray:
         """
         Return coordinates of image edges.
 
         Vertices are ordered clockwise from the origin (0, 0).
 
         Arguments:
-            step (tuple): Pixel spacing of the vertices in x and y
+            step: Pixel spacing of the vertices in x and y
+
+        Returns:
+            Image coordinates (n, 2)
         """
-        if np.isscalar(step):
+        if isinstance(step, (int, float)):
             step = (step, step)
-        nu = (self.imgsz[0] / step[0] if step[0] else 1) + 1
-        nv = (self.imgsz[1] / step[1] if step[1] else 1) + 1
+        nu = self.imgsz[0] / step[0] + 1
+        nv = self.imgsz[1] / step[1] + 1
         u = np.linspace(0, self.imgsz[0], int(nu))
         v = np.linspace(0, self.imgsz[1], int(nv))
         return np.vstack(
@@ -560,7 +591,7 @@ class Camera(object):
             )
         )
 
-    def viewbox(self, depth, step=(1, 1)):
+    def viewbox(self, depth: Number, step: Vector = (1, 1)) -> np.ndarray:
         """
         Return bounding box of the camera viewshed.
 
@@ -568,15 +599,20 @@ class Camera(object):
         to a fixed depth.
 
         Arguments:
-            depth (float): Distance of point projections
-            step (tuple): Spacing of the projected pixels in x and y
+            depth: Distance of point projections
+            step: Spacing of the projected pixels in x and y
+
+        Returns:
+            Bounding box [minx, miny, minz, maxx, maxy, maxz]
         """
         uv = self.edges(step=step)
         dxyz = self.invproject(uv, depth=depth, directions=False)
         vertices = np.vstack((self.xyz, dxyz))
         return helpers.bounding_box(vertices)
 
-    def viewpoly(self, depth, step=1, plane=None):
+    def viewpoly(
+        self, depth: Number, step: Number = 1, plane: Array = None
+    ) -> np.ndarray:
         """
         Return bounding polygon of the camera viewshed.
 
@@ -584,10 +620,13 @@ class Camera(object):
         through the principal point, then projecting the result onto a plane.
 
         Arguments:
-            depth (float): Distance of point projections
-            step (float): Spacing of the projected pixels
-            plane (iterable): Plane (a, b, c, d), where ax + by + cz + d = 0.
+            depth: Distance of point projections
+            step: Spacing of the projected pixels
+            plane: Plane (a, b, c, d), where ax + by + cz + d = 0.
                 If `None`, no planar projection is performed.
+
+        Returns:
+            Bounding polygon (n, 3)
         """
         n = int(self.imgsz[0] / step) + 1
         uv = np.column_stack(
@@ -600,41 +639,47 @@ class Camera(object):
         vertices = np.row_stack((self.xyz, xyz, self.xyz))
         if plane is None:
             return vertices
-        else:
-            return helpers.project_points_plane(points=vertices, plane=plane)
+        return helpers.project_points_plane(points=vertices, plane=plane)
 
-    def rasterize(self, uv, values, fun=np.mean):
+    def rasterize(
+        self,
+        uv: np.ndarray,
+        values: np.ndarray,
+        fun: Callable[[np.ndarray], np.ndarray] = np.mean,
+    ) -> np.ndarray:
         """
         Convert points to a raster image.
 
         Arguments:
-            uv (array): Image point coordinates (Nx2)
-            values (array): Point values
-            fun (function): Aggregate function to apply to values of overlapping points
+            uv: Image point coordinates (n, 2)
+            values: Point values (n, )
+            fun: Aggregate function to apply to values of overlapping points
+
+        Returns:
+            Image with same shape as :attr:`imgsz` (ny, nx)
         """
         is_in = self.inframe(uv)
-        shape = (int(self.imgsz[1]), int(self.imgsz[0]))
         return helpers.rasterize_points(
             uv[is_in, 1].astype(int),
             uv[is_in, 0].astype(int),
             values[is_in],
-            shape,
+            shape=self.shape,
             fun=fun,
         )
 
-    def spherical_to_xyz(self, angles):
+    def spherical_to_xyz(self, angles: np.ndarray) -> np.ndarray:
         """
         Convert relative world spherical coordinates to euclidean.
 
         Arguments:
-            angles (array): Spherical coordinates [azimuth, altitude(, distance)]
+            angles: Spherical coordinates [azimuth, altitude(, distance)]
 
                 - azimuth: degrees clockwise from north
                 - altitude: degrees above horizon
                 - distance: distance from camera
 
         Returns:
-            array: World coordinates, either absolute (if distances were provided)
+            World coordinates, either absolute (if distances were provided)
                 or relative (if distances were not)
         """
         # https://en.wikipedia.org/wiki/Spherical_coordinate_system
@@ -653,7 +698,7 @@ class Camera(object):
             xyz += self.xyz
         return xyz
 
-    def xyz_to_spherical(self, xyz, directions=False):
+    def xyz_to_spherical(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
         if not directions:
             xyz = xyz - self.xyz
         r = np.sqrt(np.sum(xyz ** 2, axis=1))
@@ -671,18 +716,18 @@ class Camera(object):
 
     def project_dem(
         self,
-        dem,
-        values=None,
-        mask=None,
-        tile_size=(256, 256),
-        tile_overlap=(1, 1),
-        scale=1,
-        scale_limits=(1, 1),
-        aggregate=np.mean,
-        parallel=False,
-        correction=False,
-        return_depth=False,
-    ):
+        dem: Raster,
+        values: np.ndarray = None,
+        mask: np.ndarray = None,
+        tile_size: Sequence[int] = (256, 256),
+        tile_overlap: Sequence[int] = (1, 1),
+        scale: Number = 1,
+        scale_limits: Sequence[Number] = (1, 1),
+        aggregate: Callable[[np.ndarray], np.ndarray] = np.mean,
+        parallel: Union[bool, int] = False,
+        correction: Union[bool, dict] = False,
+        return_depth: bool = False,
+    ) -> np.ndarray:
         """
         Return an image simulated from a digital elevation model.
 
@@ -690,20 +735,19 @@ class Camera(object):
         and `mask` are in shared memory (see `sharedmem.copy()`).
 
         Arguments:
-            dem (`Raster`): `Raster` object containing elevations.
-            values (array): Values to use in building the image.
+            dem: `Raster` object containing elevations.
+            values: Values to use in building the image.
                 Must have the same 2-dimensional shape as `dem.Z` but can have
                 multiple layers stacked along the 3rd dimension.
                 Cannot be `None` unless `return_depth` is True.
-            mask (array): Boolean mask of cells of `dem` to include.
+            mask: Boolean mask of cells of `dem` to include.
                 Must have the same shape as `dem.Z`.
                 If `None`, only NaN cells in `dem.Z` are skipped.
-            tile_size (iterable): Target size of `dem` tiles (see `Grid.tile_indices()`)
-            tile_overlap (iterable): Overlap between `dem` tiles
-                (see `Grid.tile_indices()`)
-            scale (float): Target `dem` cells per image pixel.
+            tile_size: Target size of `dem` tiles (see `Grid.tile_indices()`)
+            tile_overlap: Overlap between `dem` tiles (see `Grid.tile_indices()`)
+            scale: Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
-            scale_limits (iterable): Min and max values of `scale`
+            scale_limits: Min and max values of `scale`
             aggregate: Passed as `func` to `pandas.DataFrame.aggregate()`
                 to aggregate values projected onto the same image pixel.
                 Each layer of `values`, and depth if `return_depth` is True,
@@ -717,20 +761,23 @@ class Camera(object):
                 `dem` surface measured along the camera's optical axis
 
         Returns:
-            array: Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
+            Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
                 and 3rd dimension corresponding to each layer in `values`.
                 If `return_depth` is True, it is appended as an additional layer.
         """
-        assert values is None or values.shape[0:2] == dem.shape
-        assert mask is None or mask.shape == dem.shape
+        has_values = False
+        if values is not None:
+            has_values = True
+            values = np.atleast_3d(values)
+            if values.shape[0:2] != dem.shape:
+                raise ValueError("values does not have the same 2-d shape as dem")
+        elif not return_depth:
+            raise ValueError("values cannot be missing if return_depth is False")
         if mask is None:
             mask = ~np.isnan(dem.Z)
+        if mask.shape != dem.shape:
+            raise ValueError("mask does not have the same 2-d shape as dem")
         parallel = helpers._parse_parallel(parallel)
-        has_values = values is not None
-        if not has_values and not return_depth:
-            raise ValueError("values cannot be missing if return_depth is False")
-        if has_values:
-            values = np.atleast_3d(values)
         # Generate DEM block indices
         tile_indices = dem.tile_indices(size=tile_size, overlap=tile_overlap)
         ntiles = len(tile_indices)
@@ -739,7 +786,7 @@ class Camera(object):
         nbands_in = (values.shape[2] if has_values else 0) + return_depth
         df = pandas.DataFrame(
             data=np.zeros((2, nbands_in + 2)),
-            columns=["row", "col"] + list(range(nbands_in)),
+            columns=["row", "col"] + [str(x) for x in range(nbands_in)],
         )
         nbands_out = df.groupby(["row", "col"]).aggregate(aggregate).shape[1]
         I = np.full(self.shape + (nbands_out,), np.nan)
@@ -823,15 +870,15 @@ class Camera(object):
 
     # ---- Methods (private) ----
 
-    def _radial_distortion(self, r2):
+    def _radial_distortion(self, r2: np.ndarray) -> np.ndarray:
         """
         Compute the radial distortion multiplier `dr`.
 
         Arguments:
-            r2 (array): Squared radius of camera coordinates (Nx1)
+            r2: Squared radius of camera coordinates (n, 1)
         """
         # dr = (1 + k1 * r^2 + k2 * r^4 + k3 * r^6)/(1 + k4 * r^2 + k5 * r^4 + k6 * r^6)
-        dr = 1
+        dr: np.ndarray = 1
         if self.k[0]:
             dr += self.k[0] * r2
         if self.k[1]:
@@ -850,13 +897,13 @@ class Camera(object):
         # Return as column
         return dr[:, None]
 
-    def _tangential_distortion(self, xy, r2):
+    def _tangential_distortion(self, xy: np.ndarray, r2: np.ndarray) -> np.ndarray:
         """
         Compute tangential distortion additive `[dtx, dty]`.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
-            r2 (array): Squared radius of `xy` (Nx1)
+            xy: Camera coordinates (n, 2)
+            r2: Squared radius of `xy` (n, 1)
         """
         # dtx = 2xy * p1 + p2 * (r^2 + 2x^2)
         # dty = p1 * (r^2 + 2y^2) + 2xy * p2
@@ -865,26 +912,27 @@ class Camera(object):
         dty = self.p[0] * (r2 + 2 * xy[:, 1] ** 2) + 2 * xty * self.p[1]
         return np.column_stack((dtx, dty))
 
-    def _distort(self, xy):
+    def _distort(self, xy: np.ndarray) -> np.ndarray:
         """
         Apply distortion to camera coordinates.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
+            xy: Camera coordinates (n, 2)
         """
         # X' = dr * X + dt
         if not any(self.k) and not any(self.p):
             return xy
-        else:
-            dxy = xy.copy()
-            r2 = np.sum(xy ** 2, axis=1)
-            if any(self.k):
-                dxy *= self._radial_distortion(r2)
-            if any(self.p):
-                dxy += self._tangential_distortion(xy, r2)
-            return dxy
+        dxy = xy.copy()
+        r2 = np.sum(xy ** 2, axis=1)
+        if any(self.k):
+            dxy *= self._radial_distortion(r2)
+        if any(self.p):
+            dxy += self._tangential_distortion(xy, r2)
+        return dxy
 
-    def _undistort(self, xy, method="oulu", **params):
+    def _undistort(
+        self, xy: np.ndarray, method: str = "oulu", **kwargs: Any
+    ) -> np.ndarray:
         """
         Remove distortion from camera coordinates.
 
@@ -892,21 +940,22 @@ class Camera(object):
         https://stackoverflow.com/questions/3513660/multivariate-bisection-method
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
+            xy: Camera coordinates (n, 2)
         """
         # X = (X' - dt) / dr
         if not any(self.k) and not any(self.p):
             return xy
-        elif self.k[0] and not any(self.k[1:]) and not any(self.p):
+        if self.k[0] and not any(self.k[1:]) and not any(self.p):
             return self._undistort_k1(xy)
-        elif method == "lookup":
-            return self._undistort_lookup(xy, **params)
-        elif method == "oulu":
-            return self._undistort_oulu(xy, **params)
-        elif method == "regulafalsi":
-            return self._undistort_regulafalsi(xy, **params)
+        if method == "lookup":
+            return self._undistort_lookup(xy, **kwargs)
+        if method == "oulu":
+            return self._undistort_oulu(xy, **kwargs)
+        if method == "regulafalsi":
+            return self._undistort_regulafalsi(xy, **kwargs)
+        raise ValueError(f"Undistort method not supported: {method}")
 
-    def _undistort_k1(self, xy):
+    def _undistort_k1(self, xy: np.ndarray) -> np.ndarray:
         """
         Remove 1st order radial distortion.
 
@@ -914,7 +963,7 @@ class Camera(object):
         the only non-zero distortion coefficient is k1 (self.k[0]).
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
+            xy: Camera coordinates (n, 2)
         """
         # Cubic roots solution from Numerical Recipes in C 2nd Edition:
         # http://apps.nrbook.com/c/index.html (pages 183-185)
@@ -940,7 +989,7 @@ class Camera(object):
             r[has_one_root] = A + B
         return np.column_stack((np.cos(phi), np.sin(phi))) * r[:, None]
 
-    def _undistort_lookup(self, xy, density=1):
+    def _undistort_lookup(self, xy: np.ndarray, density: Number = 1) -> np.ndarray:
         """
         Remove distortion by table lookup.
 
@@ -951,8 +1000,8 @@ class Camera(object):
         NOTE: Remains stable in extreme distortion, but slow for large lookup tables.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
-            density (float): Grid points per pixel (approximate)
+            xy: Camera coordinates (n, 2)
+            density: Grid points per pixel (approximate)
         """
         # Estimate undistorted camera coordinate bounds
         uv_edges = self.imgsz * np.array(
@@ -979,7 +1028,9 @@ class Camera(object):
         # NOTE: Cannot use faster grid interpolation because dxy is not regular
         return scipy.interpolate.griddata(dxy, uxy, xy, method="linear")
 
-    def _undistort_oulu(self, xy, iterations=20, tolerance=0):
+    def _undistort_oulu(
+        self, xy: np.ndarray, iterations: int = 20, tolerance: Number = 0
+    ) -> np.ndarray:
         """
         Remove distortion by the iterative Oulu University method.
 
@@ -988,9 +1039,9 @@ class Camera(object):
         NOTE: Converges very quickly in normal cases, but fails for extreme distortion.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
-            iterations (int): Maximum number of iterations
-            tolerance (float): Approximate pixel displacement in x and y below which
+            xy: Camera coordinates (n, 2)
+            iterations: Maximum number of iterations
+            tolerance: Approximate pixel displacement in x and y below which
                 to exit early, or `0` to disable early exit
         """
         # Initial guess
@@ -1011,7 +1062,9 @@ class Camera(object):
                 break
         return uxy
 
-    def _undistort_regulafalsi(self, xy, iterations=100, tolerance=0):
+    def _undistort_regulafalsi(
+        self, xy: np.ndarray, iterations: int = 100, tolerance: Number = 0
+    ) -> np.ndarray:
         """
         Remove distortion by iterative regula falsi (false position) method.
 
@@ -1021,9 +1074,9 @@ class Camera(object):
         distortion.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
-            iterations (int): Maximum number of iterations
-            tolerance (float): Approximate pixel displacement in x and y
+            xy: Camera coordinates (n, 2)
+            iterations: Maximum number of iterations
+            tolerance: Approximate pixel displacement in x and y
                 (for all points) below which to exit early,
                 or `0` to disable early exit (default).
         """
@@ -1061,7 +1114,7 @@ class Camera(object):
         uxy[mask] = x2
         return uxy
 
-    def _reversible(self):
+    def _reversible(self) -> bool:
         """
         Test whether the camera model is reversible.
 
@@ -1097,19 +1150,23 @@ class Camera(object):
         return continuous_row and continuous_col
 
     def _world2camera(
-        self, xyz, directions=False, correction=False, return_depth=False
-    ):
+        self,
+        xyz: np.ndarray,
+        directions: bool = False,
+        correction: Union[bool, dict] = False,
+        return_depth: bool = False,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to camera coordinates.
 
         Arguments:
-            xyz (array): World coordinates (n, 3)
-            directions (bool): Whether `xyz` are absolute coordinates (False)
+            xyz: World coordinates (n, 3)
+            directions: Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
             correction: Arguments to `helpers.elevation_corrections()` (dict),
-                `True` for default arguments, or `None` or `False` to skip.
+                `True` for default arguments, or `False` to skip.
                 Only applies if `directions` is `False`.
-            return_depth (bool): Whether to return the distance of each point
+            return_depth: Whether to return the distance of each point
                 along the camera's optical axis
         """
         if directions:
@@ -1135,16 +1192,17 @@ class Camera(object):
         xy[behind, :] = np.nan
         if return_depth:
             return xy, xyz_c[:, 2]
-        else:
-            return xy
+        return xy
 
-    def _camera2world(self, xy, directions=True, depth=1):
+    def _camera2world(
+        self, xy: np.ndarray, directions: bool = True, depth: Vector = 1
+    ) -> np.ndarray:
         """
         Project camera coordinates to world coordinates or ray directions.
 
         Arguments:
-            xy (array): Camera coordinates (n, 2)
-            directions (bool): Whether to return world ray directions relative
+            xy: Camera coordinates (n, 2)
+            directions: Whether to return world ray directions relative
                 to the camera position (True) or absolute coordinates by adding
                 on the camera position (False)
             depth: Distance of rays along the camera's optical axis, as either a
@@ -1163,36 +1221,36 @@ class Camera(object):
             xyz += self.xyz
         return xyz
 
-    def _camera2image(self, xy):
+    def _camera2image(self, xy: np.ndarray) -> np.ndarray:
         """
         Project camera to image coordinates.
 
         Arguments:
-            xy (array): Camera coordinates (Nx2)
+            xy: Camera coordinates (n, 2)
         """
         xy = self._distort(xy)
         uv = xy * self.f + (self.imgsz / 2 + self.c)
         return uv
 
-    def _image2camera(self, uv):
+    def _image2camera(self, uv: np.ndarray) -> np.ndarray:
         """
         Project image to camera coordinates.
 
         Arguments:
-            uv (array): Image coordinates (Nx2)
+            uv: Image coordinates (n, 2)
         """
         xy = (uv - (self.imgsz * 0.5 + self.c)) * (1 / self.f)
         xy = self._undistort(xy)
         return xy
 
-    def _image2camera_grid_ideal(self, uv):
+    def _image2camera_grid_ideal(self, uv: Sequence[np.ndarray]) -> np.ndarray:
         """
         Project image to camera coordinates.
 
         Faster version for an ideal camera and regularly gridded image coordinates.
 
         Arguments:
-            uv (iterable): Vectors (u, v) of regularly gridded image coordinates
+            uv: Vectors (u, v) of regularly gridded image coordinates
         """
         x = (uv[0] - (self.imgsz[0] * 0.5 + self.c[0])) * (1 / self.f[0])
         y = (uv[1] - (self.imgsz[1] * 0.5 + self.c[1])) * (1 / self.f[1])

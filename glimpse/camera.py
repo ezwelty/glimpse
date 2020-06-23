@@ -288,41 +288,6 @@ class Camera(object):
     # ---- Methods (static) ----
 
     @staticmethod
-    def get_sensor_size(make, model):
-        """
-        Return the nominal sensor size of a digital camera model.
-
-        Data is from Digital Photography Review (https://dpreview.com) reviews
-        and their article https://dpreview.com/articles/8095816568/sensorsizes.
-
-        Arguments:
-            make (str): Camera make (see :attr:`Exif.make`)
-            model (str): Camera model (see :attr:`Exif.model`)
-
-        Returns:
-            tuple: Sensor size in millimeters (nx, ny)
-        """
-        sensor_sizes = {
-            # https://www.dpreview.com/reviews/nikond2x/2
-            "NIKON CORPORATION NIKON D2X": (23.7, 15.7),
-            # https://www.dpreview.com/reviews/nikond200/2
-            "NIKON CORPORATION NIKON D200": (23.6, 15.8),
-            # https://www.dpreview.com/reviews/nikond300s/2
-            "NIKON CORPORATION NIKON D300S": (23.6, 15.8),
-            # https://www.dpreview.com/reviews/nikoncp8700/2
-            "NIKON E8700": (8.8, 6.6),
-            # https://www.dpreview.com/reviews/canoneos20d/2
-            "Canon Canon EOS 20D": (22.5, 15.0),
-            # https://www.dpreview.com/reviews/canoneos40d/2
-            "Canon Canon EOS 40D": (22.2, 14.8),
-        }
-        make_model = make.strip() + " " + model.strip()
-        if make_model in sensor_sizes:
-            return sensor_sizes[make_model]
-        else:
-            raise KeyError("No sensor size found for: " + make_model)
-
-    @staticmethod
     def get_scale_from_size(old_size, new_size):
         """
         Return the scale factor that achieves a target image size.

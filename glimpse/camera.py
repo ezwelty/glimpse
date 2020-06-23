@@ -261,11 +261,11 @@ class Camera(object):
     # ----- Methods (class) ----
 
     @classmethod
-    def read(cls, path, **kwargs):
+    def from_json(cls, path, **kwargs):
         """
         Read Camera from JSON.
 
-        See :meth:`write` for the reverse.
+        See :meth:`to_json` for the reverse.
 
         Arguments:
             path (str): Path to JSON file
@@ -341,7 +341,7 @@ class Camera(object):
         """
         self.vector = self.original_vector.copy()
 
-    def as_dict(self, attributes=None):
+    def to_dict(self, attributes=None):
         """
         Return this camera as a dictionary.
 
@@ -362,11 +362,11 @@ class Camera(object):
             if hasattr(self, name)
         }
 
-    def write(self, path=None, attributes=None, **kwargs):
+    def to_json(self, path=None, attributes=None, **kwargs):
         """
         Write or return this camera as JSON.
 
-        See :meth:`read` for the reverse.
+        See :meth:`from_json` for the reverse.
 
         Arguments:
             path (str): Path of file to write to.
@@ -381,7 +381,7 @@ class Camera(object):
             str: Attribute names and values as a JSON-formatted string,
             or `None` if **path** is specified.
         """
-        obj = self.as_dict(attributes=attributes)
+        obj = self.to_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
     def normal(self, sigma):

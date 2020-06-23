@@ -38,7 +38,7 @@ def _strip_etree_namespaces(tree: ET.ElementTree) -> None:
 
 
 def read(
-    path: Union[str, TextIO], key: str = None, imgsz: Optional[Tuple[int, int]] = None
+    path: Union[str, TextIO], key: str = None, imgsz: Tuple[int, int] = None
 ) -> dict:
     """
     Get SVG element vertices as image coordinates.
@@ -118,9 +118,7 @@ def read(
     # Iterate over tree
     img = {}
 
-    def parse_elements(
-        e: ET.Element, key: Optional[str] = None, transform: str = ""
-    ) -> dict:
+    def parse_elements(e: ET.Element, key: str = None, transform: str = "") -> dict:
         nonlocal img
         # Choose element name for dictionary
         tag = (e.get(key) if key else None) or e.tag
@@ -285,7 +283,7 @@ def g(*children: ET.Element, **attrib: str) -> ET.Element:
 
 
 def image(
-    width: Numeric, height: Numeric, href: Optional[str] = None, **attrib: str
+    width: Numeric, height: Numeric, href: str = None, **attrib: str
 ) -> ET.Element:
     """
     Create `image` element.
@@ -342,10 +340,7 @@ def path(d: Union[str, Coordinates] = "", **attrib: str) -> ET.Element:
 
 
 def _indent_etree(
-    e: ET.Element,
-    level: int = 0,
-    indent: Optional[Union[int, str]] = 4,
-    last: bool = False,
+    e: ET.Element, level: int = 0, indent: Union[int, str] = None, last: bool = False,
 ) -> None:
     if indent is None:
         sep, tab = "", ""
@@ -367,14 +362,14 @@ def _indent_etree(
         e.tail = None
 
 
-def _etree_to_string(e: ET.Element, indent: Optional[Union[int, str]] = 4) -> str:
+def _etree_to_string(e: ET.Element, indent: Union[int, str] = None) -> str:
     e = copy.deepcopy(e)
     _indent_etree(e, indent=indent)
     return ET.tostring(e, encoding="unicode")
 
 
 def write(
-    e: ET.Element, path: Optional[str] = None, indent: Optional[Union[int, str]] = None
+    e: ET.Element, path: str = None, indent: Union[int, str] = None
 ) -> Optional[str]:
     r"""
     Returns XML as a string or writes it to file.
@@ -461,7 +456,7 @@ class Points:
         w, h = max(xs) - x, max(ys) - y
         return {"x": x, "y": y, "width": w, "height": h}
 
-    def scale(self, x: Number, y: Optional[Number] = None) -> "Points":
+    def scale(self, x: Number, y: Number = None) -> "Points":
         """
         Scale coordinates.
 
@@ -635,7 +630,7 @@ class Points:
         }
 
     @classmethod
-    def _from_svg(cls, viewBox: Optional[str] = None) -> "Points":
+    def _from_svg(cls, viewBox: str = None) -> "Points":
         if viewBox:
             x, y, w, h = COORD_REGEX.findall(viewBox)
             return cls._from_rect(w, h, x, y)

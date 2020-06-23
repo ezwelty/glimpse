@@ -1,6 +1,9 @@
 """
 Read, write, and manipulate photographic images.
 """
+import datetime
+from typing import Any, Optional, Sequence, Tuple, Union
+
 import matplotlib.pyplot
 import numpy as np
 import osgeo.gdal
@@ -12,7 +15,7 @@ from .camera import Camera
 from .exif import Exif
 
 
-class Image(object):
+class Image:
     """
     Photographic image and the settings that gave rise to the image.
 
@@ -32,7 +35,13 @@ class Image(object):
         I (numpy.ndarray): Cached image content
     """
 
-    def __init__(self, path, cam=None, exif=None, datetime=None):
+    def __init__(
+        self,
+        path: str,
+        cam: Union[dict, Camera] = None,
+        exif: Exif = None,
+        datetime: datetime.datetime = None,
+    ) -> None:
         self.path = path
         if not cam:
             cam = {}
@@ -57,20 +66,21 @@ class Image(object):
         self.I = None
 
     @property
-    def _path_imgsz(self):
+    def _path_imgsz(self) -> Tuple[int, int]:
         ds = osgeo.gdal.Open(self.path)
         return ds.RasterXSize, ds.RasterYSize
 
     @property
-    def _cache_imgsz(self):
+    def _cache_imgsz(self) -> Optional[Tuple[int, int]]:
         if self.I is not None:
             return self.I.shape[1], self.I.shape[0]
+        return None
 
     @property
-    def _cam_imgsz(self):
+    def _cam_imgsz(self) -> Tuple[int, int]:
         return int(self.cam.imgsz[0]), int(self.cam.imgsz[1])
 
-    def read(self, box=None, cache=True):
+    def read(self, box: Sequence[int] = None, cache: bool = True) -> np.ndarray:
         """
         Read image data from file.
 
@@ -123,7 +133,7 @@ class Image(object):
             I = I[box[1] : box[3], box[0] : box[2]]
         return I
 
-    def write(self, path, I=None, driver=None):
+    def write(self, path: str, I: np.ndarray = None, driver: str = None) -> None:
         """
         Write image data to file.
 
@@ -136,7 +146,7 @@ class Image(object):
             I = self.read()
         helpers.write_raster(a=I, path=path, driver=driver)
 
-    def plot(self, **kwargs):
+    def plot(self, **kwargs: Any) -> None:
         """
         Plot image data.
 
@@ -150,14 +160,14 @@ class Image(object):
         kwargs = {"origin": "upper", "extent": (0, I.shape[1], I.shape[0], 0), **kwargs}
         matplotlib.pyplot.imshow(I, **kwargs)
 
-    def set_plot_limits(self):
+    def set_plot_limits(self) -> None:
         """
         Set limits of current plot to image extent.
         """
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
-    def project(self, cam, method="linear"):
+    def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """
         Project image into another `Camera`.
 

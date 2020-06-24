@@ -170,12 +170,9 @@ class Camera:
         self.vector[18:20] = helpers.format_list(value, length=2, default=0)
 
     @property
-    def sensorsz(self) -> np.ndarray:
+    def sensorsz(self) -> Optional[np.ndarray]:
         """Sensor size in millimeters (nx, ny)."""
-        if self._sensorsz is not None:
-            return self._sensorsz
-        else:
-            return np.full(2, np.nan)
+        return self._sensorsz
 
     @sensorsz.setter
     def sensorsz(self, value: Vector = None) -> np.ndarray:
@@ -184,13 +181,17 @@ class Camera:
         self._sensorsz = value
 
     @property
-    def fmm(self) -> np.ndarray:
+    def fmm(self) -> Optional[np.ndarray]:
         """Focal length in millimeters (fx, fy)."""
+        if self.sensorsz is None:
+            return None
         return self.f * self.sensorsz / self.imgsz
 
     @property
-    def cmm(self) -> np.ndarray:
+    def cmm(self) -> Optional[np.ndarray]:
         """Principal point offset from the image center in millimeters (dx, dy)."""
+        if self.sensorsz is None:
+            return None
         return self.c * self.sensorsz / self.imgsz
 
     @property

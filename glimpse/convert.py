@@ -729,7 +729,7 @@ class PhotoModelerCamera:
 
     @classmethod
     def _from_camera_initial(cls, cam: Camera) -> "PhotoModelerCamera":
-        if np.any(np.isnan(cam.sensorsz)):
+        if cam.sensorsz is None:
             raise ValueError("Camera does not have a sensor size")
         return cls(
             imgsz=(int(cam.imgsz[0]), int(cam.imgsz[1])),

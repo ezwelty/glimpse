@@ -1402,14 +1402,23 @@ class Camera:
         uxy[mask] = x2
         return uxy
 
-    def _reversible(self) -> bool:
+    def reversible(self) -> bool:
         """
-        Test whether the camera model is reversible.
+        Test whether this camera has reversible distortion.
 
-        Checks whether distortion produces a monotonically increasing result.
-        If not, distorted coordinates are non-unique and cannot be reversed.
+        Tests whether the camera model produces monotonically increasing image
+        coordinates. If not, distorted coordinates are non-unique and thus irreversible.
 
-        TODO: Derive this explicitly from the distortion parameters.
+        Example:
+            >>> cam = Camera(imgsz=10, f=10)
+            >>> cam.reversible()
+            True
+            >>> cam.p = 0.01
+            >>> cam.reversible()
+            True
+            >>> cam.p = 0.4
+            >>> cam.reversible()
+            False
         """
         xy_row = np.column_stack(
             (

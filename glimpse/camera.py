@@ -1,6 +1,6 @@
 """Convert between world and image coordinates using a distorted camera model."""
 import copy
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, cast, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas
@@ -1070,14 +1070,14 @@ class Camera:
 
         def process(
             ij: Tuple[slice, slice]
-        ) -> Tuple[Tuple[Sequence[int], Sequence[int]], Sequence[Number]]:
-            tile_mask = mask[ij]
+        ) -> Optional[Tuple[Tuple[Sequence[int], Sequence[int]], Sequence[Number]]]:
+            tile_mask = mask[ij]  # type: ignore
             if not np.count_nonzero(tile_mask):
                 # No cells selected
                 return None
             tile = dem[ij]
             if has_values:
-                tile_values = values[ij]
+                tile_values = values[ij]  # type: ignore
             # Scale tile based on distance from camera
             mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
             if np.isnan(mean_xyz[2]):

@@ -453,8 +453,10 @@ class Grid(object):
                 gridded values
         """
         n = np.round(self.n / size).astype(int)
-        xi = np.floor(np.arange(self.n[0]) / np.ceil(self.n[0] / n[0]))
-        yi = np.floor(np.arange(self.n[1]) / np.ceil(self.n[1] / n[1]))
+        # Ignore divide by zero
+        with np.errstate(divide="ignore"):
+            xi = np.floor(np.arange(self.n[0]) / np.ceil(self.n[0] / n[0]))
+            yi = np.floor(np.arange(self.n[1]) / np.ceil(self.n[1] / n[1]))
         xends = np.insert(np.searchsorted(xi, np.unique(xi), side="right"), 0, 0)
         yends = np.insert(np.searchsorted(yi, np.unique(yi), side="right"), 0, 0)
         # HACK: Achieves overlap by increasing tile size

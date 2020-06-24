@@ -16,7 +16,7 @@ import osgeo.gdal_array
 import osgeo.osr
 import pandas
 import PIL
-import progress
+import progress.bar
 import pyproj
 import scipy.ndimage
 import scipy.spatial
@@ -1693,10 +1693,10 @@ def rasterize_points(rows, cols, values, shape, fun=np.mean):
             where available and `NaN` elsewhere
     """
     df = pandas.DataFrame({"row": rows, "col": cols, "value": values})
-    groups = df.groupby(("row", "col")).aggregate(fun).reset_index()
-    idx = np.ravel_multi_index((groups.row.values, groups.col.values), shape)
-    grid = np.full(shape, np.nan)
-    grid.flat[idx] = groups.value.values
+    groups = df.groupby(["row", "col"], sort=False, as_index=False).aggregate(fun)
+    idx = np.ravel_multi_index((groups["row"].values, groups["col"].values), shape)
+    grid = np.full(shape, np.nan, dtype=float)
+    grid.flat[idx] = groups["value"].values
     return grid
 
 

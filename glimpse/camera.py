@@ -362,8 +362,36 @@ class Camera:
         """
         Return a copy of this camera.
 
-        The :attr:`original_vector` of the new :class:`Camera` object is set to
-        the current value of :attr:`vector`.
+        The original state of the copy (to which :meth:`reset` reverts)
+        will be the current state of this camera, not its original state.
+
+        Example:
+            Create a camera `cam`, modify it, then make a reference `rcam`
+            and a copy `ccam`.
+
+            >>> cam = Camera(imgsz=1, f=1)
+            >>> cam.f[0] = 2
+            >>> rcam = cam
+            >>> ccam = cam.copy()
+
+            If we modify `cam`, only the reference `rcam` changes.
+
+            >>> cam.f[0] = 3
+            >>> cam.f[0] == rcam.f[0]
+            True
+            >>> cam.f[0] == ccam.f[0]
+            False
+
+            If we modify, then reset, the copy `ccam`,
+            it resets to its original state, not the original state of `cam`.
+
+            >>> ccam.f[0] = 4
+            >>> ccam.reset()
+            >>> ccam.f[0] == 2
+            True
+            >>> cam.reset()
+            >>> cam.f[0] == 1
+            True
         """
         cam = copy.deepcopy(self)
         cam.original_vector = cam.vector.copy()
@@ -371,35 +399,43 @@ class Camera:
 
     def reset(self) -> None:
         """
-        Reset core attributes to their original values.
+        Reset this camera to its original state.
 
-        :attr:`vector` is reset to the value of :attr:`original_vector`.
+        Example:
+            >>> cam = Camera(imgsz=1, f=1)
+            >>> cam.f[0] += 1
+            >>> cam.reset()
+            >>> cam.f[0] == 1
         """
         self.vector = self.original_vector.copy()
 
-    def to_dict(self, attributes: Sequence[str] = None) -> Dict[str, list]:
+    def to_dict(
+        self,
+        attributes: Sequence[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+    ) -> Dict[str, tuple]:
         """
         Return this camera as a dictionary.
 
         Arguments:
-            attributes: Attributes to include.
-                If `None`, defaults to the core attributes
-                (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
-                :attr:`k`, :attr:`p`).
+            attributes: Names of attributes to include.
 
         Returns:
-            Attribute names and values
+            Attribute names and values.
+
+        Example:
+            >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
+            >>> cam.to_dict()
+            {..., 'imgsz': (8.0, 6.0), 'f': (7.9, 6.1), ...}
+            >>> cam.to_dict(('imgsz', 'f'))
+            {'imgsz': (8.0, 6.0), 'f': (7.9, 6.1)}
         """
-        if attributes is None:
-            attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
-        return {
-            name: list(getattr(self, name))
-            for name in attributes
-            if hasattr(self, name)
-        }
+        return {key: tuple(getattr(self, key)) for key in attributes}
 
     def to_json(
-        self, path: str = None, attributes: Sequence[str] = None, **kwargs: Any
+        self,
+        path: str = None,
+        attributes: Sequence[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+        **kwargs: Any,
     ) -> Optional[str]:
         """
         Write or return this camera as JSON.
@@ -410,24 +446,46 @@ class Camera:
             path: Path of file to write to.
                 If `None`, a JSON-formatted string is returned.
             attributes: Attributes to include.
-                If `None`, defaults to the core attributes
-                (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
-                :attr:`k`, :attr:`p`).
             **kwargs: Additional arguments to :func:`helpers.write_json()`
 
         Returns:
             Attribute names and values as a JSON-formatted string,
                 or `None` if **path** is specified.
+
+        Example:
+            >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
+            >>> print(cam.to_json())
+            {..., "imgsz": [8.0, 6.0], "f": [7.9, 6.1], ...}
+            >>> print(cam.to_json(indent=4, flat_arrays=True))
+            {
+                "xyz": [0.0, 0.0, 0.0],
+                "viewdir": [0.0, 0.0, 0.0],
+                "imgsz": [8.0, 6.0],
+                "f": [7.9, 6.1],
+                "c": [0.0, 0.0],
+                "k": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "p": [0.0, 0.0]
+            }
         """
         obj = self.to_dict(attributes=attributes)
         return helpers.write_json(obj, path=path, **kwargs)
 
     def idealize(self) -> None:
         """
-        Set distortion to zero.
+        Make this camera ideal (remove all distortions).
 
-        Radial distortion (`k`), tangential distortion (`p`),
-        and principal point offset (`c`) are set to zero.
+        Sets the principal point offset (:attr:`c`) and radial and tangential distortion
+        coefficients (:attr:`k` and :attr:`p`) to zero.
+
+        Example:
+            >>> cam = Camera(imgsz=1, f=1, c=(0.1, 0.2), k=(0.1, 0.2), p=(0.1, 0.2))
+            >>> cam.idealize()
+            >>> all(cam.c == 0)
+            True
+            >>> all(cam.k == 0)
+            True
+            >>> all(cam.p == 0)
+            True
         """
         self.k = np.zeros(6, dtype=float)
         self.p = np.zeros(2, dtype=float)
@@ -435,19 +493,39 @@ class Camera:
 
     def resize(self, size: Vector = 1, force: bool = False) -> None:
         """
-        Resize the camera.
+        Resize this camera.
 
-        Image size (`imgsz`), focal length (`f`), and principal point offset (`c`)
-        are scaled accordingly.
+        Scales image size (:attr:`imgsz`), focal length (:attr:`f`),
+        and principal point offset (:attr:`c`) accordingly.
 
         Arguments:
-            size: Scale factor relative to original size (float)
-                or target image size (iterable)
-            force: Whether to use `size` even if it does not preserve
-                the original aspect ratio
+            size: Target image size (ny, ny) or factor of current size (float).
+            force: Whether to allow the target image size even if it does not preserve
+                the original aspect ratio.
 
         Raises:
             ValueError: Target image size does not preserve the original aspect ratio.
+
+        Example:
+            >>> cam = Camera(imgsz=(10, 20), f=(1, 2), c=(0.1, 0.2))
+            >>> cam.resize(2)
+            >>> cam.imgsz
+            array([20., 40.])
+            >>> cam.f
+            array([2., 4.])
+            >>> cam.c
+            array([0.2, 0.4])
+
+            If the target image size does not preserve the original aspect ratio,
+            it is rejected by default.
+
+            >>> cam.resize((11, 20))
+            Traceback (most recent call last):
+              ...
+            ValueError: Target image size does not preserve the original aspect ratio
+            >>> cam.resize((11, 20), force=True)
+            >>> cam.imgsz
+            array([11., 20.])
         """
         scale1d = np.atleast_1d(size)
         if len(scale1d) > 1 and force:
@@ -459,7 +537,7 @@ class Camera:
                 scale1d = Camera.get_scale_from_size(self.original_imgsz, scale1d)
                 if scale1d is None:
                     raise ValueError(
-                        "Target size does not preserve original aspect ratio"
+                        "Target image size does not preserve the original aspect ratio"
                     )
             new_size = np.floor(scale1d * self.original_imgsz + 0.5)
         scale2d = new_size / self.imgsz
@@ -479,18 +557,32 @@ class Camera:
         Project world coordinates to image coordinates.
 
         Arguments:
-            xyz: World coordinates (n, 3)
-            directions: Whether `xyz` are absolute coordinates (False)
-                or ray directions (True)
-            correction: Arguments to `helpers.elevation_corrections()` (dict),
+            xyz: World coordinates (n, [x, y, z]).
+            directions: Whether `xyz` are absolute coordinates (`False`)
+                or ray directions (`True`).
+            correction: Optional arguments to `helpers.elevation_corrections()` (dict),
                 `True` for default arguments, or `False` to skip.
                 Only applies if `directions` is `False`.
-            return_depth: Whether to return the distance of each point
+            return_depth: Whether to return the distance of each world point
                 along the camera's optical axis.
 
         Returns:
-            Image coordinates (n, 2)
-            (optional) Point depth (n, )
+            Image coordinates of the world points (n, 2).
+            (optional) Distances of the world points (n, ).
+
+        Example:
+            By default, cameras are initialized at the origin (0, 0, 0),
+            parallel with the horizon (xy-plane), pointed north (+y),
+            and distortion-free. For such a camera, the world point (0, 10, 0),
+            which is on the +y axis and a distance of 10 from the
+            origin, will be projected onto the image center with a depth of 10.
+
+            >>> cam = Camera(imgsz=10, f=10)
+            >>> xyz = np.array([(0, 10, 0)])
+            >>> cam.project(xyz)
+            array([[5., 5.]])
+            >>> cam.project(xyz, return_depth=True)
+            (array([[5., 5.]]), array([10.]))
         """
         xy = self._world2camera(
             xyz, directions=directions, correction=correction, return_depth=return_depth
@@ -509,15 +601,29 @@ class Camera:
         Project image coordinates to world coordinates or ray directions.
 
         Arguments:
-            uv: Image coordinates (n, 2)
+            uv: Image coordinates (n, [u, v]).
             directions: Whether to return world ray directions relative
                 to the camera position (True) or absolute coordinates by adding
-                on the camera position (False)
+                on the camera position (False).
             depth: Distance of rays along the camera's optical axis, as either a
-                scalar or a vector (n, )
+                scalar or a vector (n, ).
 
         Returns:
-            World coordinates or ray directions (n, 3)
+            World coordinates or ray directions (n, [x, y, z]).
+
+        Example:
+            By default, cameras are initialized at the origin (0, 0, 0),
+            parallel with the horizon (xy-plane), pointed north (+y),
+            and distortion-free. For such a camera, the image point (5, 5),
+            at the center of the image, will be projected out the camera along the
+            +y axis.
+
+            >>> cam = Camera(imgsz=10, f=10)
+            >>> uv = np.array([(5, 5)])
+            >>> cam.invproject(uv)
+            array([[0., 1., 0.]])
+            >>> cam.invproject(uv, depth=10)
+            array([[ 0., 10., 0.]])
         """
         xy = self._image2camera(uv)
         xyz = self._camera2world(xy, directions=directions, depth=depth)
@@ -528,49 +634,73 @@ class Camera:
         Test whether world coordinates are in front of the camera.
 
         Arguments:
-            xyz: World coordinates (n, 3)
+            xyz: World coordinates (n, [x, y, y]).
             directions: Whether `xyz` are ray directions (True)
-                or absolute coordinates (False)
+                or absolute coordinates (False).
 
         Returns:
-            Boolean mask (n, )
+            Boolean mask (n, ).
+
+        Example:
+            For a default camera at the origin (0, 0, 0),
+            parallel with the horizon (xy-plane), pointed north (+y),
+            any points with +y coordinates are in front of the camera,
+            regardless of whether they are actually in the image frame.
+
+            >>> cam = Camera(imgsz=10, f=10)
+            >>> xyz = np.array([(1000, 10, 0), (0, 10, 0), (0, 0, 0), (0, -10, 0)])
+            >>> cam.infront(xyz)
+            array([ True, True, False, False])
+            >>> uv = cam.project(xyz)
+            >>> uv
+            array([[1005.,    5.],
+                   [   5.,    5.],
+                   [  nan,   nan],
+                   [  nan,   nan]])
+            >>> cam.inframe(uv)
+            array([False, True, False, False])
         """
-        if directions:
-            dxyz = xyz
-        else:
-            dxyz = xyz - self.xyz
+        dxyz = xyz if directions else xyz - self.xyz
         z = np.dot(dxyz, self.R.T[:, 2])
         return z > 0
 
     def inframe(self, uv: np.ndarray) -> np.ndarray:
         """
-        Test whether image coordinates are in or on the image frame.
+        Test whether image coordinates are in (or on) the image frame.
 
         Arguments:
-            uv: Image coordinates (n, 2)
+            uv: Image coordinates (n, [u, v]).
 
         Returns:
-            Boolean mask (n, )
+            Boolean mask (n, ).
+
+        Example:
+            >>> cam = Camera(imgsz=(10, 12), f=10)
+            >>> uv = np.array([(-1, 1), (0, 0), (9, 11), (10, 15)])
+            >>> cam.inframe(uv)
+            array([False,  True,  True, False])
         """
-        return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
+        # Ignore comparisons to NaN
+        with np.errstate(invalid="ignore"):
+            return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
 
     def inview(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
         """
-        Test whether world coordinates are within view.
+        Test whether world coordinates are within view of the camera.
 
         Arguments:
-            xyz: World coordinates (n, 3)
+            xyz: World coordinates (n, [x, y, z]).
             directions: Whether `xyz` are ray directions (True)
-                or absolute coordinates (False)
+                or absolute coordinates (False).
 
         Returns:
-            Boolean mask (n, )
+            Boolean mask (n, ).
         """
         uv = self.project(xyz, directions=directions)
         return self.inframe(uv)
 
     def grid(
-        self, step: Vector, snap: Sequence[int] = (0, 0), mode: str = "vectors"
+        self, step: Vector = 1, snap: Sequence[float] = (0.5, 0.5), mode: str = "points"
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Return grid of image coordinates.
@@ -578,13 +708,39 @@ class Camera:
         Arguments:
             step: Grid spacing for all (float) or each (iterable) dimension.
             snap: Point (x, y) to align grid to.
-            mode: Return format
-                - 'vectors': x (nx, ) and y (ny, ) coordinates
-                - 'grids': x (ny, nx) and y (ny, nx) coordinates
-                - 'points': x, y coordinates (ny * nx, 2)
+            mode: Return format:
+                - 'vectors' (tuple of np.ndarray): x (nx, ) and y (ny, ) coordinates
+                - 'grids' (tuple of np.ndarray): x (ny, nx) and y (ny, nx) coordinates
+                - 'points' (np.ndarray): x, y coordinates (ny * nx, [x, y])
 
         Raises:
             ValueError: Unsupported mode.
+
+        Example:
+            >>> cam = Camera(imgsz=3, f=1)
+            >>> cam.grid()
+            array([[0.5, 0.5],
+                   [1.5, 0.5],
+                   [2.5, 0.5],
+                   [0.5, 1.5],
+                   [1.5, 1.5],
+                   [2.5, 1.5],
+                   [0.5, 2.5],
+                   [1.5, 2.5],
+                   [2.5, 2.5]])
+            >>> cam.grid(mode='vectors')
+            (array([0.5, 1.5, 2.5]), array([0.5, 1.5, 2.5]))
+            >>> cam.grid(mode='grids')
+            (array([[0.5, 1.5, 2.5],
+                    [0.5, 1.5, 2.5],
+                    [0.5, 1.5, 2.5]]),
+             array([[0.5, 0.5, 0.5],
+                    [1.5, 1.5, 1.5],
+                    [2.5, 2.5, 2.5]]))
+            >>> cam.grid(mode='unknown')
+            Traceback (most recent call last):
+              ...
+            ValueError: Unsupported mode: unknown
         """
         box = (0, 0, self.imgsz[0], self.imgsz[1])
         vectors = helpers.box_to_grid(box, step=step, snap=snap, mode="vectors")
@@ -592,22 +748,34 @@ class Camera:
             return vectors
         grid = np.meshgrid(*vectors)
         if mode == "grids":
-            return grid
+            return tuple(grid)
         if mode == "points":
             return helpers.grid_to_points(grid)
         raise ValueError(f"Unsupported mode: {mode}")
 
-    def edges(self, step: Vector = (1, 1)) -> np.ndarray:
+    def edges(self, step: Vector = 1) -> np.ndarray:
         """
         Return coordinates of image edges.
 
-        Vertices are ordered clockwise from the origin (0, 0).
+        Points are ordered clockwise from the origin (0, 0).
 
         Arguments:
-            step: Pixel spacing of the vertices in x and y
+            step: Point spacing for all (float) or each (iterable) dimension.
 
         Returns:
-            Image coordinates (n, 2)
+            Image coordinates (n, 2).
+
+        Example:
+            >>> cam = Camera(imgsz=2, f=1)
+            >>> cam.edges()
+            array([[0., 0.],
+                   [1., 0.],
+                   [2., 0.],
+                   [2., 1.],
+                   [2., 2.],
+                   [1., 2.],
+                   [0., 2.],
+                   [0., 1.]])
         """
         if isinstance(step, (int, float)):
             step = (step, step)
@@ -624,55 +792,61 @@ class Camera:
             )
         )
 
-    def viewbox(self, depth: Number, step: Vector = (1, 1)) -> np.ndarray:
+    def viewbox(self, depth: Number) -> np.ndarray:
         """
         Return bounding box of the camera viewshed.
 
-        The camera viewshed is constructed by projecting out edge pixels
-        to a fixed depth.
+        The camera viewshed is built by projecting out edge pixels to a fixed depth.
 
         Arguments:
-            depth: Distance of point projections
-            step: Spacing of the projected pixels in x and y
+            depth: Distance of point projections along the camera's optical axis.
 
         Returns:
-            Bounding box [minx, miny, minz, maxx, maxy, maxz]
+            Bounding box (min x, min y, min z, max x, max y, max z).
+
+        Example:
+            >>> cam = Camera(imgsz=3, f=3)
+            >>> cam.viewbox(depth=1)
+            array([-0.5, 0. , -0.5, 0.5, 1. , 0.5])
+            >>> cam.viewbox(depth=2)
+            array([-1., 0., -1., 1., 2., 1.])
         """
-        uv = self.edges(step=step)
+        uv = self.edges()
         dxyz = self.invproject(uv, depth=depth, directions=False)
         vertices = np.vstack((self.xyz, dxyz))
         return helpers.bounding_box(vertices)
 
-    def viewpoly(
-        self, depth: Number, step: Number = 1, plane: Array = None
-    ) -> np.ndarray:
+    def viewpoly(self, depth: Number) -> np.ndarray:
         """
         Return bounding polygon of the camera viewshed.
 
-        The polygon is constructed by projecting out the pixel row passing
-        through the principal point, then projecting the result onto a plane.
+        The polygon is built by projecting out the edges of the row passing
+        through the principal point and appending the camera position.
 
         Arguments:
-            depth: Distance of point projections
-            step: Spacing of the projected pixels
-            plane: Plane (a, b, c, d), where ax + by + cz + d = 0.
-                If `None`, no planar projection is performed.
+            depth: Distance of point projections along the camera's optical axis.
 
         Returns:
-            Bounding polygon (n, 3)
+            Bounding polygon (nx, [x, y, z]).
+
+        Example:
+            >>> cam = Camera(imgsz=100, f=100)
+            >>> cam.viewpoly(depth=2)
+            array([[ 0.,  0.,  0.],
+                   [-1.,  2.,  0.],
+                   [ 1.,  2.,  0.],
+                   [ 0.,  0.,  0.]])
+            >>> cam.viewdir = (90, 0, 0)
+            >>> cam.viewpoly(depth=2)
+            array([[ 0.,  0.,  0.],
+                   [ 2.,  1.,  0.],
+                   [ 2., -1.,  0.],
+                   [ 0.,  0.,  0.]])
         """
-        n = int(self.imgsz[0] / step) + 1
-        uv = np.column_stack(
-            (
-                np.linspace(0, self.imgsz[0], n),
-                np.repeat(self.imgsz[1] / 2 + self.c[1], n),
-            )
-        )
+        cy = self.imgsz[1] / 2 + self.c[1]
+        uv = np.array([(0, cy), (self.imgsz[0], cy)])
         xyz = self.invproject(uv, directions=False, depth=depth)
-        vertices = np.row_stack((self.xyz, xyz, self.xyz))
-        if plane is None:
-            return vertices
-        return helpers.project_points_plane(points=vertices, plane=plane)
+        return np.row_stack([self.xyz, xyz, self.xyz])
 
     def rasterize(
         self,
@@ -684,36 +858,59 @@ class Camera:
         Convert points to a raster image.
 
         Arguments:
-            uv: Image point coordinates (n, 2)
-            values: Point values (n, )
-            fun: Aggregate function to apply to values of overlapping points
+            uv: Image point coordinates (n, [u, v]).
+            values: Point values (n, ).
+            fun: Aggregate function to apply to the values of the points in each pixel.
 
         Returns:
-            Image with same shape as :attr:`imgsz` (ny, nx)
+            Image of aggregated values of the same dimensions as :attr:`imgsz` (ny, nx).
+                Pixels without points are NaN.
+
+        Example:
+            >>> cam = Camera(imgsz=(3, 2), f=1)
+            >>> uv = np.array([(0.5, 0.5), (2.5, 1.5), (2.5, 1.5)])
+            >>> values = np.array([1, 2, 4])
+            >>> cam.rasterize(uv=uv, values=values, fun=np.mean)
+            array([[ 1., nan, nan],
+                   [nan, nan,  3.]])
         """
-        is_in = self.inframe(uv)
+        inframe = self.inframe(uv)
         return helpers.rasterize_points(
-            uv[is_in, 1].astype(int),
-            uv[is_in, 0].astype(int),
-            values[is_in],
+            # astype(int) equivalent to floor()
+            uv[inframe, 1].astype(int),
+            uv[inframe, 0].astype(int),
+            values[inframe],
             shape=self.shape,
             fun=fun,
         )
 
     def spherical_to_xyz(self, angles: np.ndarray) -> np.ndarray:
         """
-        Convert relative world spherical coordinates to euclidean.
+        Convert world spherical coordinates to euclidean.
 
         Arguments:
-            angles: Spherical coordinates [azimuth, altitude(, distance)]
+            angles: Spherical coordinates (n, [azimuth, altitude(, distance)]).
 
-                - azimuth: degrees clockwise from north
-                - altitude: degrees above horizon
-                - distance: distance from camera
+                - azimuth: Degrees clockwise from north (+y axis).
+                - altitude: Degrees above horizon (xy-plane).
+                - distance (optional): Distance from camera.
 
         Returns:
-            World coordinates, either absolute (if distances were provided)
-                or relative (if distances were not)
+            World coordinates (n, [x, y, z]),
+                either absolute (if distances were provided)
+                or relative (if distances were not).
+
+        Example:
+            >>> cam = Camera(imgsz=1, f=1, xyz=(0, 0, 0))
+            >>> angles = np.array([(0, 0, 1), (90, 0, 2), (0, 45, 3)])
+            >>> xyz = cam.spherical_to_xyz(angles)
+            >>> np.round(xyz, 1)
+            array([[0. , 1. , 0. ],
+                   [2. , 0. , 0. ],
+                   [0. , 2.1, 2.1]])
+            >>> cam.xyz = (1, 2, 3)
+            >>> np.all(cam.spherical_to_xyz(angles) == xyz + cam.xyz)
+            True
         """
         # https://en.wikipedia.org/wiki/Spherical_coordinate_system
         azimuth_iso = (np.pi / 2 - angles[:, 0] * np.pi / 180) % (2 * np.pi)
@@ -725,8 +922,7 @@ class Camera:
                 np.cos(altitude_iso),
             )
         )
-        directions = angles.shape[1] < 3
-        if not directions:
+        if angles.shape[1] > 2:
             xyz *= angles[:, 2:3]
             xyz += self.xyz
         return xyz
@@ -735,16 +931,24 @@ class Camera:
         """
         Convert world coordinates to spherical coordinates.
 
-        Args:
+        Arguments:
             xyz: World coordinates (n, [x, y, z]).
             directions: Whether `xyz` are absolute coordinates (False)
                 or ray directions (True).
 
         Returns:
-            Spherical coordinates (n, [azimuth, altitude(, distance)]), where
-                - azimuth: degrees clockwise from north
-                - altitude: degrees above horizon
-                - distance: distance from camera (only if `directions` is False)
+            Spherical coordinates (n, [azimuth, altitude(, distance)]).
+                - azimuth: Degrees clockwise from north (+y).
+                - altitude: Degrees above horizon (xy-plane).
+                - distance: Distance from camera (only if `directions` is False).
+
+        Example:
+            >>> cam = Camera(imgsz=1, f=1, xyz=(1, 2, 3))
+            >>> angles = np.array([(0, 0, 1), (90, 0, 2), (0, 45, 3)])
+            >>> xyz = cam.spherical_to_xyz(angles)
+            >>> angles2 = cam.xyz_to_spherical(xyz)
+            >>> np.all(np.isclose(angles, angles2))
+            True
         """
         if not directions:
             xyz = xyz - self.xyz
@@ -790,11 +994,11 @@ class Camera:
             mask: Boolean mask of cells of `dem` to include.
                 Must have the same shape as `dem.Z`.
                 If `None`, only NaN cells in `dem.Z` are skipped.
-            tile_size: Target size of `dem` tiles (see `Grid.tile_indices()`)
-            tile_overlap: Overlap between `dem` tiles (see `Grid.tile_indices()`)
+            tile_size: Target size of `dem` tiles.
+            tile_overlap: Overlap between `dem` tiles.
             scale: Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
-            scale_limits: Min and max values of `scale`
+            scale_limits: Min and max values of `scale`.
             aggregate: Passed as `func` to `pandas.DataFrame.aggregate()`
                 to aggregate values projected onto the same image pixel.
                 Each layer of `values`, and depth if `return_depth` is True,
@@ -803,9 +1007,9 @@ class Camera:
                 or whether to work in parallel (bool). If `True`,
                 defaults to `os.cpu_count()`.
             correction: Whether or how to apply elevation corrections
-                (see `helpers.elevation_corrections()`)
+                (see `helpers.elevation_corrections()`).
             return_depth: Whether to return a depth map - the distance of the
-                `dem` surface measured along the camera's optical axis
+                `dem` surface measured along the camera's optical axis.
 
         Returns:
             Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
@@ -816,6 +1020,24 @@ class Camera:
             ValueError: `values` does not have same 2-d shape as `dem`.
             ValueError: `mask` does not have the same 2-d shape as `dem.
             ValueError: `values` is missing and `return_depth` is false.
+
+        Example:
+            For simplicity, assume the camera is looking straight down at the ground.
+            The raster is positioned such that each cell of its 3 x 3 grid is projected
+            into its own cell of the 3 x 3 image. In this situation, the values of the
+            image are equal to the values of the raster, and the depth of each raster
+            cell is equal to the elevation of the camera minus the elevation of the
+            cell.
+
+            >>> cam = Camera(imgsz=3, f=3, xyz=(0, 0, 3), viewdir=(0, -90, 0))
+            >>> Z = np.array([(0.1, 0.2, 0.3), (0.4, 0.5, 0.6), (0.7, 0.8, 0.9)])
+            >>> values = np.random.randn(*cam.shape)
+            >>> dem = Raster(Z, x=(-1, 0, 1), y=(1, 0, -1))
+            >>> img = cam.project_dem(dem, values=values, return_depth=True)
+            >>> np.all(img[:, :, 0] == values)
+            True
+            >>> np.all(img[:, :, 1] == cam.xyz[2] - Z)
+            True
         """
         has_values = False
         if values is not None:
@@ -905,12 +1127,11 @@ class Camera:
             for i in range(tile_values.shape[1]):
                 df.insert(df.shape[1], i, tile_values[:, i])
             # Aggregate values
-            groups = df.groupby(("row", "col")).aggregate(aggregate).reset_index()
-            idx = (
-                groups.row.as_matrix().astype(int),
-                groups.col.as_matrix().astype(int),
+            groups = df.groupby(["row", "col"], sort=False, as_index=False).aggregate(
+                aggregate
             )
-            return idx, groups.iloc[:, 2:].as_matrix()
+            idx = (groups["row"].values.astype(int), groups["col"].values.astype(int))
+            return idx, groups.iloc[:, 2:].values
 
         def reduce(
             idx: Tuple[Sequence[int], Sequence[int]] = None,
@@ -1252,10 +1473,12 @@ class Camera:
         else:
             xyz_c = np.dot(dxyz, self.R.T)
         # Normalize by perspective division
-        xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
+        # Ignore divide by zero
+        with np.errstate(invalid="ignore"):
+            xy = xyz_c[:, 0:2] / xyz_c[:, 2:3]
         # Set points behind camera to NaN
         behind = xyz_c[:, 2] <= 0
-        xy[behind, :] = np.nan
+        xy[behind] = np.nan
         if return_depth:
             return xy, xyz_c[:, 2]
         return xy

@@ -500,7 +500,7 @@ class Camera:
         and principal point offset (:attr:`c`) accordingly.
 
         Arguments:
-            size: Target image size (ny, ny) or factor of current size (float).
+            size: Target image size (ny, ny) or factor of original image size (float).
             force: Whether to allow the target image size even if it does not preserve
                 the original aspect ratio.
 
@@ -516,6 +516,9 @@ class Camera:
             array([2., 4.])
             >>> cam.c
             array([0.2, 0.4])
+            >>> cam.resize(1)
+            >>> cam.imgsz
+            array([10., 20.])
 
             If the target image size does not preserve the original aspect ratio,
             it is rejected by default.

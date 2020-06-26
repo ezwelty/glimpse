@@ -637,7 +637,7 @@ class RotationMatches(Matches):
         self.weights = weights
         self._test_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
+        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
 
     def _build_uvs(self, uvs=None, xys=None):
         if uvs is None and xys is not None:
@@ -683,8 +683,8 @@ class RotationMatches(Matches):
         Test whether camera internal parameters are unchanged.
         """
         return (
-            (self.cams[0].vector[6:] == self.original_internals[0])
-            & (self.cams[1].vector[6:] == self.original_internals[1])
+            (self.cams[0]._vector[6:] == self.original_internals[0])
+            & (self.cams[1]._vector[6:] == self.original_internals[1])
         ).all()
 
     def as_type(self, mtype):
@@ -730,7 +730,7 @@ class RotationMatchesXY(RotationMatches):
         self.weights = weights
         self._test_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
+        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
 
     @property
     def size(self):
@@ -802,7 +802,7 @@ class RotationMatchesXYZ(RotationMatches):
         self.weights = weights
         self._test_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = [cam.vector.copy()[6:] for cam in self.cams]
+        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
 
     @property
     def size(self):
@@ -1017,7 +1017,7 @@ class Cameras(object):
         # Test for errors
         self._test()
         # Save original camera vectors for reset_cameras()
-        self.vectors = [cam.vector.copy() for cam in self.cams]
+        self.vectors = [cam.to_array() for cam in self.cams]
         # Parameter scale factors
         self.scales = None
         if scales:
@@ -1384,7 +1384,7 @@ class Cameras(object):
             for i, mask in enumerate(self.cam_masks)
         ]
         cam_values = [
-            self.cams[i].vector[mask] for i, mask in enumerate(self.cam_masks)
+            self.cams[i]._vector[mask] for i, mask in enumerate(self.cam_masks)
         ]
         # Group parameters
         self.group_masks = []
@@ -1401,7 +1401,7 @@ class Cameras(object):
             labels = self.__class__._lmfit_labels(mask, cam=None, group=group)
             # NOTE: Initial group values as mean of cameras
             values = np.nanmean(
-                np.row_stack([self.cams[i].vector[mask] for i in idx]), axis=0
+                np.row_stack([self.cams[i]._vector[mask] for i in idx]), axis=0
             )
             for label, value, bound in zip(labels, values, bounds[mask]):
                 self.params.add(
@@ -1440,10 +1440,10 @@ class Cameras(object):
             params = list(params.valuesdict().values())
         for i, idx in enumerate(self.group_indices):
             for j in idx:
-                self.cams[j].vector[self.group_masks[i]] = params[
+                self.cams[j]._vector[self.group_masks[i]] = params[
                     self.group_breaks[i] : self.group_breaks[i + 1]
                 ]
-                self.cams[j].vector[self.cam_masks[j]] = params[
+                self.cams[j]._vector[self.cam_masks[j]] = params[
                     self.cam_breaks[j] : self.cam_breaks[j + 1]
                 ]
 
@@ -1462,7 +1462,7 @@ class Cameras(object):
             if save:
                 self.vectors = vectors
         for cam, vector in zip(self.cams, vectors):
-            cam.vector = vector.copy()
+            cam._vector = vector.copy()
 
     def data_size(self):
         """
@@ -1500,7 +1500,7 @@ class Cameras(object):
                 or all if `None` (default)
         """
         if params is not None:
-            vectors = [cam.vector.copy() for cam in self.cams]
+            vectors = [cam.to_array() for cam in self.cams]
             self.set_cameras(params)
         if len(self.controls) == 1:
             result = self.controls[0].predicted(index=index)
@@ -1583,7 +1583,7 @@ class Cameras(object):
         Returns:
             array or `lmfit.Parameters` (`full=True`): Parameter values ordered first
                 by group or camera (group, cam0, cam1, ...),
-                then ordered by position in `Camera.vector`.
+                then ordered by position in `Camera._vector`.
         """
         if method == "leastsq":
             if self.scales is not None and not hasattr(kwargs, "diag"):
@@ -1696,7 +1696,7 @@ class Cameras(object):
                 "Plotting with `index` not yet supported with multiple controls"
             )
         if params is not None:
-            vectors = [cam.vector.copy() for cam in self.cams]
+            vectors = [cam.to_array() for cam in self.cams]
             self.set_cameras(params)
         cam = self.cams[cam] if isinstance(cam, int) else cam
         cam_controls = self.__class__.prune_controls(self.controls, cams=[cam])

@@ -31,9 +31,6 @@ class Camera:
     :attr:`cmm` and :attr:`sensorsz` if both are provided.
 
     Attributes:
-        vector (numpy.ndarray): Vector of the core camera attributes
-            (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
-            :attr:`k`, :attr:`p`)
         xyz (numpy.ndarray): Position in world coordinates (x, y, z)
         viewdir (numpy.ndarray): View direction in degrees (yaw, pitch, roll)
 
@@ -81,7 +78,7 @@ class Camera:
             raise ValueError("'f' and 'fmm' cannot both be provided")
         if c is not None and cmm is not None:
             raise ValueError("'c' and 'cmm' cannot both be provided")
-        self.vector = np.full(20, np.nan, dtype=float)
+        self._vector = np.full(20, np.nan, dtype=float)
         self.xyz = xyz
         self.viewdir = viewdir
         self.imgsz = imgsz
@@ -98,18 +95,18 @@ class Camera:
         self.c = c
         self.k = k
         self.p = p
-        self._original_vector = self.vector.copy()
+        self._original_vector = self._vector.copy()
 
     # ---- Properties (dependent) ----
 
     @property
     def xyz(self) -> np.ndarray:
         """Position in world coordinates (x, y, z)."""
-        return self.vector[0:3]
+        return self._vector[0:3]
 
     @xyz.setter
     def xyz(self, value: Vector) -> None:
-        self.vector[0:3] = helpers.format_list(value, length=3, default=0)
+        self._vector[0:3] = helpers.format_list(value, length=3, default=0)
 
     @property
     def viewdir(self) -> np.ndarray:
@@ -120,16 +117,16 @@ class Camera:
         - pitch: rotation from horizon (+ look up, - look down).
         - roll: rotation about optical axis (+ down right, - down left, from behind).
         """
-        return self.vector[3:6]
+        return self._vector[3:6]
 
     @viewdir.setter
     def viewdir(self, value: Vector) -> None:
-        self.vector[3:6] = helpers.format_list(value, length=3, default=0)
+        self._vector[3:6] = helpers.format_list(value, length=3, default=0)
 
     @property
     def imgsz(self) -> np.ndarray:
         """Image size in pixels (nx, ny)."""
-        return self.vector[6:8].astype(int)
+        return self._vector[6:8].astype(int)
 
     @imgsz.setter
     def imgsz(self, value: Vector) -> None:
@@ -137,43 +134,43 @@ class Camera:
         as_float = helpers.format_list(value, length=2)
         if np.any(as_int != as_float):
             raise ValueError("Image size must be integer")
-        self.vector[6:8] = as_int
+        self._vector[6:8] = as_int
 
     @property
     def f(self) -> np.ndarray:
         """Focal length in pixels (fx, fy)."""
-        return self.vector[8:10]
+        return self._vector[8:10]
 
     @f.setter
     def f(self, value: Vector) -> None:
-        self.vector[8:10] = helpers.format_list(value, length=2)
+        self._vector[8:10] = helpers.format_list(value, length=2)
 
     @property
     def c(self) -> np.ndarray:
         """Principal point offset from the image center in pixels (dx, dy)."""
-        return self.vector[10:12]
+        return self._vector[10:12]
 
     @c.setter
     def c(self, value: Vector) -> None:
-        self.vector[10:12] = helpers.format_list(value, length=2, default=0)
+        self._vector[10:12] = helpers.format_list(value, length=2, default=0)
 
     @property
     def k(self) -> np.ndarray:
         """Radial distortion coefficients (k1, k2, k3, k4, k5, k6)."""
-        return self.vector[12:18]
+        return self._vector[12:18]
 
     @k.setter
     def k(self, value: Vector) -> None:
-        self.vector[12:18] = helpers.format_list(value, length=6, default=0)
+        self._vector[12:18] = helpers.format_list(value, length=6, default=0)
 
     @property
     def p(self) -> np.ndarray:
         """Tangential distortion coefficients (p1, p2)."""
-        return self.vector[18:20]
+        return self._vector[18:20]
 
     @p.setter
     def p(self, value: Vector) -> None:
-        self.vector[18:20] = helpers.format_list(value, length=2, default=0)
+        self._vector[18:20] = helpers.format_list(value, length=2, default=0)
 
     @property
     def sensorsz(self) -> Optional[np.ndarray]:
@@ -396,7 +393,7 @@ class Camera:
             True
         """
         cam = copy.deepcopy(self)
-        cam._original_vector = cam.vector.copy()
+        cam._original_vector = cam._vector.copy()
         return cam
 
     def reset(self) -> None:
@@ -409,7 +406,26 @@ class Camera:
             >>> cam.reset()
             >>> cam.f[0] == 1
         """
-        self.vector = self._original_vector.copy()
+        self._vector = self._original_vector.copy()
+
+    def to_array(self) -> np.ndarray:
+        """
+        Return this camera as a numpy array.
+
+        Returns:
+            Vector of the core camera attributes
+            (:attr:`xyz`, :attr:`viewdir`, :attr:`imgsz`, :attr:`f`, :attr:`c`,
+            :attr:`k`, :attr:`p`).
+
+        Example:
+            >>> cam = Camera(
+            >>>     xyz=(1, 2, 3), viewdir=(4, 5, 6), imgsz=(7, 8), f=(9, 10),
+            >>>     c=(11, 12), k=(13, 14, 15, 16, 17, 18), p=(19, 20))
+            >>> cam.to_array()
+            array([ 1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12., 13.,
+                   14., 15., 16., 17., 18., 19., 20.])
+        """
+        return self._vector.copy()
 
     def to_dict(
         self,

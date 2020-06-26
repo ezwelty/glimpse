@@ -959,11 +959,11 @@ class Converter:
         mask, _ = optimize.Cameras.parse_params(params)
 
         def fun(x: np.ndarray) -> np.ndarray:
-            self.cam.vector[mask] = x
+            self.cam._vector[mask] = x
             return self.residuals().ravel()
 
-        fit = scipy.optimize.least_squares(fun=fun, x0=self.cam.vector[mask], **kwargs)
-        self.cam.vector[mask] = fit.x
+        fit = scipy.optimize.least_squares(fun=fun, x0=self.cam._vector[mask], **kwargs)
+        self.cam._vector[mask] = fit.x
 
     def optimize_xcam(self, params: Parameters, **kwargs: Any) -> None:
         """

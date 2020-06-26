@@ -60,7 +60,7 @@ def test_converts_to_matlab_and_back_exactly() -> None:
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-11)
     cam2 = xcam.to_camera()
-    np.testing.assert_equal(cam.vector, cam2.vector)
+    np.testing.assert_equal(cam.to_array(), cam2.to_array())
 
 
 def test_converts_to_matlab_and_back_by_optimization() -> None:
@@ -126,7 +126,7 @@ def test_converts_to_agisoft_and_back_exactly() -> None:
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-11)
     cam2 = xcam.to_camera()
-    np.testing.assert_equal(cam.vector, cam2.vector)
+    np.testing.assert_equal(cam.to_array(), cam2.to_array())
 
 
 def test_converts_to_agisoft_and_back_by_optimization() -> None:
@@ -211,7 +211,7 @@ def test_converts_to_photomodeler_and_back_exactly() -> None:
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-12)
     cam2 = xcam.to_camera()
-    np.testing.assert_allclose(cam.vector, cam2.vector, rtol=0, atol=1e-13)
+    np.testing.assert_allclose(cam.to_array(), cam2.to_array(), rtol=0, atol=1e-13)
 
 
 def test_converts_to_photomodeler_and_back_by_optimization() -> None:
@@ -296,7 +296,7 @@ def test_converts_to_opencv_and_back_exactly() -> None:
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_equal(residuals, 0)
     cam2 = xcam.to_camera()
-    np.testing.assert_equal(cam.vector, cam2.vector)
+    np.testing.assert_equal(cam.to_array(), cam2.to_array())
 
 
 def test_converts_to_opencv_and_back_by_optimization() -> None:

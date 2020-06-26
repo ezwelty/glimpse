@@ -28,7 +28,7 @@ def test_reads_matlab_means_from_report() -> None:
     path = os.path.join("tests", "Calib_Results.m")
     xcam_auto = MatlabCamera.from_report(path, sigmas=False)
     xcam_manual = MatlabCamera(**means)
-    assert xcam_auto.__dict__ == xcam_manual.__dict__
+    assert vars(xcam_auto) == vars(xcam_manual)
 
 
 def test_reads_matlab_sigmas_from_report() -> None:
@@ -43,7 +43,7 @@ def test_reads_matlab_sigmas_from_report() -> None:
     path = os.path.join("tests", "Calib_Results.m")
     xcam_auto = MatlabCamera.from_report(path, sigmas=True)
     xcam_manual = MatlabCamera(**sigmas)
-    assert xcam_auto.__dict__ == xcam_manual.__dict__
+    assert vars(xcam_auto) == vars(xcam_manual)
 
 
 def test_converts_to_matlab_and_back_exactly() -> None:
@@ -109,7 +109,7 @@ def test_reads_agisoft_from_xml() -> None:
     path = os.path.join("tests", "agisoft.xml")
     xcam_auto = AgisoftCamera.from_xml(path)
     xcam_manual = AgisoftCamera(**xml)
-    assert xcam_auto.__dict__ == xcam_manual.__dict__
+    assert vars(xcam_auto) == vars(xcam_manual)
 
 
 def test_converts_to_agisoft_and_back_exactly() -> None:
@@ -177,7 +177,7 @@ def test_reads_photomodeler_means_from_report() -> None:
     path = os.path.join("tests", "CalibrationReport.txt")
     xcam_auto = PhotoModelerCamera.from_report(path, imgsz=imgsz)
     xcam_manual = PhotoModelerCamera(imgsz=imgsz, **means)
-    assert xcam_auto.__dict__ == xcam_manual.__dict__
+    assert vars(xcam_auto) == vars(xcam_manual)
 
 
 def test_reads_photomodeler_sigmas_from_report() -> None:
@@ -198,7 +198,7 @@ def test_reads_photomodeler_sigmas_from_report() -> None:
     path = os.path.join("tests", "CalibrationReport.txt")
     xcam_auto = PhotoModelerCamera.from_report(path, imgsz=imgsz, sigmas=True)
     xcam_manual = PhotoModelerCamera(imgsz=imgsz, **sigmas)
-    assert xcam_auto.__dict__ == xcam_manual.__dict__
+    assert vars(xcam_auto) == vars(xcam_manual)
 
 
 def test_converts_to_photomodeler_and_back_exactly() -> None:
@@ -278,9 +278,9 @@ def test_reads_opencv_from_xml() -> None:
     path = os.path.join("tests", "opencv.xml")
     xcam_auto = OpenCVCamera.from_xml(path, imgsz=imgsz)
     xcam_params = OpenCVCamera(imgsz=imgsz, **{**f, **c, **coeffs})
-    assert xcam_auto.__dict__ == xcam_params.__dict__
+    assert vars(xcam_auto) == vars(xcam_params)
     xcam_arrays = OpenCVCamera.from_arrays(imgsz=imgsz, **arrays)
-    assert xcam_auto.__dict__ == xcam_arrays.__dict__
+    assert vars(xcam_auto) == vars(xcam_arrays)
 
 
 def test_converts_to_opencv_and_back_exactly() -> None:

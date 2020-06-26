@@ -499,7 +499,7 @@ class Tracker(object):
             self.templates = [None] * len(self.observers)
         # Compute image box centered around particle mean
         xyz = self.particle_mean[None, 0:3]
-        uv = self.observers[obs].project(xyz, img=img).ravel()
+        uv = self.observers[obs].xyz_to_uv(xyz, img=img).ravel()
         box = self.observers[obs].tile_box(uv, size=tile_size)
         # Build template
         template = {
@@ -529,7 +529,7 @@ class Tracker(object):
             return constant_log_likelihood
         # Build image box around all particles, with a buffer for template matching
         size = np.asarray(self.templates[obs]["tile"].shape[0:2][::-1])
-        uv = self.observers[obs].project(self.particles[:, 0:3], img=img)
+        uv = self.observers[obs].xyz_to_uv(self.particles[:, 0:3], img=img)
         halfsize = size * 0.5
         box = np.row_stack((uv.min(axis=0) - halfsize, uv.max(axis=0) + halfsize))
         # Enlarge box to ensure SSE has cols, rows (ky + 1, kx + 1) for interpolation
@@ -868,7 +868,7 @@ class Tracks(object):
         )[0]
         if images:
             # Image: Track
-            track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
+            track_uv = self.tracker.observers[obs].xyz_to_uv(track_xyz, img=img)
             image_track = axes[1].plot(
                 track_uv[:, 0], track_uv[:, 1], color="black", marker="."
             )[0]
@@ -936,7 +936,9 @@ class Tracks(object):
                 # matplotlib.pyplot.colorbar(quivers, ax=axes[0], label="Weight")
             if images and particles:
                 # Image: Particles
-                particle_uv = self.tracker.observers[obs].project(particle_xyz, img=img)
+                particle_uv = self.tracker.observers[obs].xyz_to_uv(
+                    particle_xyz, img=img
+                )
                 axes[1].scatter(
                     particle_uv[:, 0],
                     particle_uv[:, 1],
@@ -975,7 +977,7 @@ class Tracks(object):
             )
             if images:
                 # Image: Track
-                track_uv = self.tracker.observers[obs].project(track_xyz, img=img)
+                track_uv = self.tracker.observers[obs].xyz_to_uv(track_xyz, img=img)
                 image_track.set_data(track_uv[:, 0], track_uv[:, 1])
                 axes[1].set_xlim(
                     track_uv[-1, 0] - img_size[0] / 2, track_uv[-1, 0] + img_size[0] / 2

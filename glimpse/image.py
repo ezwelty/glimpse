@@ -182,9 +182,9 @@ class Image:
         U, V = np.meshgrid(u, v)
         uv = np.column_stack((U.flatten(), V.flatten()))
         # Project grid out target image
-        dxyz = cam.invproject(uv)
+        dxyz = cam.uv_to_xyz(uv)
         # Project target grid onto source image (flip for RegularGridInterpolator)
-        pvu = np.fliplr(self.cam.project(dxyz, directions=True))
+        pvu = np.fliplr(self.cam.xyz_to_uv(dxyz, directions=True))
         # Construct grid in source image
         if cam.imgsz[0] == self.cam.imgsz[0]:
             pu = u

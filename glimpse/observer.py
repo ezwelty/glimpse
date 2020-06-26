@@ -23,7 +23,7 @@ class Observer(object):
             by default read from `images[i].datetime`
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
-        correction: Curvature and refraction correction (see `Camera.project()`)
+        correction: Curvature and refraction correction (see `Camera.xyz_to_uv()`)
         cache (bool): Whether to cache images on read
         grid (glimpse.raster.Grid): Grid object for operations on image coordinates
     """
@@ -79,7 +79,7 @@ class Observer(object):
         else:
             return self.images.index(value)
 
-    def project(self, xyz, img, directions=False):
+    def xyz_to_uv(self, xyz, img, directions=False):
         """
         Project world coordinates to image coordinates.
 
@@ -89,7 +89,7 @@ class Observer(object):
             directions (bool): Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
         """
-        return self.images[img].cam.project(
+        return self.images[img].cam.xyz_to_uv(
             xyz, directions=directions, correction=self.correction
         )
 
@@ -302,7 +302,7 @@ class Observer(object):
             uv = self.images[0].cam.imgsz / 2
         if frames is None:
             frames = np.arange(len(self.images))
-        dxyz = self.images[frames[0]].cam.invproject(np.atleast_2d(uv))
+        dxyz = self.images[frames[0]].cam.uv_to_xyz(np.atleast_2d(uv))
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
@@ -323,7 +323,7 @@ class Observer(object):
 
         # Update plot
         def update_plot(i):
-            puv = self.images[i].cam.project(dxyz, directions=True)[0]
+            puv = self.images[i].cam.xyz_to_uv(dxyz, directions=True)[0]
             box = np.vstack([puv - halfsize, puv + halfsize]).ravel()
             inbounds = self.images[i].cam.inframe(helpers.box_to_polygon(box))
             if np.any(inbounds):
@@ -394,7 +394,7 @@ class Observer(object):
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
-        track_uv = self.images[frames[0]].cam.project(xyz[0:1])
+        track_uv = self.images[frames[0]].cam.xyz_to_uv(xyz[0:1])
         uv = track_uv[-1]
         box = self.tile_box(uv, size=size)
         tile = self.extract_tile(img=frames[0], box=box)
@@ -428,7 +428,7 @@ class Observer(object):
         # Update plot
         def update_plot(i):
             j = np.where(frames == i)[0][0]
-            track_uv = self.images[i].cam.project(xyz[: (j + 1)])
+            track_uv = self.images[i].cam.xyz_to_uv(xyz[: (j + 1)])
             uv = track_uv[-1]
             box = self.tile_box(uv, size=size)
             tile = self.extract_tile(img=i, box=box)

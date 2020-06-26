@@ -555,7 +555,7 @@ class Camera:
         self.f *= scale2d
         self.c *= scale2d
 
-    def project(
+    def xyz_to_uv(
         self,
         xyz: np.ndarray,
         directions: bool = False,
@@ -588,22 +588,22 @@ class Camera:
 
             >>> cam = Camera(imgsz=10, f=10)
             >>> xyz = np.array([(0, 10, 0)])
-            >>> cam.project(xyz)
+            >>> cam.xyz_to_uv(xyz)
             array([[5., 5.]])
-            >>> cam.project(xyz, return_depth=True)
+            >>> cam.xyz_to_uv(xyz, return_depth=True)
             (array([[5., 5.]]), array([10.]))
         """
-        xy = self._world2camera(
+        xy = self._xyz_to_xy(
             xyz, directions=directions, correction=correction, return_depth=return_depth
         )
         if return_depth:
             xy, depth = xy
-        uv = self._camera2image(xy)
+        uv = self._xy_to_uv(xy)
         if return_depth:
             return uv, depth
         return uv
 
-    def invproject(
+    def uv_to_xyz(
         self, uv: np.ndarray, directions: bool = True, depth: Vector = 1,
     ) -> np.ndarray:
         """
@@ -629,13 +629,13 @@ class Camera:
 
             >>> cam = Camera(imgsz=10, f=10)
             >>> uv = np.array([(5, 5)])
-            >>> cam.invproject(uv)
+            >>> cam.uv_to_xyz(uv)
             array([[0., 1., 0.]])
-            >>> cam.invproject(uv, depth=10)
+            >>> cam.uv_to_xyz(uv, depth=10)
             array([[ 0., 10., 0.]])
         """
-        xy = self._image2camera(uv)
-        xyz = self._camera2world(xy, directions=directions, depth=depth)
+        xy = self._uv_to_xy(uv)
+        xyz = self._xy_to_xyz(xy, directions=directions, depth=depth)
         return xyz
 
     def infront(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
@@ -660,7 +660,7 @@ class Camera:
             >>> xyz = np.array([(1000, 10, 0), (0, 10, 0), (0, 0, 0), (0, -10, 0)])
             >>> cam.infront(xyz)
             array([ True, True, False, False])
-            >>> uv = cam.project(xyz)
+            >>> uv = cam.xyz_to_uv(xyz)
             >>> uv
             array([[1005.,    5.],
                    [   5.,    5.],
@@ -806,7 +806,7 @@ class Camera:
             array([-1., 0., -1., 1., 2., 1.])
         """
         uv = self.edges()
-        dxyz = self.invproject(uv, depth=depth, directions=False)
+        dxyz = self.uv_to_xyz(uv, depth=depth, directions=False)
         vertices = np.vstack((self.xyz, dxyz))
         return helpers.bounding_box(vertices)
 
@@ -839,7 +839,7 @@ class Camera:
         """
         cy = self.imgsz[1] / 2 + self.c[1]
         uv = np.array([(0, cy), (self.imgsz[0], cy)])
-        xyz = self.invproject(uv, directions=False, depth=depth)
+        xyz = self.uv_to_xyz(uv, directions=False, depth=depth)
         return np.row_stack([self.xyz, xyz, self.xyz])
 
     def rasterize(
@@ -1076,7 +1076,7 @@ class Camera:
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
                 return None
-            _, mean_depth = self._world2camera(
+            _, mean_depth = self._xyz_to_xy(
                 np.atleast_2d(mean_xyz), return_depth=True, correction=correction
             )
             tile_scale = scale * np.abs(tile.d).mean() / (mean_depth / self.f.mean())
@@ -1097,12 +1097,12 @@ class Camera:
                 (tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask])
             )
             if return_depth:
-                xy, depth = self._world2camera(
+                xy, depth = self._xyz_to_xy(
                     xyz, correction=correction, return_depth=True
                 )
-                uv = self._camera2image(xy)
+                uv = self._xy_to_uv(xy)
             else:
-                uv = self.project(xyz, correction=correction)
+                uv = self.xyz_to_uv(xyz, correction=correction)
             is_in = self.inframe(uv)
             if not np.count_nonzero(is_in):
                 # No cells in image
@@ -1439,7 +1439,7 @@ class Camera:
         continuous_col = np.all(dxy[1:, 1] >= dxy[:-1, 1])
         return continuous_row and continuous_col
 
-    def _world2camera(
+    def _xyz_to_xy(
         self,
         xyz: np.ndarray,
         directions: bool = False,
@@ -1486,7 +1486,7 @@ class Camera:
             return xy, xyz_c[:, 2]
         return xy
 
-    def _camera2world(
+    def _xy_to_xyz(
         self, xy: np.ndarray, directions: bool = True, depth: Vector = 1
     ) -> np.ndarray:
         """
@@ -1513,7 +1513,7 @@ class Camera:
             xyz += self.xyz
         return xyz
 
-    def _camera2image(self, xy: np.ndarray) -> np.ndarray:
+    def _xy_to_uv(self, xy: np.ndarray) -> np.ndarray:
         """
         Project camera to image coordinates.
 
@@ -1524,7 +1524,7 @@ class Camera:
         uv = xy * self.f + (self.imgsz / 2 + self.c)
         return uv
 
-    def _image2camera(self, uv: np.ndarray) -> np.ndarray:
+    def _uv_to_xy(self, uv: np.ndarray) -> np.ndarray:
         """
         Project image to camera coordinates.
 

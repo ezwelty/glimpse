@@ -34,7 +34,7 @@ class Points(object):
         xyz (array): World coordinates (Nx3)
         directions (bool): Whether `xyz` are absolute coordinates (False)
             or ray directions (True)
-        correction (dict or bool): See `cam.project()`
+        correction (dict or bool): See `cam.xyz_to_uv()`
         size (int): Number of point pairs
         xyz (array): Initial camera position (`cam.xyz`)
         imgsz (array): Initial image size (`cam.imgsz`)
@@ -86,7 +86,7 @@ class Points(object):
             index = slice(None)
         if self.directions and not self.is_static():
             raise ValueError("Camera has changed position (xyz) and `directions=True`")
-        return self.cam.project(
+        return self.cam.xyz_to_uv(
             self.xyz[index], directions=self.directions, correction=self.correction
         )
 
@@ -183,7 +183,7 @@ class Lines(object):
         xyzs (iterable): World line vertices (n, 3)
         directions (bool): Whether `xyzs` are absolute coordinates (False)
             or ray directions (True)
-        correction (dict or bool): See `cam.project()`
+        correction (dict or bool): See `cam.xyz_to_uv()`
         step (float): Along-line distance between image points
             interpolated from lines `uvs`
         size (int): Number of image points
@@ -227,7 +227,7 @@ class Lines(object):
             index = slice(None)
         return self.uvi[index]
 
-    def project(self):
+    def xyz_to_uv(self):
         """
         Project world lines onto the image.
 
@@ -242,14 +242,14 @@ class Lines(object):
             raise ValueError("Camera has changed position (xyz) and `directions=True`")
         xy_step = 1 / self.cam.f.mean()
         uv_edges = self.cam.edges(step=self.cam.imgsz / 2)
-        xy_edges = self.cam._image2camera(uv_edges)
+        xy_edges = self.cam._uv_to_xy(uv_edges)
         xy_box = np.hstack((np.min(xy_edges, axis=0), np.max(xy_edges, axis=0)))
         puvs = []
         inlines = []
         for xyz in self.xyzs:
             # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
-            xy = self.cam._world2camera(
+            xy = self.cam._xyz_to_xy(
                 xyz, directions=self.directions, correction=self.correction
             )
             # Discard nan values (behind camera)
@@ -261,7 +261,7 @@ class Lines(object):
                 for cline in helpers.clip_polyline_box(line, xy_box):
                     # Interpolate clipped lines to ~1 pixel density
                     puvs.append(
-                        self.cam._camera2image(
+                        self.cam._xy_to_uv(
                             helpers.interpolate_line(np.array(cline), dx=xy_step)
                         )
                     )
@@ -269,7 +269,7 @@ class Lines(object):
             return puvs
         else:
             # If no lines inframe, project line vertices infront
-            return [self.cam._camera2image(line) for line in inlines]
+            return [self.cam._xy_to_uv(line) for line in inlines]
 
     def predicted(self, index=None):
         """
@@ -282,7 +282,7 @@ class Lines(object):
         Returns:
             array: Image coordinates (Nx2)
         """
-        puv = np.row_stack(self.project())
+        puv = np.row_stack(self.xyz_to_uv())
         distances = helpers.pairwise_distance(self.observed(index=index), puv)
         min_index = np.argmin(distances, axis=1)
         return puv[min_index, :]
@@ -333,7 +333,7 @@ class Lines(object):
             if not isinstance(predicted, dict):
                 predicted = {"color": predicted}
             predicted = {**{"color": "yellow"}, **predicted}
-            puvs = self.project()
+            puvs = self.xyz_to_uv()
             for puv in puvs:
                 matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
         # Plot errors
@@ -342,7 +342,7 @@ class Lines(object):
                 index = slice(None)
             uv = self.observed()
             if not predicted:
-                puvs = self.project()
+                puvs = self.xyz_to_uv()
             puv = np.row_stack(puvs)
             distances = helpers.pairwise_distance(uv, puv)
             min_index = np.argmin(distances, axis=1)
@@ -463,8 +463,8 @@ class Matches(object):
             index = slice(None)
         cam_in = self.cam_index(cam)
         cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out].invproject(self.uvs[cam_out][index])
-        return self.cams[cam_in].project(dxyz, directions=True)
+        dxyz = self.cams[cam_out].uv_to_xyz(self.uvs[cam_out][index])
+        return self.cams[cam_in].xyz_to_uv(dxyz, directions=True)
 
     def is_static(self):
         """
@@ -642,8 +642,8 @@ class RotationMatches(Matches):
     def _build_uvs(self, uvs=None, xys=None):
         if uvs is None and xys is not None:
             return (
-                self.cams[0]._camera2image(xys[0]),
-                self.cams[1]._camera2image(xys[1]),
+                self.cams[0]._xy_to_uv(xys[0]),
+                self.cams[1]._xy_to_uv(xys[1]),
             )
         else:
             return uvs
@@ -651,8 +651,8 @@ class RotationMatches(Matches):
     def _build_xys(self, uvs=None, xys=None):
         if xys is None and uvs is not None:
             return (
-                self.cams[0]._image2camera(uvs[0]),
-                self.cams[1]._image2camera(uvs[1]),
+                self.cams[0]._uv_to_xy(uvs[0]),
+                self.cams[1]._uv_to_xy(uvs[1]),
             )
         else:
             return xys
@@ -675,8 +675,8 @@ class RotationMatches(Matches):
             index = slice(None)
         cam_in = self.cam_index(cam)
         cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out]._camera2world(self.xys[cam_out][index])
-        return self.cams[cam_in].project(dxyz, directions=True)
+        dxyz = self.cams[cam_out]._xy_to_xyz(self.xys[cam_out][index])
+        return self.cams[cam_in].xyz_to_uv(dxyz, directions=True)
 
     def is_original_internals(self):
         """
@@ -767,8 +767,8 @@ class RotationMatchesXY(RotationMatches):
             index = slice(None)
         cam_in = self.cam_index(cam)
         cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out]._camera2world(self.xys[cam_out][index])
-        return self.cams[cam_in]._world2camera(dxyz, directions=True)
+        dxyz = self.cams[cam_out]._xy_to_xyz(self.xys[cam_out][index])
+        return self.cams[cam_in]._xyz_to_xy(dxyz, directions=True)
 
     def plot(self, *args, **kwargs):
         raise AttributeError("plot() not supported by RotationMatchesXY")
@@ -830,7 +830,7 @@ class RotationMatchesXYZ(RotationMatches):
         if index is None:
             index = slice(None)
         cam_idx = self.cam_index(cam)
-        dxyz = self.cams[cam_idx]._camera2world(self.xys[cam_idx][index])
+        dxyz = self.cams[cam_idx]._xy_to_xyz(self.xys[cam_idx][index])
         # Normalize world coordinates to unit sphere
         dxyz *= 1 / np.linalg.norm(dxyz, ord=2, axis=1).reshape(-1, 1)
         return dxyz

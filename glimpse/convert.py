@@ -130,7 +130,7 @@ class MatlabCamera:
         converter.optimize_xcam(params=cast(Parameters, optimize), **kwargs)
         return cast("MatlabCamera", converter.xcam)
 
-    def _camera2image(self, xy: np.ndarray) -> np.ndarray:
+    def _xy_to_uv(self, xy: np.ndarray) -> np.ndarray:
         # Compute lens distortion
         r2 = np.sum(xy ** 2, axis=1)
         dr = self.kc[0] * r2 + self.kc[1] * r2 ** 2 + self.kc[4] * r2 ** 3
@@ -329,7 +329,7 @@ class AgisoftCamera:
         converter.optimize_xcam(params=cast(Parameters, optimize), **kwargs)
         return cast("AgisoftCamera", converter.xcam)
 
-    def _camera2image(self, xy: np.ndarray) -> np.ndarray:
+    def _xy_to_uv(self, xy: np.ndarray) -> np.ndarray:
         # Compute lens distortion
         r2 = np.sum(xy ** 2, axis=1)
         dr = self.k1 * r2 + self.k2 * r2 ** 2 + self.k3 * r2 ** 3 + self.k4 * r2 ** 4
@@ -586,7 +586,7 @@ class OpenCVCamera:
         """
         return cls._from_camera_initial(cam)
 
-    def _camera2image(self, xy: np.ndarray) -> np.ndarray:
+    def _xy_to_uv(self, xy: np.ndarray) -> np.ndarray:
         # Compute lens distortion
         r2 = np.sum(xy ** 2, axis=1)
         dr = (1 + self.k1 * r2 + self.k2 * r2 ** 2 + self.k3 * r2 ** 3) / (
@@ -797,7 +797,7 @@ class PhotoModelerCamera:
         converter.optimize_xcam(params=cast(Parameters, optimize), **kwargs)
         return cast("PhotoModelerCamera", converter.xcam)
 
-    def _image2camera(self, uv: np.ndarray) -> np.ndarray:
+    def _uv_to_xy(self, uv: np.ndarray) -> np.ndarray:
         # Convert image coordinates to mm relative to principal point
         xy = np.column_stack(
             (
@@ -939,11 +939,11 @@ class Converter:
         """
         if isinstance(self.xcam, InverseCamera):
             # Project out of xcam and into cam
-            return self.cam._camera2image(self.xcam._image2camera(self.uv)) - self.uv
+            return self.cam._xy_to_uv(self.xcam._uv_to_xy(self.uv)) - self.uv
         # Inverse project out of cam, then into both cam and xcam
         # NOTE: Roundtrip out of and into cam avoids counting inversion errors
-        xy = self.cam._image2camera(self.uv)
-        return self.cam._camera2image(xy) - self.xcam._camera2image(xy)
+        xy = self.cam._uv_to_xy(self.uv)
+        return self.cam._xy_to_uv(xy) - self.xcam._xy_to_uv(xy)
 
     def optimize_cam(self, params: Parameters, **kwargs: Any) -> None:
         """

@@ -57,11 +57,14 @@ class Camera:
         Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
+
+    Raises:
+        ValueError: Image size must be integer.
     """
 
     def __init__(
         self,
-        imgsz: Vector,
+        imgsz: Union[int, Union[Sequence[int], np.ndarray]],
         f: Vector = None,
         c: Vector = None,
         sensorsz: Vector = None,
@@ -130,7 +133,11 @@ class Camera:
 
     @imgsz.setter
     def imgsz(self, value: Vector) -> None:
-        self.vector[6:8] = helpers.format_list(value, length=2)
+        as_int = helpers.format_list(value, length=2, dtype=int)
+        as_float = helpers.format_list(value, length=2)
+        if np.any(as_int != as_float):
+            raise ValueError("Image size must be integer")
+        self.vector[6:8] = as_int
 
     @property
     def f(self) -> np.ndarray:

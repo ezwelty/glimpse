@@ -7,6 +7,7 @@ import json
 import os
 import pickle
 import re
+from typing import Any
 
 import cv2
 import matplotlib.path
@@ -116,6 +117,17 @@ def numpy_dtype_minmax(dtype):
         return False, True
     else:
         raise ValueError("Cannot determine min, max for " + str(dtype))
+
+
+def numpy_to_native(x: Any) -> Any:
+    """
+    Convert numpy or native type to native type.
+
+    Converts numpy types to native type,
+    while leaving other objects (without `tolist()` method) unchanged.
+    """
+    # https://stackoverflow.com/a/42923092
+    return getattr(x, "tolist", lambda: x)()
 
 
 def split_extension(path):

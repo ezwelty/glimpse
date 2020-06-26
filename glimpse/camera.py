@@ -129,7 +129,7 @@ class Camera:
     @property
     def imgsz(self) -> np.ndarray:
         """Image size in pixels (nx, ny)."""
-        return self.vector[6:8]
+        return self.vector[6:8].astype(int)
 
     @imgsz.setter
     def imgsz(self, value: Vector) -> None:
@@ -427,11 +427,14 @@ class Camera:
         Example:
             >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
             >>> cam.to_dict()
-            {..., 'imgsz': (8.0, 6.0), 'f': (7.9, 6.1), ...}
+            {..., 'imgsz': (8, 6), 'f': (7.9, 6.1), ...}
             >>> cam.to_dict(('imgsz', 'f'))
-            {'imgsz': (8.0, 6.0), 'f': (7.9, 6.1)}
+            {'imgsz': (8, 6), 'f': (7.9, 6.1)}
         """
-        return {key: tuple(getattr(self, key)) for key in attributes}
+        return {
+            key: tuple(helpers.numpy_to_native(getattr(self, key)))
+            for key in attributes
+        }
 
     def to_json(
         self,
@@ -457,12 +460,12 @@ class Camera:
         Example:
             >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
             >>> print(cam.to_json())
-            {..., "imgsz": [8.0, 6.0], "f": [7.9, 6.1], ...}
+            {..., "imgsz": [8, 6], "f": [7.9, 6.1], ...}
             >>> print(cam.to_json(indent=4, flat_arrays=True))
             {
                 "xyz": [0.0, 0.0, 0.0],
                 "viewdir": [0.0, 0.0, 0.0],
-                "imgsz": [8.0, 6.0],
+                "imgsz": [8, 6],
                 "f": [7.9, 6.1],
                 "c": [0.0, 0.0],
                 "k": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -512,14 +515,14 @@ class Camera:
             >>> cam = Camera(imgsz=(10, 20), f=(1, 2), c=(0.1, 0.2))
             >>> cam.resize(2)
             >>> cam.imgsz
-            array([20., 40.])
+            array([20, 40])
             >>> cam.f
             array([2., 4.])
             >>> cam.c
             array([0.2, 0.4])
             >>> cam.resize(1)
             >>> cam.imgsz
-            array([10., 20.])
+            array([10, 20])
 
             If the target image size does not preserve the original aspect ratio,
             it is rejected by default.
@@ -530,7 +533,7 @@ class Camera:
             ValueError: Target image size does not preserve the original aspect ratio
             >>> cam.resize((11, 20), force=True)
             >>> cam.imgsz
-            array([11., 20.])
+            array([11, 20])
         """
         scale1d = np.atleast_1d(size)
         original_size = self._original_vector[6:8]

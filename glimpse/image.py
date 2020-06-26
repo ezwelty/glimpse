@@ -74,10 +74,6 @@ class Image:
             return self.I.shape[1], self.I.shape[0]
         return None
 
-    @property
-    def _cam_imgsz(self) -> Tuple[int, int]:
-        return int(self.cam.imgsz[0]), int(self.cam.imgsz[1])
-
     def read(self, box: Sequence[int] = None, cache: bool = True) -> np.ndarray:
         """
         Read image data from file.
@@ -96,7 +92,7 @@ class Image:
             cache (bool): Whether to save image in `self.I`
         """
         size = self._cache_imgsz or self._path_imgsz
-        cam_size = self._cam_imgsz
+        cam_size = tuple(self.cam.imgsz)
         resize = cam_size != size
         new_I = True
         if self.I is not None and not resize:
@@ -181,8 +177,8 @@ class Image:
                 "Source and target cameras have different positions ('xyz')"
             )
         # Construct grid in target image
-        u = np.linspace(0.5, cam.imgsz[0] - 0.5, int(cam.imgsz[0]))
-        v = np.linspace(0.5, cam.imgsz[1] - 0.5, int(cam.imgsz[1]))
+        u = np.linspace(0.5, cam.imgsz[0] - 0.5, cam.imgsz[0])
+        v = np.linspace(0.5, cam.imgsz[1] - 0.5, cam.imgsz[1])
         U, V = np.meshgrid(u, v)
         uv = np.column_stack((U.flatten(), V.flatten()))
         # Project grid out target image
@@ -193,18 +189,16 @@ class Image:
         if cam.imgsz[0] == self.cam.imgsz[0]:
             pu = u
         else:
-            pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, int(self.cam.imgsz[0]))
+            pu = np.linspace(0.5, self.cam.imgsz[0] - 0.5, self.cam.imgsz[0])
         if cam.imgsz[1] == self.cam.imgsz[1]:
             pv = v
         else:
-            pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, int(self.cam.imgsz[1]))
+            pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, self.cam.imgsz[1])
         # Prepare source image
         I = self.read()
         if I.ndim < 3:
             I = np.expand_dims(I, axis=2)
-        pI = np.full(
-            (int(cam.imgsz[1]), int(cam.imgsz[0]), I.shape[2]), np.nan, dtype=I.dtype
-        )
+        pI = np.full((cam.imgsz[1], cam.imgsz[0], I.shape[2]), np.nan, dtype=I.dtype)
         # Sample source image at target grid
         for i in range(pI.shape[2]):
             f = scipy.interpolate.RegularGridInterpolator(

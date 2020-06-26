@@ -88,7 +88,7 @@ class MatlabCamera:
     @classmethod
     def _from_camera_initial(cls, cam: Camera) -> "MatlabCamera":
         return cls(
-            imgsz=(int(cam.imgsz[0]), int(cam.imgsz[1])),
+            imgsz=(cam.imgsz[0], cam.imgsz[1]),
             fc=(cam.f[0], cam.f[1]),
             cc=(
                 (cam.c[0] + 0.5 * cam.imgsz[0]) - 0.5,
@@ -284,7 +284,7 @@ class AgisoftCamera:
     @classmethod
     def _from_camera_initial(cls, cam: Camera) -> "AgisoftCamera":
         return cls(
-            imgsz=(int(cam.imgsz[0]), int(cam.imgsz[1])),
+            imgsz=(cam.imgsz[0], cam.imgsz[1]),
             f=cam.f[1],
             cx=cam.c[0],
             cy=cam.c[1],
@@ -558,7 +558,7 @@ class OpenCVCamera:
     @classmethod
     def _from_camera_initial(cls, cam: Camera) -> "OpenCVCamera":
         return cls(
-            imgsz=(int(cam.imgsz[0]), int(cam.imgsz[1])),
+            imgsz=(cam.imgsz[0], cam.imgsz[1]),
             fx=cam.f[0],
             fy=cam.f[1],
             cx=cam.c[0] + cam.imgsz[0] / 2,
@@ -732,7 +732,7 @@ class PhotoModelerCamera:
         if cam.sensorsz is None:
             raise ValueError("Camera does not have a sensor size")
         return cls(
-            imgsz=(int(cam.imgsz[0]), int(cam.imgsz[1])),
+            imgsz=(cam.imgsz[0], cam.imgsz[1]),
             focal=(cam.fmm[0] + cam.fmm[1]) / 2,
             xp=cam.cmm[0] + cam.sensorsz[0] / 2,
             yp=cam.cmm[1] + cam.sensorsz[1] / 2,

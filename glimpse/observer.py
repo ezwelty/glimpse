@@ -45,9 +45,7 @@ class Observer(object):
         self.sigma = sigma
         self.correction = correction
         self.cache = cache
-        n = self.images[0].cam.imgsz.astype(int)
-        if (n != self.images[0].cam.imgsz).any():
-            raise ValueError("Image sizes (imgsz) are not integer")
+        n = self.images[0].cam.imgsz
         self.grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod

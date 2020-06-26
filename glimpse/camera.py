@@ -287,11 +287,6 @@ class Camera:
         return Rprime * (np.pi / 180)
 
     @property
-    def original_imgsz(self) -> np.ndarray:
-        """Original image size in pixels (nx, ny)."""
-        return self.original_vector[6:8]
-
-    @property
     def shape(self) -> Tuple[int, int]:
         """Image shape in pixels (ny, nx)."""
         return int(self.imgsz[1]), int(self.imgsz[0])
@@ -532,18 +527,19 @@ class Camera:
             array([11., 20.])
         """
         scale1d = np.atleast_1d(size)
+        original_size = self.original_vector[6:8]
         if len(scale1d) > 1 and force:
             # Use target size without checking for scalar scale factor
             new_size = scale1d
         else:
             if len(scale1d) > 1:
                 # Compute scalar scale factor (if one exists)
-                scale1d = Camera.get_scale_from_size(self.original_imgsz, scale1d)
+                scale1d = Camera.get_scale_from_size(original_size, scale1d)
                 if scale1d is None:
                     raise ValueError(
                         "Target image size does not preserve the original aspect ratio"
                     )
-            new_size = np.floor(scale1d * self.original_imgsz + 0.5)
+            new_size = np.floor(scale1d * original_size + 0.5)
         scale2d = new_size / self.imgsz
         # Ensure whole numbers
         self.imgsz = np.round(new_size)

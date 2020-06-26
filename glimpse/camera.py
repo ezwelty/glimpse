@@ -57,7 +57,6 @@ class Camera:
         Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
-        original_vector (numpy.ndarray): Value of :attr:`vector` when first initialized
     """
 
     def __init__(
@@ -96,7 +95,7 @@ class Camera:
         self.c = c
         self.k = k
         self.p = p
-        self.original_vector = self.vector.copy()
+        self._original_vector = self.vector.copy()
 
     # ---- Properties (dependent) ----
 
@@ -390,7 +389,7 @@ class Camera:
             True
         """
         cam = copy.deepcopy(self)
-        cam.original_vector = cam.vector.copy()
+        cam._original_vector = cam.vector.copy()
         return cam
 
     def reset(self) -> None:
@@ -403,7 +402,7 @@ class Camera:
             >>> cam.reset()
             >>> cam.f[0] == 1
         """
-        self.vector = self.original_vector.copy()
+        self.vector = self._original_vector.copy()
 
     def to_dict(
         self,
@@ -527,7 +526,7 @@ class Camera:
             array([11., 20.])
         """
         scale1d = np.atleast_1d(size)
-        original_size = self.original_vector[6:8]
+        original_size = self._original_vector[6:8]
         if len(scale1d) > 1 and force:
             # Use target size without checking for scalar scale factor
             new_size = scale1d

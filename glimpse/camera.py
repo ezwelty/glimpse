@@ -56,7 +56,11 @@ class Camera:
             :class:`optimize.ObserverCameras`.
 
     Raises:
-        ValueError: Image size must be integer.
+        ValueError: Image size is not integer.
+        ValueError: Focal length (f or fmm) is missing.
+        ValueError: Attributes in mm (fmm, cmm) provided without sensor size.
+        ValueError: Focal length provided in both pixels and mm (f, fmm).
+        ValueError: Principal point offset provided in both pixels and mm (c, cmm).
     """
 
     def __init__(
@@ -73,11 +77,13 @@ class Camera:
         viewdir: Vector = (0, 0, 0),
     ) -> None:
         if (fmm is not None or cmm is not None) and sensorsz is None:
-            raise ValueError("'fmm' or 'cmm' provided without 'sensorsz'")
+            raise ValueError("Attributes in mm (fmm, cmm) provided without sensor size")
         if f is not None and fmm is not None:
-            raise ValueError("'f' and 'fmm' cannot both be provided")
+            raise ValueError("Focal length provided in both pixels and mm (f, fmm)")
         if c is not None and cmm is not None:
-            raise ValueError("'c' and 'cmm' cannot both be provided")
+            raise ValueError(
+                "Principal point offset provided in both pixels and mm (c, cmm)"
+            )
         self._vector = np.full(20, np.nan, dtype=float)
         self.xyz = xyz
         self.viewdir = viewdir
@@ -86,7 +92,7 @@ class Camera:
         if fmm is not None:
             f = helpers.format_list(fmm, length=2) * self.imgsz / self.sensorsz
         if f is None:
-            raise ValueError("Either 'f' or 'fmm' must be provided")
+            raise ValueError("Focal length (f or fmm) is missing")
         self.f = f
         if cmm is not None:
             c = helpers.format_list(cmm, length=2) * self.imgsz / self.sensorsz
@@ -133,7 +139,7 @@ class Camera:
         as_int = helpers.format_list(value, length=2, dtype=int)
         as_float = helpers.format_list(value, length=2)
         if np.any(as_int != as_float):
-            raise ValueError("Image size must be integer")
+            raise ValueError("Image size is not integer")
         self._vector[6:8] = as_int
 
     @property

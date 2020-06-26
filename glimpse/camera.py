@@ -1539,16 +1539,3 @@ class Camera:
         xy = (uv - (self.imgsz * 0.5 + self.c)) * (1 / self.f)
         xy = self._undistort(xy)
         return xy
-
-    def _image2camera_grid_ideal(self, uv: Sequence[np.ndarray]) -> np.ndarray:
-        """
-        Project image to camera coordinates.
-
-        Faster version for an ideal camera and regularly gridded image coordinates.
-
-        Arguments:
-            uv: Vectors (u, v) of regularly gridded image coordinates
-        """
-        x = (uv[0] - (self.imgsz[0] * 0.5 + self.c[0])) * (1 / self.f[0])
-        y = (uv[1] - (self.imgsz[1] * 0.5 + self.c[1])) * (1 / self.f[1])
-        return helpers.grid_to_points(np.meshgrid(x, y))

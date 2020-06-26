@@ -683,21 +683,6 @@ class Camera:
         with np.errstate(invalid="ignore"):
             return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
 
-    def inview(self, xyz: np.ndarray, directions: bool = False) -> np.ndarray:
-        """
-        Test whether world coordinates are within view of the camera.
-
-        Arguments:
-            xyz: World coordinates (n, [x, y, z]).
-            directions: Whether `xyz` are ray directions (True)
-                or absolute coordinates (False).
-
-        Returns:
-            Boolean mask (n, ).
-        """
-        uv = self.project(xyz, directions=directions)
-        return self.inframe(uv)
-
     def grid(
         self, step: Vector = 1, snap: Sequence[float] = (0.5, 0.5), mode: str = "points"
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:

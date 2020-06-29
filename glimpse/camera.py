@@ -200,7 +200,7 @@ class Camera:
         return self._sensorsz
 
     @sensorsz.setter
-    def sensorsz(self, value: Vector = None) -> np.ndarray:
+    def sensorsz(self, value: Vector = None) -> None:
         if value is not None:
             value = np.array(helpers.format_list(value, length=2), dtype=float)
         self._sensorsz = value
@@ -212,12 +212,26 @@ class Camera:
             return None
         return self.f * self.sensorsz / self.imgsz
 
+    @fmm.setter
+    def fmm(self, value: Vector) -> None:
+        if self.sensorsz is None:
+            raise ValueError("Sensor size is required")
+        self.f = helpers.format_list(value, length=2) * self.imgsz / self.sensorsz
+
     @property
     def cmm(self) -> Optional[np.ndarray]:
         """Principal point offset from the image center in millimeters (dx, dy)."""
         if self.sensorsz is None:
             return None
         return self.c * self.sensorsz / self.imgsz
+
+    @cmm.setter
+    def cmm(self, value: Vector) -> None:
+        if self.sensorsz is None:
+            raise ValueError("Sensor size is required")
+        self.c = (
+            helpers.format_list(value, length=2, default=0) * self.imgsz / self.sensorsz
+        )
 
     @property
     def R(self) -> np.ndarray:

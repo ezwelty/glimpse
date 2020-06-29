@@ -311,11 +311,6 @@ class Camera:
         )
         return Rprime * (np.pi / 180)
 
-    @property
-    def shape(self) -> Tuple[int, int]:
-        """Image shape in pixels (ny, nx)."""
-        return int(self.imgsz[1]), int(self.imgsz[0])
-
     # ----- Methods (class) ----
 
     @classmethod
@@ -866,7 +861,7 @@ class Camera:
             uv[inframe, 1].astype(int),
             uv[inframe, 0].astype(int),
             values[inframe],
-            shape=self.shape,
+            shape=(self.imgsz[1], self.imgsz[0]),
             fun=fun,
         )
 
@@ -1014,7 +1009,7 @@ class Camera:
 
             >>> cam = Camera(imgsz=3, f=3, xyz=(0, 0, 3), viewdir=(0, -90, 0))
             >>> Z = np.array([(0.1, 0.2, 0.3), (0.4, 0.5, 0.6), (0.7, 0.8, 0.9)])
-            >>> values = np.random.randn(*cam.shape)
+            >>> values = np.random.randn(*cam.imgsz[::-1])
             >>> dem = Raster(Z, x=(-1, 0, 1), y=(1, 0, -1))
             >>> img = cam.project_dem(dem, values=values, return_depth=True)
             >>> np.all(img[:, :, 0] == values)
@@ -1046,7 +1041,7 @@ class Camera:
             columns=["row", "col"] + [str(x) for x in range(nbands_in)],
         )
         nbands_out = df.groupby(["row", "col"]).aggregate(aggregate).shape[1]
-        I = np.full(self.shape + (nbands_out,), np.nan)
+        I = np.full((self.imgsz[1], self.imgsz[0], nbands_out), np.nan)
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)
 

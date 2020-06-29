@@ -1,15 +1,18 @@
 import datetime
+from typing import Any, List, Sequence, Tuple, Union
 
+import matplotlib.animation
 import matplotlib.patches
 import matplotlib.pyplot
 import numpy as np
 import scipy.interpolate
 
 from . import helpers
+from .image import Image
 from .raster import Grid
 
 
-class Observer(object):
+class Observer:
     """
     An `Observer` contains a sequence of `Image` objects and the methods to compute
     the misfit between image subsets.
@@ -27,7 +30,13 @@ class Observer(object):
         grid (glimpse.raster.Grid): Grid object for operations on image coordinates
     """
 
-    def __init__(self, images, datetimes=None, sigma=0.3, cache=True):
+    def __init__(
+        self,
+        images: Sequence[Image],
+        datetimes: Sequence[datetime.datetime] = None,
+        sigma: float = 0.3,
+        cache: bool = False,
+    ) -> None:
         if len(images) < 2:
             raise ValueError("Observer must have two or more images")
         self.xyz = images[0].cam.xyz
@@ -47,7 +56,7 @@ class Observer(object):
         self.grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
 
     @staticmethod
-    def test_images(images, cam_tol=1e-3):
+    def test_images(images: Sequence[Image], cam_tol: float = 1e-3) -> None:
         for img in images[1:]:
             if np.linalg.norm(img.cam.xyz - images[0].cam.xyz) > cam_tol:
                 raise ValueError("Positions (xyz) are not equal")
@@ -56,14 +65,18 @@ class Observer(object):
             if any(img.cam.imgsz != images[0].cam.imgsz):
                 raise ValueError("Image sizes (imgsz) are not equal")
 
-    def index(self, value, maxdt=datetime.timedelta(0)):
+    def index(
+        self,
+        value: Union[Image, datetime.datetime],
+        maxdt: datetime.timedelta = datetime.timedelta(0),
+    ) -> int:
         """
         Retrieve the index of an image.
 
         Arguments:
             value: Either Image object to find in `self.images` or
                 Date and time to match against `self.datetimes` (datetime)
-            maxdt (timedelta): Maximum timedelta for `value` (datetime) to be
+            maxdt: Maximum timedelta for `value` (datetime) to be
                 considered a match. If `None`, no limit is placed on the match.
         """
         if isinstance(value, datetime.datetime):
@@ -77,32 +90,36 @@ class Observer(object):
         else:
             return self.images.index(value)
 
-    def xyz_to_uv(self, xyz, img, directions=False):
+    def xyz_to_uv(
+        self, xyz: np.ndarray, img: int, directions: bool = False
+    ) -> np.ndarray:
         """
         Project world coordinates to image coordinates.
 
         Arguments:
-            xyz (array): World coordinates (Nx3) or camera coordinates (Nx2)
+            xyz: World coordinates (Nx3) or camera coordinates (Nx2)
             img: Index of Image to project into
-            directions (bool): Whether `xyz` are absolute coordinates (False)
+            directions: Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
         """
         return self.images[img].cam.xyz_to_uv(xyz, directions=directions)
 
-    def tile_box(self, uv, size=(1, 1)):
+    def tile_box(self, uv: Sequence[float], size: Sequence[int] = (1, 1)) -> np.ndarray:
         """
         Compute a grid-aligned box centered around a point.
 
         Arguments:
-            uv (array-like): Desired box center in image coordinates (u, v)
-            size (array-like): Size of box in pixels (width, height)
+            uv: Desired box center in image coordinates (u, v)
+            size: Size of box in pixels (width, height)
 
         Returns:
             array: Integer (pixel edge) boundaries (left, top, right, bottom)
         """
         return self.grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
-    def extract_tile(self, box, img, cache=None):
+    def extract_tile(
+        self, box: Sequence[float], img: int, cache: bool = None
+    ) -> np.ndarray:
         """
         Extract rectangular image region.
 
@@ -111,24 +128,25 @@ class Observer(object):
         Non-cached results are read with a speed proportional to the size of the box.
 
         Arguments:
-            box (array-like): Boundaries of tile in image coordinates
-                (left, top, right, bottom)
+            box: Boundaries of tile in image coordinates (left, top, right, bottom)
             img: Index of Image to read
-            cache (bool): Optional override of `self.cache`
+            cache: Optional override of `self.cache`
         """
         if cache is None:
             cache = self.cache
         return self.images[img].read(box=box, cache=cache)
 
-    def shift_tile(self, tile, duv, **kwargs):
+    def shift_tile(
+        self, tile: np.ndarray, duv: Sequence[float], **kwargs: Any
+    ) -> np.ndarray:
         """
         Shift tile by a half-pixel (or smaller) offset.
 
         Useful for centering a tile over an arbitrary center point.
 
         Arguments:
-            tile (array): 2-d or 3-d array
-            duv (array-like): Shift in image coordinates (du, dv).
+            tile: 2-d or 3-d array
+            duv: Shift in image coordinates (du, dv).
                 Must be 0.5 pixels or smaller in each dimension.
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
@@ -147,17 +165,23 @@ class Observer(object):
         else:
             return tile
 
-    def sample_tile(self, uv, tile, box, grid=False, **kwargs):
+    def sample_tile(
+        self,
+        uv: Union[np.ndarray, Tuple[np.ndarray, np.ndarray]],
+        tile: np.ndarray,
+        box: Sequence[float],
+        grid: bool = False,
+        **kwargs: Any
+    ) -> np.ndarray:
         """
         Sample tile at image coordinates.
 
         Arguments:
-            uv (array-like): Image coordinates as either points (Nx2) if `grid=False`
+            uv: Image coordinates as either points (Nx2) if `grid=False`
                 or an iterable of grid coordinate arrays (u, v) if `grid=True`
-            tile (array): 2-d array
-            box (array-like): Boundaries of tile in image coordinates
-                (left, top, right, bottom)
-            grid (bool): See `uv`
+            tile: 2-d array
+            box: Boundaries of tile in image coordinates (left, top, right, bottom)
+            grid: See `uv`
             **kwargs: Optional arguments to scipy.interpolate.RectBivariateSpline
         """
         if not np.all(helpers.in_box(uv, box)):
@@ -175,20 +199,23 @@ class Observer(object):
         else:
             return f(uv[:, 1], uv[:, 0], grid=grid)
 
-    def plot_tile(self, tile, box=None, axes=None, **kwargs):
+    def plot_tile(
+        self,
+        tile: np.ndarray,
+        box: Sequence[float] = None,
+        axes: matplotlib.axes.Axes = None,
+        **kwargs: Any
+    ) -> matplotlib.image.AxesImage:
         """
         Draw tile on current matplotlib axes.
 
         Arguments:
-            tile (array): 2-d or 3-d array
-            box (array-like): Boundaries of tile in image coordinates
-                (left, top, right, bottom). If `None`, the upper-left corner of the
+            tile: 2-d or 3-d array
+            box: Boundaries of tile in image coordinates (left, top, right, bottom).
+                If `None`, the upper-left corner of the
                 upper-left pixel is placed at (0, 0).
-            axes (`matplotlib.axes.Axes`): Matplotlib axes to plot on
+            axes: Matplotlib axes to plot on
             **kwargs: Optional arguments to matplotlib.pyplot.imshow
-
-        Returns:
-            `matplotlib.image.AxesImage`
         """
         if box is None:
             box = (0, 0, tile.shape[0], tile.shape[1])
@@ -197,18 +224,21 @@ class Observer(object):
             axes = matplotlib.pyplot
         return axes.imshow(tile, origin="upper", extent=extent, **kwargs)
 
-    def plot_box(self, box, fill=False, axes=None, **kwargs):
+    def plot_box(
+        self,
+        box: Sequence[float],
+        fill: bool = False,
+        axes: matplotlib.axes.Axes = None,
+        **kwargs: Any
+    ) -> matplotlib.patches.Rectangle:
         """
         Draw box on current matplotlib axes.
 
         Arguments:
-            box (array-like): Box in image coordinates (left, top, right, bottom)
-            fill (bool): Whether to fill the box
-            axes (`matplotlib.axes.Axes`): Matplotlib axes to plot on
+            box: Box in image coordinates (left, top, right, bottom)
+            fill: Whether to fill the box
+            axes: Matplotlib axes to plot on
             **kwargs: Optional arguments to matplotlib.patches.Rectangle
-
-        Returns:
-            `matplotlib.patches.Rectangle`
         """
         if axes is None:
             axes = matplotlib.pyplot.gca()
@@ -222,13 +252,12 @@ class Observer(object):
             )
         )
 
-    def set_plot_limits(self, box=None):
+    def set_plot_limits(self, box: Sequence[float] = None) -> None:
         """
         Set the x,y limits of the current matplotlib axes.
 
         Arguments:
-            box (array-like): Plot limits in image coordinates
-                (left, top, right, bottom).
+            box: Plot limits in image coordinates (left, top, right, bottom).
                 If `None`, uses the full extent of the images.
         """
         if box is None:
@@ -236,24 +265,24 @@ class Observer(object):
         matplotlib.pyplot.xlim(box[0::2])
         matplotlib.pyplot.ylim(box[1::2])
 
-    def cache_images(self, index=None):
+    def cache_images(self, index: Union[Sequence[int], slice] = None) -> None:
         """
         Cache image data.
 
         Arguments:
-            index (iterable or slice): Index of images, or all if `None`
+            index: Index of images, or all if `None`
         """
         if index is None:
             index = slice(None)
         for img in np.array(self.images)[index]:
             img.read(cache=True)
 
-    def clear_images(self, index=None):
+    def clear_images(self, index: Union[Sequence[int], slice] = None) -> None:
         """
         Clear cached image data.
 
         Arguments:
-            index (iterable or slice): Index of images, or all if `None`
+            index: Index of images, or all if `None`
         """
         if index is None:
             index = slice(None)
@@ -262,13 +291,13 @@ class Observer(object):
 
     def animate(
         self,
-        uv=None,
-        frames=None,
-        size=(100, 100),
-        interval=200,
-        subplots={},
-        animation={},
-    ):
+        uv: Sequence[float] = None,
+        frames: Sequence[int] = None,
+        size: Sequence[int] = (100, 100),
+        interval: float = 200,
+        subplots: dict = {},
+        animation: dict = {},
+    ) -> matplotlib.animation.FuncAnimation:
         """
         Animate image tiles centered around a target point.
 
@@ -282,17 +311,13 @@ class Observer(object):
         https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
 
         Arguments:
-            uv (iterable): Image coordinate (u, v) of the center of the tile in
+            uv: Image coordinate (u, v) of the center of the tile in
                 in the first image (`frames[0]`). If `None`, the image center is used.
-            frames (iterable): Integer indices of the images to include
-            size (iterable): Size of the image tiles to plot
-            interval (number): Delay between frames in milliseconds
-            subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
-            animation (dict): Additional arguments to
-                'matplotlib.animation.FuncAnimation()'
-
-        Returns:
-            `matplotlib.animation.FuncAnimation`
+            frames: Integer indices of the images to include
+            size: Size of the image tiles to plot
+            interval: Delay between frames in milliseconds
+            subplots: Additional arguments to `matplotlib.pyplot.subplots()`
+            animation: Additional arguments to 'matplotlib.animation.FuncAnimation()'
         """
         if uv is None:
             uv = self.images[0].cam.imgsz / 2
@@ -353,13 +378,13 @@ class Observer(object):
 
     def track(
         self,
-        xyz,
-        frames=None,
-        size=(100, 100),
-        interval=200,
-        subplots={},
-        animation={},
-    ):
+        xyz: Sequence[float],
+        frames: Sequence[int] = None,
+        size: Sequence[int] = (100, 100),
+        interval: float = 200,
+        subplots: dict = {},
+        animation: dict = {},
+    ) -> matplotlib.animation.FuncAnimation:
         """
         Animate image tiles tracking a moving point.
 
@@ -373,17 +398,13 @@ class Observer(object):
         See https://stackoverflow.com/questions/17558096/animated-title-in-matplotlib.
 
         Arguments:
-            xyz (array): World coordinates (x, y, z)
-            frames (iterable): Integer indices of the images to include.
+            xyz: World coordinates (x, y, z)
+            frames: Integer indices of the images to include.
                 If `None`, defaults to `range(len(xyz))`.
-            size (iterable): Size of the image tiles to plot
-            interval (number): Delay between frames in milliseconds
-            subplots (dict): Additional arguments to `matplotlib.pyplot.subplots()`
-            animation (dict): Additional arguments to
-                'matplotlib.animation.FuncAnimation()'
-
-        Returns:
-            `matplotlib.animation.FuncAnimation`
+            size: Size of the image tiles to plot
+            interval: Delay between frames in milliseconds
+            subplots: Additional arguments to `matplotlib.pyplot.subplots()`
+            animation: Additional arguments to 'matplotlib.animation.FuncAnimation()'
         """
         if frames is None:
             frames = np.arange(len(xyz))
@@ -445,7 +466,7 @@ class Observer(object):
             fig, update_plot, frames=frames, interval=interval, blit=True, **animation
         )
 
-    def subset(self, **kwargs):
+    def subset(self, **kwargs: Any) -> "Observer":
         """
         Return a new Observer with a subset of the original images.
 
@@ -457,13 +478,15 @@ class Observer(object):
         params = {key: getattr(self, key) for key in ("sigma", "cache")}
         return self.__class__(images, datetimes=self.datetimes[index], **params)
 
-    def split(self, n, overlap=1):
+    def split(
+        self, n: Union[int, Sequence[datetime.datetime]], overlap: int = 1
+    ) -> List["Observer"]:
         """
         Split into multiple Observers.
 
         Arguments:
             n: Number of equal-length Observers (int) or datetime breaks (iterable)
-            overlap (int): Number of images from previous Observer to append to start
+            overlap: Number of images from previous Observer to append to start
                 of following Observer
         """
         if np.iterable(n):

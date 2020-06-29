@@ -54,6 +54,16 @@ class Camera:
         Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
+        correction (bool or dict): Whether or how to apply elevation corrections for
+            surface curvature and atmospheric refraction when projecting absolute world
+            coordinates to image coordinates. Either `False` to skip,
+            `True` for default arguments, or a dictionary of custom arguments:
+
+                - radius (float): Radius of curvature in the same units as :attr:`xyz`.
+                    Default (6.3781e6 m) is the Earth's equatorial radius in meters.
+                - refraction (float): Coefficient of refraction of light.
+                    Default (0.13) is an average for standard Earth atmospheric
+                    conditions.
 
     Raises:
         ValueError: Image size is not integer.
@@ -75,6 +85,7 @@ class Camera:
         p: Vector = (0, 0),
         xyz: Vector = (0, 0, 0),
         viewdir: Vector = (0, 0, 0),
+        correction: Union[bool, dict] = False,
     ) -> None:
         if (fmm is not None or cmm is not None) and sensorsz is None:
             raise ValueError("Attributes in mm (fmm, cmm) provided without sensor size")
@@ -101,6 +112,11 @@ class Camera:
         self.c = c
         self.k = k
         self.p = p
+        if correction is True:
+            correction = {}
+        if correction is not False:
+            correction = {"radius": 6.3781e6, "refraction": 0.13, **correction}
+        self.correction = correction
         self._original_vector = self._vector.copy()
 
     # ---- Properties (dependent) ----
@@ -415,14 +431,11 @@ class Camera:
         Example:
             >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
             >>> cam.to_dict()
-            {..., 'imgsz': (8, 6), 'f': (7.9, 6.1), ...}
+            {..., 'imgsz': [8, 6], 'f': [7.9, 6.1], ...}
             >>> cam.to_dict(('imgsz', 'f'))
-            {'imgsz': (8, 6), 'f': (7.9, 6.1)}
+            {'imgsz': [8, 6], 'f': [7.9, 6.1]}
         """
-        return {
-            key: tuple(helpers.numpy_to_native(getattr(self, key)))
-            for key in attributes
-        }
+        return {key: helpers.numpy_to_native(getattr(self, key)) for key in attributes}
 
     def to_json(
         self,
@@ -544,11 +557,7 @@ class Camera:
         self.c *= scale2d
 
     def xyz_to_uv(
-        self,
-        xyz: np.ndarray,
-        directions: bool = False,
-        correction: Union[bool, dict] = False,
-        return_depth: bool = False,
+        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to image coordinates.
@@ -557,9 +566,6 @@ class Camera:
             xyz: World coordinates (n, [x, y, z]).
             directions: Whether `xyz` are absolute coordinates (`False`)
                 or ray directions (`True`).
-            correction: Optional arguments to `helpers.elevation_corrections()` (dict),
-                `True` for default arguments, or `False` to skip.
-                Only applies if `directions` is `False`.
             return_depth: Whether to return the distance of each world point
                 along the camera's optical axis.
 
@@ -581,9 +587,7 @@ class Camera:
             >>> cam.xyz_to_uv(xyz, return_depth=True)
             (array([[5., 5.]]), array([10.]))
         """
-        xy = self._xyz_to_xy(
-            xyz, directions=directions, correction=correction, return_depth=return_depth
-        )
+        xy = self._xyz_to_xy(xyz, directions=directions, return_depth=return_depth)
         if return_depth:
             xy, depth = xy
         uv = self._xy_to_uv(xy)
@@ -958,7 +962,6 @@ class Camera:
         scale_limits: Sequence[Number] = (1, 1),
         aggregate: Callable[[np.ndarray], np.ndarray] = np.mean,
         parallel: Union[bool, int] = False,
-        correction: Union[bool, dict] = False,
         return_depth: bool = False,
     ) -> np.ndarray:
         """
@@ -988,8 +991,6 @@ class Camera:
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
                 defaults to `os.cpu_count()`.
-            correction: Whether or how to apply elevation corrections
-                (see `helpers.elevation_corrections()`).
             return_depth: Whether to return a depth map - the distance of the
                 `dem` surface measured along the camera's optical axis.
 
@@ -1064,9 +1065,7 @@ class Camera:
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
                 return None
-            _, mean_depth = self._xyz_to_xy(
-                np.atleast_2d(mean_xyz), return_depth=True, correction=correction
-            )
+            _, mean_depth = self._xyz_to_xy(np.atleast_2d(mean_xyz), return_depth=True)
             tile_scale = scale * np.abs(tile.d).mean() / (mean_depth / self.f.mean())
             tile_scale = min(max(tile_scale, min(scale_limits)), max(scale_limits))
             if tile_scale != 1:
@@ -1085,12 +1084,10 @@ class Camera:
                 (tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask])
             )
             if return_depth:
-                xy, depth = self._xyz_to_xy(
-                    xyz, correction=correction, return_depth=True
-                )
+                xy, depth = self._xyz_to_xy(xyz, return_depth=True)
                 uv = self._xy_to_uv(xy)
             else:
-                uv = self.xyz_to_uv(xyz, correction=correction)
+                uv = self.xyz_to_uv(xyz)
             is_in = self.inframe(uv)
             if not np.count_nonzero(is_in):
                 # No cells in image
@@ -1428,11 +1425,7 @@ class Camera:
         return continuous_row and continuous_col
 
     def _xyz_to_xy(
-        self,
-        xyz: np.ndarray,
-        directions: bool = False,
-        correction: Union[bool, dict] = False,
-        return_depth: bool = False,
+        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to camera coordinates.
@@ -1441,9 +1434,6 @@ class Camera:
             xyz: World coordinates (n, 3)
             directions: Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
-            correction: Arguments to `helpers.elevation_corrections()` (dict),
-                `True` for default arguments, or `False` to skip.
-                Only applies if `directions` is `False`.
             return_depth: Whether to return the distance of each point
                 along the camera's optical axis
         """
@@ -1451,12 +1441,10 @@ class Camera:
             dxyz = xyz
         else:
             dxyz = xyz - self.xyz
-            if correction is True:
-                correction = {}
-            if isinstance(correction, dict):
-                # Apply elevation correction
+            if self.correction:
                 dxyz[:, 2] += helpers.elevation_corrections(
-                    squared_distances=np.sum(dxyz[:, 0:2] ** 2, axis=1), **correction
+                    squared_distances=np.sum(dxyz[:, 0:2] ** 2, axis=1),
+                    **self.correction,
                 )
         # Convert coordinates to ray directions
         if config._UseMatMul:

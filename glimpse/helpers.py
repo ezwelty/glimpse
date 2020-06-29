@@ -1780,24 +1780,20 @@ def polygons_to_mask(polygons, size, holes=None):
 
 
 def elevation_corrections(
-    origin=None,
-    xyz=None,
-    squared_distances=None,
-    earth_radius=6.3781e6,
-    refraction=0.13,
+    origin=None, xyz=None, squared_distances=None, radius=6.3781e6, refraction=0.13,
 ):
     """
-    Return elevation corrections for earth curvature and refraction.
+    Return elevation corrections for surface curvature and atmospheric refraction.
 
     Arguments:
         origin (iterable): World coordinates of origin (x, y, (z))
         xyz (array): World coordinates of target points (n, 2+)
         squared_distances (iterable): Squared Euclidean distances
             between `origin` and `xyz`. Takes precedence if not `None`.
-        earth_radius (float): Radius of the earth in the same units as `xyz`.
-            Default is the equatorial radius in meters.
+        radius (float): Radius of curvature in the same units as `xyz`.
+            Default is the Earth's equatorial radius in meters.
         refraction (float): Coefficient of refraction of light.
-            Default is an average for standard atmospheric conditions.
+            Default is an average for standard Earth atmospheric conditions.
     """
     # http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
     # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm

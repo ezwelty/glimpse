@@ -23,12 +23,11 @@ class Observer(object):
             by default read from `images[i].datetime`
         sigma (float): Standard deviation of pixel values between images
             due to changes in illumination, deformation, or unresolved camera motion
-        correction: Curvature and refraction correction (see `Camera.xyz_to_uv()`)
         cache (bool): Whether to cache images on read
         grid (glimpse.raster.Grid): Grid object for operations on image coordinates
     """
 
-    def __init__(self, images, datetimes=None, sigma=0.3, correction=True, cache=True):
+    def __init__(self, images, datetimes=None, sigma=0.3, cache=True):
         if len(images) < 2:
             raise ValueError("Observer must have two or more images")
         self.xyz = images[0].cam.xyz
@@ -43,7 +42,6 @@ class Observer(object):
             raise ValueError("Image datetimes are not stricly increasing")
         self.datetimes = datetimes
         self.sigma = sigma
-        self.correction = correction
         self.cache = cache
         n = self.images[0].cam.imgsz
         self.grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
@@ -89,9 +87,7 @@ class Observer(object):
             directions (bool): Whether `xyz` are absolute coordinates (False)
                 or ray directions (True)
         """
-        return self.images[img].cam.xyz_to_uv(
-            xyz, directions=directions, correction=self.correction
-        )
+        return self.images[img].cam.xyz_to_uv(xyz, directions=directions)
 
     def tile_box(self, uv, size=(1, 1)):
         """
@@ -458,7 +454,7 @@ class Observer(object):
         """
         index = helpers.select_datetimes(self.datetimes, **kwargs)
         images = [self.images[i] for i in index]
-        params = {key: getattr(self, key) for key in ("sigma", "correction", "cache")}
+        params = {key: getattr(self, key) for key in ("sigma", "cache")}
         return self.__class__(images, datetimes=self.datetimes[index], **params)
 
     def split(self, n, overlap=1):

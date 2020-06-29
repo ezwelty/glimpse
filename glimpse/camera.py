@@ -1,6 +1,6 @@
 """Convert between world and image coordinates using a distorted camera model."""
 import copy
-from typing import Any, Callable, cast, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas

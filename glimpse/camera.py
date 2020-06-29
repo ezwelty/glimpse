@@ -327,40 +327,6 @@ class Camera:
         args = {**json_args, **kwargs}
         return cls(**args)
 
-    # ---- Methods (static) ----
-
-    @staticmethod
-    def get_scale_from_size(
-        old_size: Sequence[int], new_size: Sequence[int]
-    ) -> Optional[float]:
-        """
-        Return the scale factor that achieves a target image size.
-
-        Arguments:
-            old_size: Initial image size (nx, ny)
-            new_size: Target image size (nx, ny)
-
-        Returns:
-            Scale factor, or `None` if **new_size** cannot be achieved exactly
-        """
-        old = np.asarray(old_size)
-        new = np.asarray(new_size)
-        if all(new == old):
-            return 1.0
-        scale_bounds = new / old
-        if scale_bounds[0] == scale_bounds[1]:
-            return scale_bounds[0]
-
-        def err(scale: float) -> float:
-            return np.sum(np.abs(np.floor(scale * old + 0.5) - new_size))
-
-        fit = scipy.optimize.minimize(
-            err, x0=scale_bounds.mean(), bounds=[scale_bounds]
-        )
-        if err(fit["x"]) == 0:
-            return fit["x"]
-        return None
-
     # ---- Methods (public) ----
 
     def copy(self) -> "Camera":
@@ -565,7 +531,7 @@ class Camera:
         else:
             if len(scale1d) > 1:
                 # Compute scalar scale factor (if one exists)
-                scale1d = Camera.get_scale_from_size(original_size, scale1d)
+                scale1d = helpers.get_scale_from_size(original_size, scale1d)
                 if scale1d is None:
                     raise ValueError(
                         "Target image size does not preserve the original aspect ratio"

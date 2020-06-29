@@ -7,7 +7,7 @@ import json
 import os
 import pickle
 import re
-from typing import Any
+from typing import Any, Optional, Sequence
 
 import cv2
 import matplotlib.path
@@ -1681,6 +1681,47 @@ def polyline_to_cartesian(points, line):
     return projected_points + np.abs(points[:, 1:2]) * np.column_stack(
         (np.cos(new_directions), np.sin(new_directions))
     )
+
+
+def get_scale_from_size(old: Sequence[int], new: Sequence[int]) -> Optional[float]:
+    """
+    Return the scale factor that achieves a target integer grid size.
+
+    Arguments:
+        old: Initial size (nx, ny)
+        new: Target size (nx, ny)
+
+    Returns:
+        Scale factor, or `None` if the **new** size cannot be achieved exactly.
+
+    Example:
+        >>> get_scale_from_size(1, 2)
+        2.0
+        >>> get_scale_from_size((1, 1, 1), (2, 2, 2))
+        2.0
+        >>> old, new = (133, 311), (40, 94)
+        >>> scale = get_scale_from_size(old, new)
+        >>> (round(old[0] * scale), round(old[1] * scale)) == new
+        True
+        >>> get_scale_from_size((1, 1), (1, 2)) is None
+        True
+    """
+    old = np.atleast_1d(old)
+    new = np.atleast_1d(new)
+    if all(new == old):
+        return 1.0
+    initial = new / old
+    if all(initial[0] == initial):
+        return initial[0]
+
+    def err(scale: float) -> float:
+        return np.sum(np.abs(np.round(scale * old) - new))
+
+    bounds = [(np.floor(initial.min()), np.ceil(initial.max()))]
+    fit = scipy.optimize.differential_evolution(func=err, bounds=bounds)
+    if fit["fun"] == 0:
+        return float(fit["x"])
+    return None
 
 
 # ---- Image formation ---- #

@@ -35,7 +35,7 @@ class Observer:
         images: Sequence[Image],
         datetimes: Sequence[datetime.datetime] = None,
         sigma: float = 0.3,
-        cache: bool = False,
+        cache: bool = True,
     ) -> None:
         if len(images) < 2:
             raise ValueError("Observer must have two or more images")

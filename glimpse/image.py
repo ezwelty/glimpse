@@ -18,27 +18,75 @@ class Image:
     Photographic image and the settings that gave rise to the image.
 
     Arguments:
-        path (str): Path to image
-        cam (:class:`Camera` or dict): Camera or arguments passed to :class:`Camera()`.
+        path: Path to image file.
+        cam: :class:`Camera` or arguments passed to :class:`Camera`.
             If missing, 'imgsz', 'fmm', and 'sensorsz' are read from **exif**.
-        exif (:class:`Exif`): Image metadata. If `None`, read from **path**.
-        datetime (datetime.datetime): Capture date and time.
-            If `None`, read from **exif**.
+        datetime: Image capture date and time. If `None`, read from **exif**.
+        exif: Image metadata. If `None` and needed for **cam** or **datetime**,
+            read from **path**.
 
     Attributes:
-        path (str): Image path
-        cam (:class:`Camera`): Camera model
-        exif (:class:`Exif`): Image metadata
-        datetime (datetime.datetime): Image capture date and time
-        I (numpy.ndarray): Cached image content
+        path (str): Path to image file.
+        cam (:class:`Camera`): Camera model.
+        exif (:class:`Exif`): Image metadata.
+        datetime (datetime.datetime): Image capture date and time.
+        I (numpy.ndarray): Cached image content.
+
+    Example:
+        By default, the base camera model (:class:`Camera`) and image capture time
+        are loaded from image metadata (:class:`Exif`) read from the image file.
+
+        >>> path = 'tests/AK10b_20141013_020336.JPG'
+        >>> img = Image(path)
+        >>> img.path
+        'tests/AK10b_20141013_020336.JPG'
+        >>> img.path == path
+        True
+        >>> img.cam.imgsz
+        array([800, 536])
+        >>> all(img.cam.imgsz == img.exif.imgsz)
+        True
+        >>> img.cam.sensorsz
+        array([23.6, 15.8])
+        >>> all(img.cam.sensorsz == img.exif.sensorsz)
+        True
+        >>> img.cam.fmm
+        array([20., 20.])
+        >>> all(img.cam.fmm == img.exif.fmm)
+        True
+        >>> img.datetime
+        datetime.datetime(2014, 10, 13, 2, 3, 36, 280000)
+        >>> img.datetime == img.exif.datetime
+        True
+
+        If all of these are provided, image metadata is not read, which is faster.
+
+        >>> img = Image(
+        >>>     path,
+        >>>     cam={'imgsz': (800, 536), 'sensorsz': (23.6, 15.8), 'fmm': 20},
+        >>>     datetime=datetime.datetime(2014, 10, 13, 2, 3, 36, 280000))
+        >>> img.exif is None
+        True
+
+        Custom camera parameters override and supplement those read from metadata.
+
+        >>> fmm = 28
+        >>> xyz = (1, 2, 3)
+        >>> img = Image(path, cam={'fmm': fmm, 'xyz': xyz})
+        >>> img.cam.imgsz
+        array([800, 536])
+        >>> all(img.cam.fmm == fmm)
+        True
+        >>> all(img.cam.xyz == xyz)
+        True
     """
 
     def __init__(
         self,
         path: str,
         cam: Union[dict, Camera] = None,
-        exif: Exif = None,
         datetime: datetime.datetime = None,
+        exif: Exif = None,
     ) -> None:
         self.path = path
         if not cam:
@@ -79,17 +127,43 @@ class Image:
         Read image data from file.
 
         The image is resized as needed to the camera image size
-        (`self.cam.imgsz`). The result is cached (`self.I`) and reused only if
-        it matches the camera image size. To clear the cache, set `self.I` to
+        (:attr:`cam.imgsz`). The result is cached (:attr:`I`) and reused only if
+        it matches the camera image size. To clear the cache, set :attr:`I` to
         `None`.
 
         Arguments:
-            box (array-like): Crop extent in image coordinates
-                (left, top, right, bottom) relative to `self.cam.imgsz`.
-                If `cache=True`, the region is extracted from the cached image.
-                If `cache=False`, the region is extracted directly from the file
+            box: Crop extent in image coordinates (left, top, right, bottom)
+                relative to :attr:`cam.imgsz`. If `None`, the full image is returned.
+            cache: Whether to cache image values.
+                If `True`, the region is extracted from the cached image.
+                If `False`, the region is extracted directly from the file
                 (faster than reading the entire image).
-            cache (bool): Whether to save image in `self.I`
+
+        Example:
+            The image is read and resized as needed to match the camera image size.
+
+            >>> img = Image('tests/AK10b_20141013_020336.JPG')
+            >>> img.cam.resize(0.5)
+            >>> img.cam.imgsz
+            array([400, 268])
+            >>> I = img.read()
+            >>> I.shape[1], I.shape[0]
+            (400, 268)
+            >>> img.cam.resize(1)
+            >>> I = img.read()
+            >>> I.shape[1], I.shape[0]
+            (800, 536)
+
+            Reading a subset of the image is equivalent to
+            slicing the original image, even when it is read directly from file.
+
+            >>> box = 0, 5, 100, 94
+            >>> tile = img.read(box)
+            >>> np.all(tile == I[box[1] : box[3], box[0] : box[2]])
+            True
+            >>> tile = img.read(box, cache=False)
+            >>> np.all(tile == I[box[1] : box[3], box[0] : box[2]])
+            True
         """
         size = self._cache_imgsz or self._path_imgsz
         cam_size = tuple(self.cam.imgsz)
@@ -132,9 +206,9 @@ class Image:
         Write image data to file.
 
         Arguments:
-            path (str): File path to write to.
-            I (array): Image data.
-                If `None` (default), the original image data is read.
+            path: File path to write to.
+            I: Image data.
+                If `None`, the original image data is read.
             driver: GDAL drivers to use (see https://gdal.org/drivers/raster).
                 If `None`, tries to guess the driver based on the file extension.
         """
@@ -142,7 +216,7 @@ class Image:
             I = self.read()
         helpers.write_raster(a=I, path=path, driver=driver)
 
-    def plot(self, **kwargs: Any) -> None:
+    def plot(self, **kwargs: Any) -> matplotlib.image.AxesImage:
         """
         Plot image data.
 
@@ -151,26 +225,62 @@ class Image:
 
         Arguments:
             **kwargs: Arguments passed to `matplotlib.pyplot.imshow`.
+
+        Example:
+            >>> import matplotlib.pyplot as plt
+            >>> img = Image('tests/AK10b_20141013_020336.JPG')
+            >>> img.plot()
+            <matplotlib.image.AxesImage object at ...>
+            >>> plt.show()  #doctest: +SKIP
+            >>> plt.close()
         """
         I = self.read()
         kwargs = {"origin": "upper", "extent": (0, I.shape[1], I.shape[0], 0), **kwargs}
-        matplotlib.pyplot.imshow(I, **kwargs)
+        return matplotlib.pyplot.imshow(I, **kwargs)
 
     def set_plot_limits(self) -> None:
-        """Set limits of current plot to image extent."""
+        """
+        Set limits of current plot axes to image extent.
+
+        Example:
+            >>> import matplotlib.pyplot as plt
+            >>> img = Image('tests/AK10b_20141013_020336.JPG')
+            >>> img.plot()
+            >>> ax = plt.gca()
+            >>> ax.set_xlim(0, 1)
+            >>> ax.set_ylim(1, 0)
+            >>> img.set_plot_limits()
+            >>> ax.get_xlim() == (0, img.cam.imgsz[0])
+            True
+            >>> ax.get_ylim() == (img.cam.imgsz[1], 0)
+            True
+        """
         matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
         matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
 
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """
-        Project image into another `Camera`.
+        Project image into another camera.
 
         Arguments:
-            cam (Camera): Target `Camera`
-            method (str): Interpolation method, either 'linear' or 'nearest'
+            cam: Target camera.
+            method: Interpolation method (either 'linear' or 'nearest').
 
         Raises:
             ValueError: Camera positions are not equal.
+
+        Example:
+            For example, turn the original camera slightly right and up.
+            The image is now projected to the lower-left corner of the image frame.
+
+            >>> import matplotlib.pyplot as plt
+            >>> img = Image('tests/AK10b_20141013_020336.JPG')
+            >>> cam = img.cam.copy()
+            >>> cam.viewdir = (5, 4, 0)
+            >>> I = img.project(cam, method="nearest")
+            >>> plt.imshow(I)
+            >>> plt.show()  #doctest: +SKIP
+            >>> plt.close()
         """
         if not all(cam.xyz == self.cam.xyz):
             raise ValueError(

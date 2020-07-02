@@ -1,6 +1,8 @@
+"""Optimize camera models to fit observations taken from images and the world."""
 import datetime
 import os
 import sys
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 import warnings
 
 import cv2
@@ -13,6 +15,9 @@ import scipy.sparse
 from . import config, helpers
 from .camera import Camera
 
+Index = Union[slice, Sequence[int]]
+CamIndex = Union[int, Camera]
+
 # ---- Controls ----
 
 # Controls (within Cameras) support RANSAC with the following API:
@@ -21,132 +26,165 @@ from .camera import Camera
 # .predicted(index)
 
 
-class Points(object):
+class Points:
     """
-    `Points` store image-world point correspondences.
+    Image-world point correspondences.
 
-    World coordinates (`xyz`) are projected into the camera,
-    then compared to the corresponding image coordinates (`uv`).
+    World coordinates (`xyz`) are projected to image coordinates,
+    then compared to their expected image coordinates (`uv`).
 
     Attributes:
-        cam (Camera): Camera object
-        uv (array): Image coordinates (Nx2)
-        xyz (array): World coordinates (Nx3)
+        cam (Camera): Camera.
+        uv (array): Image coordinates (n, [u, v]).
+        xyz (array): World coordinates (n, [x, y, z]).
         directions (bool): Whether `xyz` are absolute coordinates (False)
-            or ray directions (True)
-        correction (dict or bool): See `cam.xyz_to_uv()`
-        size (int): Number of point pairs
-        xyz (array): Initial camera position (`cam.xyz`)
-        imgsz (array): Initial image size (`cam.imgsz`)
+            or ray directions (True). If the latter, camera position cannot change.
+        size (int): Number of point pairs (n).
+
+    Raises:
+        ValueError: Image and world coordinates have different length.
+
+    Example:
+        Say we have a camera looking down onto three world points on the xy-plane.
+
+        >>> cam = Camera(imgsz=10, f=1, xyz=(0, 0, 1), viewdir=(0, -90, 0))
+        >>> xyz = [(-1, 0, 0), (0, 0, 0), (1, 0, 0)]
+        >>> uv = [(3, 5), (5, 5), (7, 5)]
+        >>> points = Points(cam=cam, uv=uv, xyz=xyz)
+        >>> points.size
+        3
+
+        The image coordinates predicted from the world coordinates and the camera model
+        do not match the observed image coordinates.
+
+        >>> points.predicted() - points.observed()
+        array([[ 1., 0.],
+               [ 0., 0.],
+               [-1., 0.]])
+
+        Plotting the reprojection errors can help diagnose the problem.
+
+        >>> import matplotlib.pyplot as plt
+        >>> points.plot()
+        {'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        >>> plt.show()  # doctest: SKIP
+        >>> plt.close()
+
+        In this case, the errors are symmetric and increasing from the image center,
+        suggesting that the camera focal length needs to be adjusted.
+
+        >>> cam.f = 2
+        >>> points.predicted() - points.observed()
+        array([[0., 0.],
+               [0., 0.],
+               [0., 0.]])
     """
 
-    def __init__(self, cam, uv, xyz, directions=False, correction=False):
+    def __init__(
+        self, cam: Camera, uv: np.ndarray, xyz: np.ndarray, directions: bool = False,
+    ) -> None:
         if len(uv) != len(xyz):
-            raise ValueError("`uv` and `xyz` have different number of rows")
+            raise ValueError("Image and world coordinates have different length")
         self.cam = cam
-        self.uv = uv
-        self.xyz = xyz
+        self.uv = np.atleast_2d(uv).astype(float)
+        self.xyz = np.atleast_2d(xyz).astype(float)
         self.directions = directions
-        self.correction = correction
-        self.cam_xyz = cam.xyz.copy()
-        self.imgsz = cam.imgsz.copy()
+        self._position = cam.xyz.copy()
+        self._imgsz = cam.imgsz.copy()
 
     @property
-    def size(self):
+    def size(self) -> int:
+        """Number of points pairs."""
         return len(self.uv)
 
-    @property
-    def cams(self):
-        return [self.cam]
-
-    def observed(self, index=None):
+    def observed(self, index: Index = slice(None)) -> np.ndarray:
         """
         Return observed image coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of points to return, or all if `None`
+            index: Indices of points to return.
         """
-        if index is None:
-            index = slice(None)
         return self.uv[index]
 
-    def predicted(self, index=None):
+    def _test_position(self) -> None:
+        if self.directions and any(self.cam.xyz != self._position):
+            raise ValueError(
+                "Camera position has changed and world coordinates are ray directions"
+            )
+
+    def predicted(self, index: Index = slice(None)) -> np.ndarray:
         """
         Predict image coordinates from world coordinates.
 
-        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions
-        (`directions=True`), the point correspondences are invalid and an error is
-        raised.
-
         Arguments:
-            index (array_like or slice): Indices of world points to project,
-                or all if `None`
-        """
-        if index is None:
-            index = slice(None)
-        if self.directions and not self.is_static():
-            raise ValueError("Camera has changed position (xyz) and `directions=True`")
-        return self.cam.xyz_to_uv(
-            self.xyz[index], directions=self.directions, correction=self.correction
-        )
+            index: Indices of world points to project.
 
-    def is_static(self):
+        Raises:
+            ValueError: Camera position has changed and world coordinates are
+                ray directions.
         """
-        Test whether the camera is at its original position.
-        """
-        return (self.cam.xyz == self.cam_xyz).all()
+        self._test_position()
+        return self.cam.xyz_to_uv(self.xyz[index], directions=self.directions)
 
-    def plot(self, index=None, scale=1, width=5, selected="red", unselected=None):
+    def plot(
+        self,
+        index: Index = slice(None),
+        selected: Union[str, dict] = "red",
+        unselected: Union[str, dict] = None,
+        **kwargs: Any
+    ) -> Dict[str, Optional[matplotlib.quiver.Quiver]]:
         """
         Plot reprojection errors as quivers.
 
-        Arrows point from observed to predicted coordinates.
+        Arrows point from observed to predicted image coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of points to select, or all if `None`
-            scale (float): Scale of quivers
-            width (float): Width of quivers
-            selected: For selected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
+            index: Indices of points to select.
+            selected: For selected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            unselected: For unselected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
-        if index is None:
-            index = slice(None)
-            other_index = slice(0)
-        else:
-            other_index = np.delete(np.arange(self.size), index)
-        uv = self.observed()
-        puv = self.predicted()
-        duv = scale * (puv - uv)
+        new_plot = not matplotlib.pyplot.get_fignums()
         defaults = {
             "scale": 1,
             "scale_units": "xy",
             "angles": "xy",
             "units": "xy",
-            "width": width,
+            "width": self.cam.imgsz[0] * 0.005,
             "color": "red",
+            **kwargs,
         }
-        if unselected is not None:
-            if not isinstance(unselected, dict):
-                unselected = {"color": unselected}
-            unselected = {**defaults, **unselected}
-            matplotlib.pyplot.quiver(
-                uv[other_index, 0],
-                uv[other_index, 1],
-                duv[other_index, 0],
-                duv[other_index, 1],
-                **unselected
+        uv = self.observed()
+        duv = self.predicted() - uv
+        unindex = np.delete(np.arange(self.size), index)
+        # Plot selected points on top
+        result: Dict[str, Optional[matplotlib.quiver.Quiver]] = {}
+        for idx, args, label in [
+            (unindex, unselected, "unselected"),
+            (index, selected, "selected"),
+        ]:
+            if args is None:
+                result[label] = None
+                continue
+            if isinstance(args, str):
+                args = {"color": args}
+            args = {**defaults, **args}
+            result[label] = matplotlib.pyplot.quiver(
+                uv[idx, 0], uv[idx, 1], duv[idx, 0], duv[idx, 1], **args
             )
-        if selected is not None:
-            if not isinstance(selected, dict):
-                selected = {"color": selected}
-            selected = {**defaults, **selected}
-            matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
-            )
+        if new_plot:
+            self.cam.set_plot_limits()
+        return result
 
-    def resize(self, size=None, force=False):
+    def _scale(self, scale: np.ndarray) -> None:
+        if np.any(scale != 1):
+            self.uv = self.uv * scale
+
+    def resize(
+        self, size: Union[float, Sequence[int]] = None, force: bool = False
+    ) -> None:
         """
         Resize to new image size.
 
@@ -154,93 +192,120 @@ class Points(object):
 
         Arguments:
             size: Scale factor relative to the camera's original size (float)
-                or target image size (iterable).
-                If `None`, image coordinates are resized to fit current
+                or target image size in pixels (nx, ny).
+                If `None`, image coordinates are resized to fit the current
                 camera image size.
-            force (bool): Whether to use `size` even if it does not preserve
-                the original aspect ratio
+            force: Whether to use `size` even if it does not preserve
+                the original aspect ratio.
+
+        Example:
+            >>> cam = Camera(imgsz=10, f=1)
+            >>> xyz = [(0, 1, 0)]
+            >>> uv = [(5, 5)]
+            >>> points = Points(cam=cam, uv=uv, xyz=xyz)
+            >>> points.resize(0.5)
+            >>> cam.imgsz
+            array([5, 5])
+            >>> points.uv
+            array([[2.5, 2.5]])
+            >>> cam.resize(1)
+            >>> points.resize()
+            >>> points.uv
+            array([[5., 5.]])
         """
         if size is not None:
             self.cam.resize(size=size, force=force)
-        scale = self.cam.imgsz / self.imgsz
-        if any(scale != 1):
-            self.uv = self.uv * scale
-            self.imgsz = self.cam.imgsz.copy()
+        self._scale(self.cam.imgsz / self._imgsz)
+        self._imgsz = self.cam.imgsz.copy()
 
 
-class Lines(object):
+class Lines(Points):
     """
-    `Lines` store image and world lines believed to overlap.
+    Image-world line correspondences.
 
-    Image lines (`uvs`) are interpolated to a single array of image points (`uvi`).
-    World lines (`xyzs`) are projected into the camera and the nearest point along
-    any such lines is matched to each image point.
+    Image polylines (`uvs`) are reduced to a single array of image points (`uv`).
+    World polylines (`xyzs`) are projected onto the image with a target pixel density,
+    and each image point is matched to the nearest projected world point.
+
+    Since each image point is matched to a projected world point
+    (but not every projected world point is necessarily matched to an image point),
+    the image lines should be a subset of the world lines.
+    The opposite will not yield correct results.
 
     Attributes:
-        cam (Camera): Camera object
-        uvs (iterable): Image line vertices (n, 2)
-        uvi (array): Image coordinates interpolated from `uvs` by `step`
-        xyzs (iterable): World line vertices (n, 3)
+        cam (Camera): Camera.
+        uvs (list of array): Image line vertices [(ni, [u, v]), ...].
+        xyzs (list of array): World line vertices [(mi, [x, y, z]), ...].
         directions (bool): Whether `xyzs` are absolute coordinates (False)
-            or ray directions (True)
-        correction (dict or bool): See `cam.xyz_to_uv()`
-        step (float): Along-line distance between image points
-            interpolated from lines `uvs`
-        size (int): Number of image points
-        xyz (array): Initial camera position (`cam.xyz`)
-        imgsz (array): Initial image size (`cam.imgsz`)
+            or ray directions (True).
+        density (float): Target
+        uv (array): Merged image line vertices (n, [u, v]).
+        size (int): Number of image points (n).
+
+    Example:
+        Say we have a camera looking north towards a distant horizon.
+        Only a portion of the horizon is traced in the image.
+
+        >>> cam = Camera(imgsz=10, f=1)
+        >>> xyzs = [[(-10, 1, 0), (0, 1, 0), (10, 1, 0)]]
+        >>> uvs = [[(2, 4), (4, 4)], [(6, 4), (8, 4)]]
+        >>> lines = Lines(cam=cam, uvs=uvs, xyzs=xyzs, density=10)
+        >>> lines.size
+        4
+
+        The image coordinates predicted from the world lines and the camera model
+        do not match the observed image coordinates.
+
+        >>> lines.predicted() - lines.observed()
+        array([[0., 1.],
+               [0., 1.],
+               [0., 1.],
+               [0., 1.]])
+
+        Plotting the reprojection errors can help diagnose the problem.
+
+        >>> import matplotlib.pyplot as plt
+        >>> lines.plot()
+        {..., 'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        >>> plt.show()  # doctest: SKIP
+        >>> plt.close()
+
+        The errors all point straight down,
+        suggesting that the camera needs to be rotated downward.
+
+        >>> cam.viewdir[1] -= 45
+        >>> lines.predicted() - lines.observed()
+        array([[0., 0.],
+               [0., 0.],
+               [0., 0.],
+               [0., 0.]])
     """
 
-    def __init__(self, cam, uvs, xyzs, directions=False, correction=False, step=None):
+    def __init__(
+        self,
+        cam: Camera,
+        uvs: Sequence[np.ndarray],
+        xyzs: Sequence[np.ndarray],
+        directions: bool = False,
+        density: float = 1,
+    ) -> None:
         self.cam = cam
-        # Retain image lines for plotting
-        self.uvs = list(uvs)
-        self.step = step
-        if step:
-            self.uvi = np.vstack(
-                (helpers.interpolate_line(uv, dx=step) for uv in self.uvs)
-            )
-        else:
-            self.uvi = np.vstack(self.uvs)
+        self.uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+        self.uv = np.row_stack(self.uvs)
         self.xyzs = xyzs
         self.directions = directions
-        self.correction = correction
-        self.cam_xyz = cam.xyz.copy()
-        self.imgsz = cam.imgsz.copy()
+        self.density = density
+        self._position = cam.xyz.copy()
+        self._imgsz = cam.imgsz.copy()
 
-    @property
-    def size(self):
-        return len(self.uvi)
-
-    @property
-    def cams(self):
-        return [self.cam]
-
-    def observed(self, index=None):
-        """
-        Return observed image coordinates.
-
-        Arguments:
-            index (array_like or slice): Indices of points to return, or all if `None`
-        """
-        if index is None:
-            index = slice(None)
-        return self.uvi[index]
-
-    def xyz_to_uv(self):
+    def _xyzs_to_uvs(self) -> List[np.ndarray]:
         """
         Project world lines onto the image.
 
-        If the camera position (`cam.xyz`) has changed and `xyz` are ray directions
-        (`directions=True`), the point correspondences are invalid and an error is
-        raised.
-
         Returns:
-            list: Arrays of image coordinates (Nx2)
+            Arrays of image coordinates [(ni, [u, v]), ...].
         """
-        if self.directions and not self.is_static():
-            raise ValueError("Camera has changed position (xyz) and `directions=True`")
-        xy_step = 1 / self.cam.f.mean()
+        xy_step = (1 / self.density) / self.cam.f.max()
         uv_edges = self.cam.edges(step=self.cam.imgsz / 2)
         xy_edges = self.cam._uv_to_xy(uv_edges)
         xy_box = np.hstack((np.min(xy_edges, axis=0), np.max(xy_edges, axis=0)))
@@ -249,9 +314,7 @@ class Lines(object):
         for xyz in self.xyzs:
             # TODO: Instead, clip lines to 3D polar viewbox before projecting
             # Project world lines to camera
-            xy = self.cam._xyz_to_xy(
-                xyz, directions=self.directions, correction=self.correction
-            )
+            xy = self.cam._xyz_to_xy(xyz, directions=self.directions)
             # Discard nan values (behind camera)
             lines = helpers.boolean_split(xy, np.isnan(xy[:, 0]), include="false")
             for line in lines:
@@ -259,7 +322,7 @@ class Lines(object):
                 # Clip lines in view
                 # Resolves coordinate wrap around with large distortion
                 for cline in helpers.clip_polyline_box(line, xy_box):
-                    # Interpolate clipped lines to ~1 pixel density
+                    # Interpolate clipped lines to target resolution
                     puvs.append(
                         self.cam._xy_to_uv(
                             helpers.interpolate_line(np.array(cline), dx=xy_step)
@@ -267,288 +330,308 @@ class Lines(object):
                     )
         if puvs:
             return puvs
-        else:
-            # If no lines inframe, project line vertices infront
-            return [self.cam._xy_to_uv(line) for line in inlines]
+        # If no lines inframe, project line vertices infront
+        return [self.cam._xy_to_uv(line) for line in inlines]
 
-    def predicted(self, index=None):
+    def predicted(self, index: Index = slice(None)) -> np.ndarray:
         """
-        Return the points on the projected world lines nearest the image coordinates.
+        Predict image coordinates from world coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of image points to include in
-                nearest-neighbor search, or all if `None`
+            index: Indices of image points to include in nearest-neighbor search.
 
         Returns:
-            array: Image coordinates (Nx2)
+            Image coordinates (n, [u, v]) on the projected world lines nearest
+            the observed image coordinates.
+
+        Raises:
+            ValueError: Camera position has changed and world coordinates are
+                ray directions.
         """
-        puv = np.row_stack(self.xyz_to_uv())
+        self._test_position()
+        puv = np.row_stack(self._xyzs_to_uvs())
         distances = helpers.pairwise_distance(self.observed(index=index), puv)
         min_index = np.argmin(distances, axis=1)
         return puv[min_index, :]
 
-    def is_static(self):
-        """
-        Test whether the camera is at its original position.
-        """
-        return (self.cam.xyz == self.cam_xyz).all()
-
     def plot(
         self,
-        index=None,
-        scale=1,
-        width=5,
-        selected="red",
-        unselected=None,
-        observed="green",
-        predicted="yellow",
-    ):
+        index: Index = slice(None),
+        selected: Union[str, dict] = "red",
+        unselected: Union[str, dict] = None,
+        observed: Union[str, dict] = "green",
+        predicted: Union[str, dict] = "yellow",
+        **kwargs: Any
+    ) -> Dict[
+        str, Optional[Union[matplotlib.quiver.Quiver, List[matplotlib.lines.Line2D]]]
+    ]:
         """
-        Plot the reprojection errors as quivers.
+        Plot reprojection errors as quivers.
 
         Arrows point from observed to predicted image coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of points to select, or all if `None`
-            scale (float): Scale of quivers
-            width (float): Width of quivers
-            selected: For selected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            observed: For image lines, further arguments to
-                matplotlib.pyplot.plot (dict), `None` to hide, or color
-            predicted: For world lines, further arguments to
-                matplotlib.pyplot.plot (dict), `None` to hide, or color
+            index: Indices of points to select.
+            selected: For selected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            unselected: For unselected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            observed: For image lines, optional arguments to
+                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+            predicted: For world lines, optional arguments to
+                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+            **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
-        # Plot image lines
-        if observed is not None:
-            if not isinstance(observed, dict):
-                observed = {"color": observed}
-            observed = {**{"color": "green"}, **observed}
-            for uv in self.uvs:
-                matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **observed)
-        # Plot world lines
-        if predicted is not None:
-            if not isinstance(predicted, dict):
-                predicted = {"color": predicted}
-            predicted = {**{"color": "yellow"}, **predicted}
-            puvs = self.xyz_to_uv()
-            for puv in puvs:
-                matplotlib.pyplot.plot(puv[:, 0], puv[:, 1], **predicted)
+        new_plot = not matplotlib.pyplot.get_fignums()
+        result: Dict[
+            str,
+            Optional[Union[matplotlib.quiver.Quiver, List[matplotlib.lines.Line2D]]],
+        ] = {}
+        # Plot lines
+        for uvs, args, label in [
+            (self.uvs, observed, "observed"),
+            (self._xyzs_to_uvs(), predicted, "predicted"),
+        ]:
+            if args is None:
+                result[label] = None
+                continue
+            if isinstance(args, str):
+                args = {"color": args}
+            # matplotlib.pyplot.plot returns a list even for a single line
+            result[label] = [
+                matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], **args)[0] for uv in uvs
+            ]
         # Plot errors
-        if selected is not None or unselected is not None:
-            if index is None:
-                index = slice(None)
-            uv = self.observed()
-            if not predicted:
-                puvs = self.xyz_to_uv()
-            puv = np.row_stack(puvs)
-            distances = helpers.pairwise_distance(uv, puv)
-            min_index = np.argmin(distances, axis=1)
-            duv = scale * (puv[min_index, :] - uv)
-            defaults = {
-                "scale": 1,
-                "scale_units": "xy",
-                "angles": "xy",
-                "units": "xy",
-                "width": width,
-                "color": "red",
-            }
-            if unselected is not None:
-                if not isinstance(unselected, dict):
-                    unselected = {"color": unselected}
-                unselected = {**defaults, **unselected}
-                matplotlib.pyplot.quiver(
-                    uv[index, 0],
-                    uv[index, 1],
-                    duv[index, 0],
-                    duv[index, 1],
-                    **unselected
-                )
-            if selected is not None:
-                if not isinstance(selected, dict):
-                    selected = {"color": selected}
-                selected = {**defaults, **selected}
-                matplotlib.pyplot.quiver(
-                    uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
-                )
-
-    def resize(self, size=None, force=False):
-        """
-        Resize to new image size.
-
-        Resizes both the camera and image coordinates.
-
-        Arguments:
-            size: Scale factor relative to the camera's original size (float)
-                or target image size (iterable).
-                If `None`, image coordinates are resized to fit current
-                camera image size.
-            force (bool): Whether to use `size` even if it does not preserve
-                the original aspect ratio
-        """
-        if size is not None:
-            self.cam.resize(size=size, force=force)
-        scale = self.cam.imgsz / self.imgsz
-        if any(scale != 1):
-            for i, uv in enumerate(self.uvs):
-                self.uvs[i] = uv * scale
-            self.uvi *= scale
-            self.imgsz = self.cam.imgsz.copy()
-
-
-class Matches(object):
-    """
-    `Matches` store image-image point correspondences.
-
-    The image coordinates (`uvs[i]`) of one camera (`cams[i]`) are projected into the
-    other camera (`cams[j]`), then compared to the expected image coordinates for that
-    camera (`uvs[j]`).
-
-    Attributes:
-        cams (list): Pair of Camera objects
-        uvs (list): Pair of image coordinate arrays (n, 2)
-        size (int): Number of point pairs
-        imgszs (list): Initial image sizes (`cam.imgsz`)
-        weights (array): Relative weight of each point pair (n, )
-    """
-
-    def __init__(self, cams, uvs, weights=None):
-        self.cams = cams
-        self.uvs = list(uvs)
-        self._test_matches()
-        self.imgszs = [cam.imgsz.copy() for cam in cams]
-        self.weights = weights
-
-    @property
-    def size(self):
-        return len(self.uvs[0])
-
-    def _test_matches(self):
-        if self.cams[0] is self.cams[1]:
-            raise ValueError("Both cameras are the same object")
-        uvs = self.uvs
-        if uvs is None:
-            uvs = getattr(self, "xys", None)
-        if len(self.cams) != 2 or len(uvs) != 2:
-            raise ValueError("`cams` and coordinate arrays must each have two elements")
-        if uvs[0].shape != uvs[1].shape:
-            raise ValueError("Coordinate arrays have different shapes")
-
-    def observed(self, index=None, cam=0):
-        """
-        Return observed image coordinates.
-
-        Arguments:
-            index (array_like or slice): Indices of points to return, or all if `None`
-            cam (Camera or int): Camera of points to return
-        """
-        if index is None:
-            index = slice(None)
-        cam_idx = self.cam_index(cam)
-        return self.uvs[cam_idx][index]
-
-    def predicted(self, index=None, cam=0):
-        """
-        Predict image coordinates for a camera from those of the other camera.
-
-        Arguments:
-            index (array_like or slice): Indices of points to project from other camera
-            cam (Camera or int): Camera to project points into
-        """
-        if not self.is_static():
-            raise ValueError("Cameras have different positions (xyz)")
-        if index is None:
-            index = slice(None)
-        cam_in = self.cam_index(cam)
-        cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out].uv_to_xyz(self.uvs[cam_out][index])
-        return self.cams[cam_in].xyz_to_uv(dxyz, directions=True)
-
-    def is_static(self):
-        """
-        Test whether the cameras are at the same position.
-        """
-        return (self.cams[0].xyz == self.cams[1].xyz).all()
-
-    def cam_index(self, cam):
-        """
-        Retrieve the index of a camera.
-
-        Arguments:
-            cam (Camera): Camera object
-        """
-        if isinstance(cam, int):
-            if cam >= len(self.cams):
-                raise IndexError("Camera index out of range")
-            return cam
-        else:
-            return self.cams.index(cam)
-
-    def plot(
-        self, index=None, cam=0, scale=1, width=5, selected="red", unselected=None
-    ):
-        """
-        Plot the reprojection errors as quivers.
-
-        Arrows point from the observed to the predicted coordinates.
-
-        Arguments:
-            index (array_like or slice): Indices of points to select, or all if `None`
-            cam (Camera or int): Camera to plot
-            scale (float): Scale of quivers
-            width (float): Width of quivers
-            selected: For selected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-        """
-        if index is None:
-            index = slice(None)
-            other_index = slice(0)
-        else:
-            other_index = np.delete(np.arange(self.size), index)
-        uv = self.observed(cam=cam)
-        puv = self.predicted(cam=cam)
-        duv = scale * (puv - uv)
         defaults = {
             "scale": 1,
             "scale_units": "xy",
             "angles": "xy",
             "units": "xy",
-            "width": width,
+            "width": self.cam.imgsz[0] * 0.005,
             "color": "red",
+            **kwargs,
         }
-        if unselected is not None:
-            if not isinstance(unselected, dict):
-                unselected = {"color": unselected}
-            unselected = {**defaults, **unselected}
-            matplotlib.pyplot.quiver(
-                uv[other_index, 0],
-                uv[other_index, 1],
-                duv[other_index, 0],
-                duv[other_index, 1],
-                **unselected
+        unindex = np.delete(np.arange(self.size), index)
+        uv = self.observed()
+        duv = self.predicted() - uv
+        for idx, args, label in [
+            (unindex, unselected, "unselected"),
+            (index, selected, "selected"),
+        ]:
+            if args is None:
+                result[label] = None
+                continue
+            if isinstance(args, str):
+                args = {"color": args}
+            args = {**defaults, **args}
+            result[label] = matplotlib.pyplot.quiver(
+                uv[idx, 0], uv[idx, 1], duv[idx, 0], duv[idx, 1], **args
             )
-        if selected is not None:
-            if not isinstance(selected, dict):
-                selected = {"color": selected}
-            selected = {**defaults, **selected}
-            matplotlib.pyplot.quiver(
-                uv[index, 0], uv[index, 1], duv[index, 0], duv[index, 1], **selected
-            )
+        if new_plot:
+            self.cam.set_plot_limits()
+        return result
 
-    def as_type(self, mtype):
+    def _scale(self, scale: np.ndarray) -> None:
+        if np.any(scale != 1):
+            for i, uv in enumerate(self.uvs):
+                self.uvs[i] = uv * scale
+            self.uv *= scale
+
+
+class Matches:
+    """
+    Image-image point correspondences.
+
+    The image coordinates (`uvs[i]`) of one camera (`cams[i]`) are projected into the
+    other camera (`cams[j]`), then compared to the expected image coordinates for that
+    camera (`uvs[j]`).
+
+    Since the world coordinates of the points are not known,
+    both cameras must have the same position.
+
+    Attributes:
+        cams (list of Camera): Pair of cameras.
+        uvs (list of array): Image point coordinates for each camera
+            [(n, [ui, vi]), (n, [uj, vj])].
+        weights (array): Relative weight of each point pair (n, ).
+        size (int): Number of point pairs (n).
+
+    Raises:
+        ValueError: Both cameras are the same object.
+        ValueError: Cameras and point coordinates do not have two elements each.
+        ValueError: Camera point coordinates do not have the same length.
+        ValueError: Cameras have different positions.
+
+    Example:
+        Say we have two identical cameras with some points matched between them.
+
+        >>> cams = Camera(imgsz=10, f=1), Camera(imgsz=10, f=1)
+        >>> uvs = [(4, 5), (5, 5), (6, 5)], [(4.1, 5), (5.1, 5), (6.1, 5)]
+        >>> matches = Matches(cams=cams, uvs=uvs)
+        >>> matches.size
+        3
+
+        The image coordinates predicted for the first camera
+        do not match the image coordinates observed by the first camera.
+
+        >>> matches.predicted() - matches.observed()
+        array([[0.1, 0. ],
+               [0.1, 0. ],
+               [0.1, 0. ]])
+
+        Plotting the reprojection errors can help diagnose the problem.
+
+        >>> import matplotlib.pyplot as plt
+        >>> matches.plot(scale=0.5)
+        {'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        >>> plt.show()  # doctest: SKIP
+        >>> plt.close()
+
+        The errors all point right. If we assume the first camera is fixed,
+        this suggests that the second camera needs to be rotated slightly left.
+        Since errors are still not zero, it may be possible to further reduce them by
+        adjusting other camera parameters.
+
+        >>> cams[1].viewdir[0] = -3
+        >>> matches.predicted() - matches.observed()
+        array([[ 0.0..., 0. ],
+               [ 0.0..., 0. ],
+               [-0.0..., 0. ]])
+    """
+
+    def __init__(
+        self,
+        cams: Sequence[Camera],
+        uvs: Sequence[np.ndarray],
+        weights: np.ndarray = None,
+    ) -> None:
+        self.cams = cams
+        self.uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+        self.weights = weights
+        self._test_matches()
+        self._test_position()
+        self._imgszs = [cam.imgsz.copy() for cam in cams]
+
+    @property
+    def size(self) -> int:
+        """Number of points pairs."""
+        return len(self.uvs[0])
+
+    def _test_matches(self) -> None:
+        if self.cams[0] is self.cams[1]:
+            raise ValueError("Both cameras are the same object")
+        # HACK: Support subclasses with xyzs and optional uvs
+        uvs = self.uvs or self.xyzs
+        if len(self.cams) != 2 or len(uvs) != 2:
+            raise ValueError(
+                "Cameras and point coordinates do not have two elements each"
+            )
+        if len(uvs[0]) != len(uvs[1]):
+            raise ValueError("Camera point coordinates do not have the same length")
+
+    def _test_position(self) -> None:
+        if any(self.cams[0].xyz != self.cams[1].xyz):
+            raise ValueError("Cameras have different positions")
+
+    def _cam_index(self, cam: CamIndex) -> int:
+        if isinstance(cam, int):
+            if cam >= len(self.cams):
+                raise IndexError("Camera index out of range")
+            return cam
+        return self.cams.index(cam)
+
+    def observed(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
-        Return as a matches object of a different type.
+        Return observed image coordinates.
+
+        Arguments:
+            cam: Camera whose points to return.
+            index: Indices of points to return.
         """
+        c = self._cam_index(cam)
+        return self.uvs[c][index]
+
+    def predicted(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
+        """
+        Predict image coordinates for a camera from those of the other camera.
+
+        Arguments:
+            cam: Camera for which to predict image coordinates.
+            index: Indices of points to predict.
+
+        Raises:
+            ValueError: Cameras have different positions.
+        """
+        self._test_position()
+        ci = self._cam_index(cam)
+        co = 0 if ci else 1
+        dxyz = self.cams[co].uv_to_xyz(self.uvs[co][index])
+        return self.cams[ci].xyz_to_uv(dxyz, directions=True)
+
+    def plot(
+        self,
+        cam: CamIndex = 0,
+        index: Index = slice(None),
+        selected: Union[str, dict] = "red",
+        unselected: Union[str, dict] = None,
+        **kwargs: Any
+    ) -> Dict[str, matplotlib.quiver.Quiver]:
+        """
+        Plot reprojection errors as quivers.
+
+        Arrows point from observed to predicted image coordinates.
+
+        Arguments:
+            cam: Camera to plot.
+            index: Indices of points to select.
+            selected: For selected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            unselected: For unselected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+            **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
+        """
+        new_plot = not matplotlib.pyplot.get_fignums()
+        c = self._cam_index(cam)
+        defaults = {
+            "scale": 1,
+            "scale_units": "xy",
+            "angles": "xy",
+            "units": "xy",
+            "width": self.cams[c].imgsz[0] * 0.005,
+            "color": "red",
+            **kwargs,
+        }
+        uv = self.observed(cam=cam)
+        duv = self.predicted(cam=cam) - uv
+        unindex = np.delete(np.arange(self.size), index)
+        # Plot selected points on top
+        result: Dict[str, matplotlib.quiver.Quiver] = {}
+        for idx, args, label in [
+            (unindex, unselected, "unselected"),
+            (index, selected, "selected"),
+        ]:
+            if args is None:
+                result[label] = None
+                continue
+            if isinstance(args, str):
+                args = {"color": args}
+            args = {**defaults, **args}
+            result[label] = matplotlib.pyplot.quiver(
+                uv[idx, 0], uv[idx, 1], duv[idx, 0], duv[idx, 1], **args
+            )
+        if new_plot:
+            self.cams[c].set_plot_limits()
+        return result
+
+    def to_type(self, mtype: Type["Matches"]) -> "Matches":
+        """Return as matches of a different type."""
         if mtype is type(self):
             return self
-        else:
-            return mtype(cams=self.cams, uvs=self.uvs, weights=self.weights)
+        return mtype(cams=self.cams, uvs=self.uvs, weights=self.weights)
 
-    def resize(self, size=None, force=False):
+    def resize(
+        self, size: Union[float, Sequence[int]] = None, force: bool = False
+    ) -> None:
         """
         Resize to new image size.
 
@@ -559,284 +642,331 @@ class Matches(object):
                 or target image size (iterable).
                 If `None`, image coordinates are resized to fit current
                 camera image sizes.
-            force (bool): Whether to use `size` even if it does not preserve
+            force: Whether to use `size` even if it does not preserve
                 the original aspect ratio
         """
         for i, cam in enumerate(self.cams):
             if size is not None:
                 cam.resize(size=size, force=force)
-            scale = cam.imgsz / self.imgszs[i]
-            if any(scale != 1):
+            scale = cam.imgsz / self._imgszs[i]
+            if np.any(scale != 1):
                 self.uvs[i] = self.uvs[i] * scale
-                self.imgszs[i] = cam.imgsz.copy()
+                self._imgszs[i] = cam.imgsz.copy()
 
     def filter(
         self,
-        max_distance=None,
-        max_error=None,
-        min_weight=None,
-        n_best=None,
-        scaled=False,
-    ):
+        n_best: int = None,
+        min_weight: float = None,
+        cam: CamIndex = 0,
+        max_error: float = None,
+        max_distance: float = None,
+        scaled: bool = False,
+    ) -> None:
+        """
+        Filter matches.
+
+        Arguments:
+            n_best: Maximum number of matches to keep, by descending :attr:`weights`.
+            min_weight: Minimum value for :attr:`weights`.
+            cam: Camera to use as reference for the following filters.
+            max_error: Maximum pixel distance between observed and predicted
+                image coordinates, as seen by `cam`.
+            max_distance: Maximum pixel distance between image point pairs.
+                If the cameras have different image sizes, the image coordinates of the
+                other camera are scaled to match the image size of `cam`.
+            scaled: Whether `max_error` and `max_distance` are
+                absolute pixel distances (False) or
+                relative to the image width of `cam` (True).
+
+        Raises:
+            ValueError: Filtering on weights failed since these are missing.
+        """
         selected = np.ones(self.size, dtype=bool)
-        if min_weight:
-            selected &= self.weights >= min_weight
-        if max_distance:
-            if scaled:
-                max_distance = max_distance * self.cams[0].imgsz.max()
-            scale = self.cams[0].imgsz / self.cams[1].imgsz
-            distances = np.linalg.norm(
-                self.uvs[1][selected] * scale - self.uvs[0][selected], axis=1
-            )
-            selected[selected] &= distances <= max_distance
+        if self.weights is not None:
+            if n_best or min_weight:
+                raise ValueError("Filtering on weights failed since these are missing")
+            if n_best:
+                order = np.argsort(-self.weights)
+                selected[order[min(n_best, self.size) :]] = False
+            if min_weight:
+                selected &= self.weights >= min_weight
+        ci = self._cam_index(cam)
+        co = 0 if ci else 1
         if max_error:
             if scaled:
-                max_error = max_error * self.cams[0].imgsz.max()
+                max_error = max_error * self.cams[ci].imgsz[0]
             errors = np.linalg.norm(
-                self.observed(index=selected) - self.predicted(index=selected), axis=1
+                self.observed(ci, index=selected) - self.predicted(ci, index=selected),
+                axis=1,
             )
             selected[selected] &= errors <= max_error
-        if n_best:
-            weight_order = np.flip(
-                np.argsort(self.weights[selected]), axis=0
-            )  # descending
-            indices = weight_order[: min(n_best, len(weight_order))]
-            # NOTE: Switch from boolean to integer indexing
-            selected = np.arange(len(selected))[selected][indices]
-        if self.uvs is not None:
+        if max_distance:
+            if scaled:
+                max_distance = max_distance * self.cams[ci].imgsz[0]
+            scale = self.cams[ci].imgsz / self.cams[co].imgsz
+            distances = np.linalg.norm(
+                self.predicted(co, index=selected) * scale
+                - self.predicted(ci, index=selected),
+                axis=1,
+            )
+            selected[selected] &= distances <= max_distance
+        # HACK: Support for RotationMatches
+        if self.uvs:
             self.uvs = [uv[selected] for uv in self.uvs]
+        else:
+            self.xys = [xy[selected] for xy in self.xys]
         if self.weights is not None:
             self.weights = self.weights[selected]
-        # HACK: Support for RotationMatches
-        if getattr(self, "xys", None) is not None:
-            self.xys = [xy[selected] for xy in self.xys]
 
 
 class RotationMatches(Matches):
     """
-    `RotationMatches` store image-image point correspondences for cameras
-    separated by a pure rotation.
+    Image-image point correspondences for cameras separated by a pure rotation.
 
-    Normalized camera coordinates are pre-computed for speed. Therefore,
-    the cameras must always have equal `xyz` (as for `Matches`)
-    and no internal parameters can change after initialization.
+    Unlike :class:`Matches`, normalized camera coordinates are pre-computed for speed,
+    so internal camera parameters cannot change after initialization.
 
     Attributes:
-        cams (list): Pair of Camera objects
-        uvs (list): Pair of image coordinate arrays (Nx2)
-        xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (list): Original camera internal parameters
-            (imgsz, f, c, k, p) of each camera
-        size (int): Number of point pairs
+        cams (list of Camera): Pair of cameras.
+        uvs (list of array): Image point coordinates for each camera
+            [(n, [ui, vi]), (n, [uj, vj])].
+        xys (list of array): Normalized camera coordinates for each camera
+            [(n, [xi, yi]), (n, [xj, yj])].
+        weights (array): Relative weight of each point pair (n, ).
+        size (int): Number of point pairs (n).
+
+    Raises:
+        ValueError: Both :attr:`uvs` and :attr:`xys` are missing.
     """
 
-    def __init__(self, cams, uvs=None, xys=None, weights=None):
+    def __init__(
+        self,
+        cams: Sequence[Camera],
+        uvs: Sequence[np.ndarray] = None,
+        xys: Sequence[np.ndarray] = None,
+        weights: np.ndarray = None,
+    ) -> None:
         self.cams = cams
-        self.uvs = self._build_uvs(uvs=uvs, xys=xys)
-        self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self.uvs, self.xys = self._initialize_uvs_xys(uvs, xys)
+        self.uvs = self._build_uvs()
+        self.xys = self._build_xys()
         self.weights = weights
         self._test_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
+        self._internals = [cam.to_array()[6:] for cam in self.cams]
 
-    def _build_uvs(self, uvs=None, xys=None):
-        if uvs is None and xys is not None:
-            return (
-                self.cams[0]._xy_to_uv(xys[0]),
-                self.cams[1]._xy_to_uv(xys[1]),
+    def _initialize_uvs_xys(
+        self, uvs: Sequence[np.ndarray] = None, xys: Sequence[np.ndarray] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        if uvs is None and xys is None:
+            raise ValueError("Both uvs and xys are missing")
+        if uvs is not None:
+            uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+        if xys is not None:
+            xys = [np.atleast_2d(xy).astype(float) for xy in xys]
+        return uvs, xys
+
+    def _build_xys(self) -> List[np.ndarray]:
+        if self.xys is None:
+            return [cam._uv_to_xy(uv) for cam, uv in zip(self.cams, self.uvs)]
+        return self.xys
+
+    def _build_uvs(self) -> List[np.ndarray]:
+        if self.uvs is None:
+            return [cam._xy_to_uv(xy) for cam, xy in zip(self.cams, self.xys)]
+        return self.uvs
+
+    def _test_internals(self) -> None:
+        """Test whether camera internal parameters are unchanged."""
+        if any(
+            (cam._vector[6:] != v).any() for cam, v in zip(self.cams, self._internals)
+        ):
+            raise ValueError(
+                "Camera internal parameters (imgsz, f, c, k, p) have changed"
             )
-        else:
-            return uvs
 
-    def _build_xys(self, uvs=None, xys=None):
-        if xys is None and uvs is not None:
-            return (
-                self.cams[0]._uv_to_xy(uvs[0]),
-                self.cams[1]._uv_to_xy(uvs[1]),
-            )
-        else:
-            return xys
-
-    def predicted(self, index=None, cam=0):
+    def predicted(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
         Predict image coordinates for a camera from those of the other camera.
 
         Arguments:
-            index (array_like or slice): Indices of points to project from other camera
-            cam (Camera or int): Camera to project points into
-        """
-        if not self.is_static():
-            raise ValueError("Cameras have different positions (xyz)")
-        if not self.is_original_internals():
-            raise ValueError(
-                "Camera internal parameters (imgsz, f, c, k, p) have changed"
-            )
-        if index is None:
-            index = slice(None)
-        cam_in = self.cam_index(cam)
-        cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out]._xy_to_xyz(self.xys[cam_out][index])
-        return self.cams[cam_in].xyz_to_uv(dxyz, directions=True)
+            cam: Camera for which to predict image coordinates.
+            index: Indices of points to predict.
 
-    def is_original_internals(self):
+        Raises:
+            ValueError: Cameras have different positions.
+            ValueError: Camera internal parameters (imgsz, f, c, k, p) have changed.
         """
-        Test whether camera internal parameters are unchanged.
-        """
-        return (
-            (self.cams[0]._vector[6:] == self.original_internals[0])
-            & (self.cams[1]._vector[6:] == self.original_internals[1])
-        ).all()
+        self._test_position()
+        self._test_internals()
+        ci = self._cam_index(cam)
+        co = 0 if ci else 1
+        dxyz = self.cams[co]._xy_to_xyz(self.xys[co][index])
+        return self.cams[ci].xyz_to_uv(dxyz, directions=True)
 
-    def as_type(self, mtype):
-        """
-        Return as a matches object of a different type.
-        """
+    def to_type(self, mtype: Type["Matches"]) -> "Matches":
+        """Return as a matches object of a different type."""
         if mtype is type(self):
             return self
-        elif mtype is Matches:
-            uvs = self._build_uvs(uvs=self.uvs, xys=self.xys)
-            return mtype(cams=self.cams, uvs=uvs, weights=self.weights)
-        else:
-            return mtype(
-                cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights
-            )
+        return mtype(cams=self.cams, uvs=self.uvs, weights=self.weights)
 
 
 class RotationMatchesXY(RotationMatches):
     """
-    `RotationMatchesXY` store image-image point correspondences for cameras
-    separated by a pure rotation.
+    Image-image point correspondences for cameras separated by a pure rotation.
 
-    Normalized camera coordinates are pre-computed for speed,
-    and image coordinates may be discarded to save memory (`self.uvs = None`).
-    Unlike `RotationMatches`, `self.predicted()` and `self.observed()` return
-    normalized camera coordinates.
-
-    Arguments:
-        uvs (list): Pair of image coordinate arrays (Nx2)
+    Unlike :class:`Matches`, normalized camera coordinates are pre-computed for speed,
+    so internal camera parameters cannot change after initialization.
+    Unlike :clas:`RotationMatches`, image coordinates may be discarded to save memory.
+    :meth:`predicted` and :meth:`observed` return normalized camera coordinates
+    rather than image coordinates.
 
     Attributes:
-        cams (list): Pair of Camera objects
-        xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (list): Original camera internal parameters
-            (imgsz, f, c, k, p) of each camera
-        size (int): Number of point pairs
+        cams (list of Camera): Pair of cameras.
+        uvs (list of array): Image point coordinates for each camera
+            [(n, [ui, vi]), (n, [uj, vj])].
+        xys (list of array): Normalized camera coordinates for each camera
+            [(n, [xi, yi]), (n, [xj, yj])].
+        weights (array): Relative weight of each point pair (n, ).
+        size (int): Number of point pairs (n).
+
+    Raises:
+        ValueError: Both :attr:`uvs` and :attr:`xys` are missing.
     """
 
-    def __init__(self, cams, uvs=None, xys=None, weights=None):
+    _EXCLUDED = ["plot"]
+
+    def __init__(
+        self,
+        cams: Sequence[Camera],
+        uvs: Sequence[np.ndarray] = None,
+        xys: Sequence[np.ndarray] = None,
+        weights: np.ndarray = None,
+    ) -> None:
         self.cams = cams
-        self.uvs = uvs
-        self.xys = self._build_xys(uvs=uvs, xys=xys)
+        self.uvs, self.xyz = self._initialize_uvs_xys(uvs, xys)
+        self.xys = self._build_xys()
         self.weights = weights
         self._test_matches()
         # [imgsz, f, c, k, p]
-        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
+        self._internals = [cam.to_array()[6:] for cam in self.cams]
+
+    def __dir__(self) -> list:
+        return sorted(
+            (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
+        )
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in self._EXCLUDED:
+            raise AttributeError(name)
+        return super(RotationMatches, self).__getattribute__(name)
 
     @property
-    def size(self):
+    def size(self) -> int:
+        """Number of points pairs."""
         return len(self.xys[0])
 
-    def observed(self, index=None, cam=0):
+    def observed(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
         Return observed camera coordinates.
 
         Arguments:
-            index (array_like or slice): Indices of points to return, or all if `None`
-            cam (Camera or int): Camera of points to return
+            cam: Camera whose points to return.
+            index: Indices of points to return.
         """
-        if index is None:
-            index = slice(None)
-        cam_idx = self.cam_index(cam)
-        return self.xys[cam_idx][index]
+        c = self._cam_index(cam)
+        return self.xys[c][index]
 
-    def predicted(self, index=None, cam=0):
+    def predicted(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
         Predict camera coordinates for a camera from those of the other camera.
 
         Arguments:
-            index (array_like or slice): Indices of points to project from other camera
-            cam (Camera or int): Camera to project points into
+            cam: Camera for which to predict camera coordinates.
+            index: Indices of points to predict.
+
+        Raises:
+            ValueError: Cameras have different positions.
+            ValueError: Camera internal parameters (imgsz, f, c, k, p) have changed.
         """
-        if not self.is_static():
-            raise ValueError("Cameras have different positions (xyz)")
-        if not self.is_original_internals():
-            raise ValueError(
-                "Camera internal parameters (imgsz, f, c, k, p) have changed"
-            )
-        if index is None:
-            index = slice(None)
-        cam_in = self.cam_index(cam)
-        cam_out = 0 if cam_in else 1
-        dxyz = self.cams[cam_out]._xy_to_xyz(self.xys[cam_out][index])
-        return self.cams[cam_in]._xyz_to_xy(dxyz, directions=True)
+        self._test_position()
+        self._test_internals()
+        ci = self._cam_index(cam)
+        co = 0 if ci else 1
+        dxyz = self.cams[co]._xy_to_xyz(self.xys[co][index])
+        return self.cams[ci]._xyz_to_xy(dxyz, directions=True)
 
-    def plot(self, *args, **kwargs):
-        raise AttributeError("plot() not supported by RotationMatchesXY")
+    def to_type(self, mtype: Type[Matches]) -> Matches:
+        """Return as a matches object of a different type."""
+        if mtype is type(self):
+            return self
+        if mtype is Matches:
+            uvs = self._build_uvs()
+            return mtype(cams=self.cams, uvs=uvs, weights=self.weights)
+        return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights)
 
 
-class RotationMatchesXYZ(RotationMatches):
+class RotationMatchesXYZ(RotationMatchesXY):
     """
-    `RotationMatches3D` store image-image point correspondences for cameras
-    separated by a pure rotation.
+    Image-image point correspondences for cameras separated by a pure rotation.
 
-    Normalized camera coordinates are pre-computed for speed,
-    and image coordinates may be discarded to save memory (`self.uvs = None`).
-    Unlike `RotationMatches`, `self.predicted()` returns
-    world ray directions and `self.observed()` is disabled.
-
-    Arguments:
-        uvs (list): Pair of image coordinate arrays (Nx2)
+    Unlike :class:`Matches`, normalized camera coordinates are pre-computed for speed,
+    so internal camera parameters cannot change after initialization.
+    Unlike :clas:`RotationMatches`, image coordinates may be discarded to save memory.
+    :meth:`predicted` returns world ray directions and :meth:`observed` is disabled.
+    Exclusively for use with :class:`ObserverCameras`.
 
     Attributes:
-        cams (list): Pair of Camera objects
-        xys (list): Pair of normalized coordinate arrays (Nx2)
-        original_internals (list): Original camera internal parameters
-            (imgsz, f, c, k, p) of each camera
-        size (int): Number of point pairs
+        cams (list of Camera): Pair of cameras.
+        uvs (list of array): Image point coordinates for each camera
+            [(n, [ui, vi]), (n, [uj, vj])].
+        xys (list of array): Normalized camera coordinates for each camera
+            [(n, [xi, yi]), (n, [xj, yj])].
+        weights (array): Relative weight of each point pair (n, ).
+        size (int): Number of point pairs (n).
+
+    Raises:
+        ValueError: Both :attr:`uvs` and :attr:`xys` are missing.
     """
 
-    def __init__(self, cams, uvs=None, xys=None, weights=None):
-        self.cams = cams
-        self.uvs = uvs
-        self.xys = self._build_xys(uvs=uvs, xys=xys)
-        self.weights = weights
-        self._test_matches()
-        # [imgsz, f, c, k, p]
-        self.original_internals = [cam.to_array()[6:] for cam in self.cams]
+    _EXCLUDED = ["observed"]
 
-    @property
-    def size(self):
-        return len(self.xys[0])
+    def __init__(
+        self,
+        cams: Sequence[Camera],
+        uvs: Sequence[np.ndarray] = None,
+        xys: Sequence[np.ndarray] = None,
+        weights: np.ndarray = None,
+    ) -> None:
+        super().__init__(cams=cams, uvs=uvs, xys=xys, weights=weights)
 
-    def observed(self, *args, **kwargs):
-        raise AttributeError("observed() not supported by RotationMatchesXYZ")
+    def __dir__(self) -> list:
+        return sorted(
+            (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
+        )
 
-    def predicted(self, index=None, cam=0):
+    def __getattribute__(self, name: str) -> Any:
+        if name in self._EXCLUDED:
+            raise AttributeError(name)
+        return super(RotationMatchesXY, self).__getattribute__(name)
+
+    def predicted(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
         Predict world coordinates for a camera.
 
-        Returns world coordinates as ray directions normalized with unit length.
+        Returns world coordinates as ray directions with unit length.
 
         Arguments:
-            index (array_like or slice): Indices of points to project from other camera
-            cam (Camera or int): Camera to project points into
+            cam: Camera for which to predict world coordinates.
+            index: Indices of points to predict.
         """
-        if not self.is_static():
-            raise ValueError("Cameras have different positions (xyz)")
-        if not self.is_original_internals():
-            raise ValueError(
-                "Camera internal parameters (imgsz, f, c, k, p) have changed"
-            )
-        if index is None:
-            index = slice(None)
-        cam_idx = self.cam_index(cam)
-        dxyz = self.cams[cam_idx]._xy_to_xyz(self.xys[cam_idx][index])
+        self._test_position()
+        self._test_internals()
+        c = self._cam_index(cam)
+        dxyz = self.cams[c]._xy_to_xyz(self.xys[c][index])
         # Normalize world coordinates to unit sphere
-        dxyz *= 1 / np.linalg.norm(dxyz, ord=2, axis=1).reshape(-1, 1)
+        dxyz *= 1 / np.linalg.norm(dxyz, ord=2, axis=1, keepdims=True)
         return dxyz
-
-    def plot(self, *args, **kwargs):
-        raise AttributeError("plot() not supported by RotationMatchesXY")
 
 
 # ---- Models ----
@@ -998,7 +1128,7 @@ class Cameras(object):
         )
         # Core attributes
         self.cams = cams
-        controls = self.__class__.prune_controls(controls, cams=self.cams)
+        controls = self.prune_controls(controls, cams=self.cams)
         self.controls = controls
         ncams = len(self.cams)
         if cam_params is None:
@@ -1073,8 +1203,10 @@ class Cameras(object):
             labels = ["group" + str(group) + "_" + label for label in labels]
         return labels
 
-    @staticmethod
-    def prune_controls(controls, cams):
+    def _get_cams(self, control):
+        return getattr(control, "cams") or [getattr(control, "cam")]
+
+    def prune_controls(self, controls, cams):
         """
         Return the controls which reference the specified cameras.
 
@@ -1086,7 +1218,9 @@ class Cameras(object):
             list: Control which reference the cameras in `cams`
         """
         return [
-            control for control in controls if len(set(cams) & set(control.cams)) > 0
+            control
+            for control in controls
+            if len(set(cams) & set(self._get_cams(control))) > 0
         ]
 
     @staticmethod
@@ -1306,7 +1440,9 @@ class Cameras(object):
                     "Some cameras are in multiple groups with overlapping masks"
                 )
         # Error: Some cameras with params do not appear in controls
-        control_cams = [cam for control in self.controls for cam in control.cams]
+        control_cams = [
+            cam for control in self.controls for cam in self._get_cams(control)
+        ]
         cams_with_params = [
             cam
             for i, cam in enumerate(self.cams)
@@ -1350,7 +1486,7 @@ class Cameras(object):
         control_breaks = np.cumsum([0] + m_control)
         for i, control in enumerate(self.controls):
             ctrl_slice = slice(control_breaks[i], control_breaks[i + 1])
-            for cam in control.cams:
+            for cam in self._get_cams(control):
                 try:
                     j = self.cams.index(cam)
                 except ValueError:
@@ -1479,12 +1615,12 @@ class Cameras(object):
         Arguments:
             index (array or slice): Indices of points to return, or all if `None`
         """
+        if index is None:
+            index = slice(None)
         if len(self.controls) == 1:
             return self.controls[0].observed(index=index)
         else:
             # TODO: Map index to subindices for each control
-            if index is None:
-                index = slice(None)
             return np.vstack([control.observed() for control in self.controls])[index]
 
     def predicted(self, params=None, index=None):
@@ -1499,6 +1635,8 @@ class Cameras(object):
             index (array or slice): Indices of points to return,
                 or all if `None` (default)
         """
+        if index is None:
+            index = slice(None)
         if params is not None:
             vectors = [cam.to_array() for cam in self.cams]
             self.set_cameras(params)
@@ -1506,8 +1644,6 @@ class Cameras(object):
             result = self.controls[0].predicted(index=index)
         else:
             # TODO: Map index to subindices for each control
-            if index is None:
-                index = slice(None)
             result = np.vstack([control.predicted() for control in self.controls])[
                 index
             ]
@@ -1699,7 +1835,7 @@ class Cameras(object):
             vectors = [cam.to_array() for cam in self.cams]
             self.set_cameras(params)
         cam = self.cams[cam] if isinstance(cam, int) else cam
-        cam_controls = self.__class__.prune_controls(self.controls, cams=[cam])
+        cam_controls = self.prune_controls(self.controls, cams=[cam])
         for control in cam_controls:
             if isinstance(control, Lines):
                 control.plot(

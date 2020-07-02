@@ -88,8 +88,8 @@ class Points:
         if len(uv) != len(xyz):
             raise ValueError("Image and world coordinates have different length")
         self.cam = cam
-        self.uv = np.atleast_2d(uv).astype(float)
-        self.xyz = np.atleast_2d(xyz).astype(float)
+        self.uv = np.atleast_2d(uv).astype(float, copy=False)
+        self.xyz = np.atleast_2d(xyz).astype(float, copy=False)
         self.directions = directions
         self._position = cam.xyz.copy()
         self._imgsz = cam.imgsz.copy()
@@ -294,7 +294,7 @@ class Lines(Points):
         density: float = 1,
     ) -> None:
         self.cam = cam
-        self.uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+        self.uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
         self.uv = np.row_stack(self.uvs)
         self.xyzs = xyzs
         self.directions = directions
@@ -510,7 +510,7 @@ class Matches:
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
-        self.uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+        self.uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
         self.weights = weights
         self._test_matches()
         self._test_position()
@@ -765,9 +765,9 @@ class RotationMatches(Matches):
         if uvs is None and xys is None:
             raise ValueError("Both uvs and xys are missing")
         if uvs is not None:
-            uvs = [np.atleast_2d(uv).astype(float) for uv in uvs]
+            uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
         if xys is not None:
-            xys = [np.atleast_2d(xy).astype(float) for xy in xys]
+            xys = [np.atleast_2d(xy).astype(float, copy=False) for xy in xys]
         return uvs, xys
 
     def _build_xys(self) -> List[np.ndarray]:
@@ -2279,8 +2279,8 @@ class KeypointMatcher(object):
         if I.ndim > 2:
             I = helpers.rgb_to_gray(I, method="average", weights=None)
         if self.clahe is not None:
-            I = self.clahe.apply(I.astype(np.uint8))
-        return I.astype(np.uint8)
+            I = self.clahe.apply(I.astype(np.uint8, copy=False))
+        return I.astype(np.uint8, copy=False)
 
     def build_keypoints(
         self,

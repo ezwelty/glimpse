@@ -2140,7 +2140,7 @@ def detect_keypoints(
     Arguments:
         array: 2 or 3-dimensional image array (cast to uint8).
         mask: Pixel regions in which to detect keypoints (cast to uint8).
-        method: The feature detection algorithm to use.
+        method: The keypoint detection algorithm to use.
             - 'sift': Scale-invariant feature transform (SIFT) by
                 Lowe 2004 (https://doi.org/10.1023/B:VISI.0000029664.99615.94.
                 Uses :class:`cv2.xfeatures2d.SIFT`
@@ -2152,7 +2152,7 @@ def detect_keypoints(
         root: Whether to return square-root L1-normalized descriptors, as described by
              Arandjelović & Zisserman 2012 (https://doi.org/10.1109/CVPR.2012.6248018).
         **kwargs: Additional arguments passed to
-            :meth:`cv2.xfeatures2d.SIFT` or :meth:`cv2.xfeatures2d.SURF`.
+            :class:`cv2.xfeatures2d.SIFT` or :class:`cv2.xfeatures2d.SURF`.
 
     Returns:
         Keypoints as :class:`cv2.KeyPoint`.
@@ -2184,24 +2184,30 @@ def match_keypoints(
     ka: Tuple[List[cv2.KeyPoint], np.ndarray],
     kb: Tuple[List[cv2.KeyPoint], np.ndarray],
     mask: np.ndarray = None,
+    cross_check: bool = False,
     max_ratio: float = None,
     max_distance: float = None,
     return_ratios: bool = False,
-    **kwargs: Any
+    matcher: cv2.DescriptorMatcher = cv2.FlannBasedMatcher(),
 ):
     """
     Return the image coordinates of matched keypoint pairs.
 
     Arguments:
-        ka: Keypoints of first image (keypoints, descriptors).
-        kb: Keypoints of second image (keypoints, descriptors).
+        ka: Keypoints of the first image (keypoints, descriptors).
+        kb: Keypoints of the second image (keypoints, descriptors).
         mask: Pixel regions in which to retain keypoints (cast to uint8).
+        cross_check: Whether to only return matches for which the keypoint from
+            `kb` is the best match among `kb` for the keypoint in `ka`,
+            and vice versa.
         max_ratio: Maximum descriptor-distance ratio between the best and
             second best match.
             See Lowe 2004 (http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20).
         max_distance: Maximum coordinate-distance of matched keypoints.
         return_ratios: Whether to return the ratio of each match.
-        **kwargs: Arguments to :class:`cv2.FlannBasedMatcher`
+        matcher: Keypoint descriptor matcher to use for matching
+            (https://docs.opencv.org/4.1.1/db/d39/classcv_1_1DescriptorMatcher.html).
+            Default is to use :class:`cv2.FlannBasedMatcher`
             (https://docs.opencv.org/4.1.1/dc/de2/classcv_1_1FlannBasedMatcher.html).
 
     Returns:
@@ -2212,19 +2218,19 @@ def match_keypoints(
     if mask is not None:
         mask = mask.astype(np.uint8, copy=False)
     compute_ratios = max_ratio or return_ratios
-    n_nearest = 2 if compute_ratios else 1
-    if len(ka[0]) >= n_nearest and len(kb[0]) >= n_nearest:
-        flann = cv2.FlannBasedMatcher(**kwargs)
-        matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
-        uva = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
-        uvb = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
-        if compute_ratios:
-            ratios = np.array([m.distance / n.distance for m, n in matches])
+    n = 2 if compute_ratios else 1
+    if len(ka[0]) >= n and len(kb[0]) >= n:
+        matches = matcher.knnMatch(ka[1], kb[1], k=n, mask=mask)
+        if cross_check:
+            matches_ba = matcher.knnMatch(kb[1], ka[1], k=n, mask=mask)
+            ba = [(m[0].trainIdx, m[0].queryIdx) for m in matches_ba]
+            matches = [m for m in matches if (m[0].queryIdx, m[0].trainIdx) in ba]
         if max_ratio:
-            valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
-            uva, uvb = uva[valid], uvb[valid]
-            if return_ratios:
-                ratios = ratios[valid]
+            matches = [m for m in matches if m[0].distance / m[1].distance < max_ratio]
+        uva = np.atleast_2d([ka[0][m[0].queryIdx].pt for m in matches])
+        uvb = np.atleast_2d([kb[0][m[0].trainIdx].pt for m in matches])
+        if return_ratios:
+            ratios = np.array([m.distance / n.distance for m, n in matches])
         if max_distance:
             valid = np.linalg.norm(uva - uvb, axis=1) < max_distance
             uva, uvb = uva[valid], uvb[valid]

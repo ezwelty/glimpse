@@ -6,7 +6,7 @@ import glimpse.optimize
 import numpy as np
 
 
-def test_ransac_camera_viewdir(tol=0.1):
+def test_ransac_camera_viewdir():
     path = os.path.join("tests", "AK10b_20141013_020336.JPG")
     imgA = glimpse.Image(path)
     imgA.cam.resize(0.5)
@@ -22,8 +22,8 @@ def test_ransac_camera_viewdir(tol=0.1):
         cams=[imgB.cam], controls=[matches], cam_params=[{"viewdir": True}]
     )
     values = model.fit()
-    assert any(abs(values - viewdir) > tol)
+    assert any(abs(values - viewdir) > 0.1)
     rvalues, rindex = glimpse.optimize.ransac(
         model, sample_size=12, max_error=5, min_inliers=10, iterations=10
     )
-    assert all(abs(rvalues - viewdir) < tol)
+    assert all(abs(rvalues - viewdir) < 0.1)

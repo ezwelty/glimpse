@@ -972,102 +972,153 @@ class RotationMatchesXYZ(RotationMatchesXY):
 # ---- Models ----
 
 # Models support RANSAC with the following API:
-# .data_size()
+# .size
 # .fit(index)
 # .errors(params, index)
 
 
-class Polynomial(object):
+class Polynomial:
     """
-    Least-squares 1-dimensional polynomial model.
+    Least-square polynomial model.
 
-    Fits a polynomial of degree `deg` to 2-dimensional points (rows of `data`) and
-    returns the coefficients that minimize the squared error (`params`).
-    Can be used with RANSAC algorithm (see optimize.ransac).
+    Fits a polynomial to 2-dimensional points and
+    returns the coefficients that minimize the squared error.
 
     Attributes:
-        data (array): Point coordinates (x,y) (Nx2)
-        deg (int): Degree of the polynomial
+        xy: Observed point coordinates (n, [x, y]).
+        deg: Degree of the polynomial.
+        size: Number of observations (n ).
+
+    Example:
+        Add noisy data to an initial set of points lying close to the line `y = x + 0`.
+
+        >>> xy = [(0, 0), (1.1, 1), (1.9, 2), (3.1, 3), (3.9, 4)]
+        >>> xy += [(3, 0.1), (0.1, 3)]
+
+        Fitting a least-squares line to noisy points will not result in a good fit.
+
+        >>> model = Polynomial(xy, deg=1)
+        >>> model.fit()
+        array([0.41631292, 1.09232868])
+
+        Instead, we can use RANSAC to find the inliers among the noise.
+        The polynomial coefficients of the fit are now much closer to the ideal (1, 0).
+
+        >>> params, inliers = ransac(
+        >>>     model, sample_size=2, max_error=0.2, min_inliers=2, iterations=100
+        >>> )
+        >>> inliers
+        array([0, 1, 2, 3, 4])
+        >>> params
+        array([ 1.01659751, -0.03319502])
+
+        Plotting the result confirms a successful fit.
+
+        >>> import matplotlib.pyplot as plt
+        >>> model.plot(params=params, index=inliers)
+        {'unselected': <matplotlib.collections.PathCollection ...>,
+        'selected': <matplotlib.collections.PathCollection ...>, 
+        'predicted': [<matplotlib.lines.Line2D ...>]}
+        >>> plt.show()  # doctest: SKIP
+        >>> plt.close()
     """
 
-    def __init__(self, data, deg=1):
+    def __init__(self, xy: np.ndarray, deg: int = 1) -> None:
+        self.xy = np.atleast_2d(xy)
         self.deg = deg
-        self.data = data
 
-    def data_size(self):
-        """
-        Count the number of points.
-        """
-        return len(self.data)
+    @property
+    def size(self) -> int:
+        """Number of observations."""
+        return len(self.xy)
 
-    def predict(self, params, index=slice(None)):
+    def predict(self, params: np.ndarray, index: Index = slice(None)) -> np.ndarray:
         """
         Predict the values of a polynomial.
 
         Arguments:
-            params (array): Values of the polynomial,
-                from highest to lowest degree component
-            index (array_like or slice): Indices of points for which to predict y from x
+            params: Values of the polynomial, from highest to lowest degree component.
+            index: Indices of points for which to predict y from x.
         """
-        return np.polyval(params, self.data[index, 0])
+        return np.polyval(params, self.xy[index, 0])
 
-    def errors(self, params, index=slice(None)):
+    def errors(self, params: np.ndarray, index: Index = slice(None)) -> np.ndarray:
         """
         Compute the errors of a polynomial prediction.
 
         Arguments:
-            params (array): Values of the polynomial,
-                from highest to lowest degree component
-            index (array_like or slice): Indices of points for which to predict y from x
+            params: Values of the polynomial, from highest to lowest degree component.
+            index: Indices of points for which to predict y from x.
         """
         prediction = self.predict(params, index)
-        return np.abs(prediction - self.data[index, 1])
+        return np.abs(prediction - self.xy[index, 1])
 
-    def fit(self, index=slice(None)):
+    def fit(self, index: Index = slice(None)) -> np.ndarray:
         """
-        Fit a polynomial to the points (using numpy.polyfit).
+        Fit a polynomial to the points.
 
         Arguments:
-            index (array_like or slice): Indices of points to use for fitting
+            index: Indices of points to use for fitting.
 
         Returns:
-            array: Values of the polynomial, from highest to lowest degree component
+            Values of the polynomial, from highest to lowest degree component.
         """
-        return np.polyfit(self.data[index, 0], self.data[index, 1], deg=self.deg)
+        return np.polyfit(self.xy[index, 0], self.xy[index, 1], deg=self.deg)
 
     def plot(
         self,
-        params=None,
-        index=slice(None),
-        selected="red",
-        unselected="grey",
-        polynomial="red",
-    ):
+        params: np.ndarray = None,
+        index: Index = slice(None),
+        selected: Optional[Union[str, dict]] = "red",
+        unselected: Optional[Union[str, dict]] = "gray",
+        predicted: Optional[Union[str, dict]] = "red",
+        **kwargs: Any
+    ) -> Dict[
+        str,
+        Optional[
+            Union[matplotlib.collections.PathCollection, List[matplotlib.lines.Line2D]]
+        ],
+    ]:
         """
-        Plot the points and the polynomial fit.
+        Plot observations and the polynomial fit.
 
         Arguments:
-            params (array): Values of the polynomial,
-                from highest to lowest degree component, or computed if `None`
-            index (array_like or slice): Indices of points to select
-            selected (color): Matplotlib color for selected points, or `None` to hide
-            unselected (color): Matplotlib color for unselected points,
-                or `None` to hide
-            polynomial (color): Matplotlib color for polynomial fit, or `None` to hide
+            params: Values of the polynomial, from highest to lowest degree component.
+            index: Indices of points to select.
+            selected: For selected points, optional arguments to
+                matplotlib.pyplot.scatter (dict), color (str), or `None` to hide.
+            unselected: For unselected points, optional arguments to
+                matplotlib.pyplot.scatter (dict), color (str), or `None` to hide.
+            predicted: For polynomial fit, optional arguments to
+                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+            **kwargs: Optional arguments to matplotlib.pyplot.scatter for all points.
         """
         if params is None:
             params = self.fit(index)
-        other_index = np.delete(np.arange(self.data_size()), index)
-        if selected:
-            matplotlib.pyplot.scatter(
-                self.data[index, 0], self.data[index, 1], c=selected
+        defaults = {}
+        result = {}
+        unindex = np.delete(np.arange(self.size), index)
+        for idx, args, label in [
+            (unindex, unselected, "unselected"),
+            (index, selected, "selected"),
+        ]:
+            if args is None:
+                result = None
+                continue
+            if isinstance(args, str):
+                args = {"c": args}
+            result[label] = matplotlib.pyplot.scatter(
+                self.xy[idx, 0], self.xy[idx, 1], **{**args, **kwargs}
             )
-        if unselected:
-            matplotlib.pyplot.scatter(
-                self.data[other_index, 0], self.data[other_index, 1], c=unselected
+        if predicted is None:
+            result["predicted"] = None
+        else:
+            if isinstance(predicted, str):
+                predicted = {"color": predicted}
+            result["predicted"] = matplotlib.pyplot.plot(
+                self.xy[:, 0], self.predict(params), **predicted
             )
-        if polynomial:
-            matplotlib.pyplot.plot(self.data[:, 0], self.predict(params), c=polynomial)
+        return result
 
 
 class Cameras(object):
@@ -1600,7 +1651,8 @@ class Cameras(object):
         for cam, vector in zip(self.cams, vectors):
             cam._vector = vector.copy()
 
-    def data_size(self):
+    @property
+    def size(self):
         """
         Return the total number of data points.
         """
@@ -1732,7 +1784,7 @@ class Cameras(object):
                     kwargs["jac_sparsity"] = self.sparsity
                 else:
                     if isinstance(index, slice):
-                        jac_index = np.arange(self.data_size())[index]
+                        jac_index = np.arange(self.size)[index]
                     else:
                         jac_index = index
                     jac_index = np.dstack((2 * jac_index, 2 * jac_index + 1)).ravel()
@@ -1870,7 +1922,7 @@ class Cameras(object):
     def plot_weights(self, index=None, scale=1, cmap=None):
         if index is None:
             index = slice(None)
-        weights = np.ones(self.data_size()) if self.weights is None else self.weights
+        weights = np.ones(self.size) if self.weights is None else self.weights
         uv = self.observed(index=index)
         matplotlib.pyplot.scatter(
             uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap
@@ -1998,7 +2050,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
     Arguments:
         model (object): Model and data object with the following methods:
 
-            - `data_size()`: Returns maximum sample size
+            - `size`: Maximum sample size
             - `fit(index)`: Accepts sample indices and returns model parameters
             - `errors(params, index)`: Accepts sample indices and model parameters and
                 returns an error for each sample
@@ -2020,7 +2072,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
     err = np.inf
     inlier_idx = None
     while i < iterations:
-        maybe_idx, test_idx = ransac_sample(sample_size, model.data_size())
+        maybe_idx, test_idx = ransac_sample(sample_size, model.size)
         # maybe_inliers = data[maybe_idx]
         maybe_params = model.fit(maybe_idx, **fit_kws)
         if maybe_params is None:

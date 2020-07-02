@@ -6,18 +6,6 @@ import glimpse.optimize
 import numpy as np
 
 
-def test_ransac_polynomial():
-    data = np.column_stack(
-        ((0, 1.1, 1.9, 3.1, 3.0, 0.1, 4.1), (0, 1.0, 2.0, 3.1, 0.1, 3.0, 4.0))
-    )
-    model = glimpse.optimize.Polynomial(data, deg=1)
-    inliers = (0, 1, 2, 3, 6)
-    rvalues, rindex = glimpse.optimize.ransac(
-        model, sample_size=2, max_error=0.5, min_inliers=2, iterations=100
-    )
-    assert set(rindex) == set(inliers)
-
-
 def test_ransac_camera_viewdir(tol=0.1):
     path = os.path.join("tests", "AK10b_20141013_020336.JPG")
     imgA = glimpse.Image(path)

@@ -2127,107 +2127,117 @@ def _ransac_sample(sample_size, data_size):
 # ---- Keypoints ----
 
 
-def detect_keypoints(array, mask=None, method="sift", root=True, **params):
+def detect_keypoints(
+    array: np.ndarray,
+    mask: np.ndarray = None,
+    method: str = "sift",
+    root: bool = True,
+    **kwargs: Any
+) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
     """
     Return keypoints and descriptors for an image.
 
     Arguments:
-        array (array): 2 or 3-dimensional image array (uint8)
-        mask (array): Regions in which to detect keypoints (uint8)
-        root (bool): Whether to return square root L1-normalized descriptors.
-            See https://doi.org/10.1109/CVPR.2012.6248018.
-        **params: Additional arguments passed to `cv2.xfeatures2d.SIFT()` or
-            `cv2.xfeatures2d.SURF()`.
-            See https://docs.opencv.org/master/d2/dca/group__xfeatures2d__nonfree.html.
+        array: 2 or 3-dimensional image array (cast to uint8).
+        mask: Pixel regions in which to detect keypoints (cast to uint8).
+        method: The feature detection algorithm to use.
+            - 'sift': Scale-invariant feature transform (SIFT) by
+                Lowe 2004 (https://doi.org/10.1023/B:VISI.0000029664.99615.94.
+                Uses :class:`cv2.xfeatures2d.SIFT`
+                (https://docs.opencv.org/4.1.1/d5/d3c/classcv_1_1xfeatures2d_1_1SIFT.html).
+            - 'surf': Speeded-up robust features (SURF) by
+                Bay et al. 2006 (https://doi.org/10.1016/j.cviu.2007.09.014).
+                Uses :class:`cv2.xfeatures2d.SURF`
+                (https://docs.opencv.org/4.1.1/d5/df7/classcv_1_1xfeatures2d_1_1SURF.html).
+        root: Whether to return square-root L1-normalized descriptors, as described by
+             Arandjelović & Zisserman 2012 (https://doi.org/10.1109/CVPR.2012.6248018).
+        **kwargs: Additional arguments passed to
+            :meth:`cv2.xfeatures2d.SIFT` or :meth:`cv2.xfeatures2d.SURF`.
 
     Returns:
-        list: Keypoints as cv2.KeyPoint objects
-        array: Descriptors as array rows
+        Keypoints as :class:`cv2.KeyPoint`.
+        Keypoint descriptors as array rows.
     """
+    array = array.astype(np.uint8, copy=False)
+    if mask is not None:
+        mask = mask.astype(np.uint8, copy=False)
     if method == "sift":
         try:
-            detector = cv2.xfeatures2d.SIFT_create(**params)
+            detector = cv2.xfeatures2d.SIFT_create(**kwargs)
         except AttributeError:
-            # OpenCV 2
-            detector = cv2.SIFT(**params)
+            detector = cv2.SIFT(**kwargs)
     elif method == "surf":
         try:
-            detector = cv2.xfeatures2d.SURF_create(**params)
+            detector = cv2.xfeatures2d.SURF_create(**kwargs)
         except AttributeError:
-            # OpenCV 2
-            detector = cv2.SURF(**params)
+            detector = cv2.SURF(**kwargs)
     keypoints, descriptors = detector.detectAndCompute(array, mask=mask)
     # Empty result: ([], None)
     if root and descriptors is not None:
-        descriptors *= 1 / (descriptors.sum(axis=1, keepdims=True) + 1e-7)
-        descriptors = np.sqrt(descriptors)
+        descriptors = np.sqrt(
+            descriptors / (descriptors.sum(axis=1, keepdims=True) + 1e-7)
+        )
     return keypoints, descriptors
 
 
 def match_keypoints(
-    ka,
-    kb,
-    mask=None,
-    max_ratio=None,
-    max_distance=None,
-    indexParams={"algorithm": 1, "trees": 5},
-    searchParams={"checks": 50},
-    return_ratios=False,
+    ka: Tuple[List[cv2.KeyPoint], np.ndarray],
+    kb: Tuple[List[cv2.KeyPoint], np.ndarray],
+    mask: np.ndarray = None,
+    max_ratio: float = None,
+    max_distance: float = None,
+    return_ratios: bool = False,
+    **kwargs: Any
 ):
     """
-    Return the coordinates of matched keypoint pairs.
+    Return the image coordinates of matched keypoint pairs.
 
     Arguments:
-        ka (tuple): Keypoints of image A (keypoints, descriptors)
-        kb (tuple): Keypoints of image B (keypoints, descriptors)
-        mask (array): Region in which to retain keypoints (uint8)
-        max_ratio (float): Maximum descriptor-distance ratio between the best and
+        ka: Keypoints of first image (keypoints, descriptors).
+        kb: Keypoints of second image (keypoints, descriptors).
+        mask: Pixel regions in which to retain keypoints (cast to uint8).
+        max_ratio: Maximum descriptor-distance ratio between the best and
             second best match.
-            See http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20.
-        max_distance (float): Maximum coordinate-distance of matched keypoints
-        indexParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
-        searchParams (dict): Undocumented argument passed to `cv2.FlannBasedMatcher()`
-        return_ratios (bool): Whether to return the ratio of each (filtered) match
+            See Lowe 2004 (http://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf#page=20).
+        max_distance: Maximum coordinate-distance of matched keypoints.
+        return_ratios: Whether to return the ratio of each match.
+        **kwargs: Arguments to :class:`cv2.FlannBasedMatcher`
+            (https://docs.opencv.org/4.1.1/dc/de2/classcv_1_1FlannBasedMatcher.html).
 
     Returns:
-        array: Coordinates of matches in image A (n, 2)
-        array: Coordinates of matches in image B (n, 2)
-        array (optional): Ratio of each match (n, )
+        Coordinates of matches in first image (n, [ua, va]).
+        Coordinates of matches in second image (n, [ub, vb]).
+        (optional) Ratio of each match (n, ).
     """
+    if mask is not None:
+        mask = mask.astype(np.uint8, copy=False)
     compute_ratios = max_ratio or return_ratios
     n_nearest = 2 if compute_ratios else 1
     if len(ka[0]) >= n_nearest and len(kb[0]) >= n_nearest:
-        flann = cv2.FlannBasedMatcher(
-            indexParams=indexParams, searchParams=searchParams
-        )
+        flann = cv2.FlannBasedMatcher(**kwargs)
         matches = flann.knnMatch(ka[1], kb[1], k=n_nearest, mask=mask)
-        uvA = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
-        uvB = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
+        uva = np.array([ka[0][m[0].queryIdx].pt for m in matches]).reshape(-1, 2)
+        uvb = np.array([kb[0][m[0].trainIdx].pt for m in matches]).reshape(-1, 2)
         if compute_ratios:
             ratios = np.array([m.distance / n.distance for m, n in matches])
         if max_ratio:
-            is_valid = (
-                np.array([m.distance / n.distance for m, n in matches]) < max_ratio
-            )
-            uvA = uvA[is_valid]
-            uvB = uvB[is_valid]
+            valid = np.array([m.distance / n.distance for m, n in matches]) < max_ratio
+            uva, uvb = uva[valid], uvb[valid]
             if return_ratios:
-                ratios = ratios[is_valid]
+                ratios = ratios[valid]
         if max_distance:
-            is_valid = np.linalg.norm(uvA - uvB, axis=1) < max_distance
-            uvA = uvA[is_valid]
-            uvB = uvB[is_valid]
+            valid = np.linalg.norm(uva - uvb, axis=1) < max_distance
+            uva, uvb = uva[valid], uvb[valid]
             if return_ratios:
-                ratios = ratios[is_valid]
+                ratios = ratios[valid]
     else:
         # Not enough keypoints to match
-        empty = np.array([], dtype=float).reshape(-1, 2)
-        uvA, uvB = empty, empty.copy()
+        empty = np.array([], dtype=float).reshape(0, 2)
+        uva, uvb = empty, empty.copy()
         ratios = np.array([], dtype=float)
     if return_ratios:
-        return uvA, uvB, ratios
-    else:
-        return uvA, uvB
+        return uva, uvb, ratios
+    return uva, uvb
 
 
 class KeypointMatcher(object):

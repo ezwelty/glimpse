@@ -17,6 +17,8 @@ from .camera import Camera
 
 Index = Union[slice, Sequence[int]]
 CamIndex = Union[int, Camera]
+Color = Union[str, Tuple[float, float, float], Tuple[float, float, float, float]]
+ColorArgs = Optional[Union[dict, Color]]
 
 # ---- Controls ----
 
@@ -66,7 +68,7 @@ class Points:
 
         >>> import matplotlib.pyplot as plt
         >>> points.plot()
-        {'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        {'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
         >>> plt.show()  # doctest: SKIP
         >>> plt.close()
 
@@ -129,8 +131,8 @@ class Points:
     def plot(
         self,
         index: Index = slice(None),
-        selected: Union[str, dict] = "red",
-        unselected: Union[str, dict] = None,
+        selected: ColorArgs = "red",
+        unselected: ColorArgs = "gray",
         **kwargs: Any
     ) -> Dict[str, Optional[matplotlib.quiver.Quiver]]:
         """
@@ -141,9 +143,9 @@ class Points:
         Arguments:
             index: Indices of points to select.
             selected: For selected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             unselected: For unselected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
         new_plot = not matplotlib.pyplot.get_fignums()
@@ -153,22 +155,22 @@ class Points:
             "angles": "xy",
             "units": "xy",
             "width": self.cam.imgsz[0] * 0.005,
-            "color": "red",
             **kwargs,
         }
         uv = self.observed()
         duv = self.predicted() - uv
-        unindex = np.delete(np.arange(self.size), index)
+        full = np.arange(self.size)
+        index, unindex = full[index], np.delete(full, index)
         # Plot selected points on top
         result: Dict[str, Optional[matplotlib.quiver.Quiver]] = {}
         for idx, args, label in [
             (unindex, unselected, "unselected"),
             (index, selected, "selected"),
         ]:
-            if args is None:
+            if not len(idx) or args is None:
                 result[label] = None
                 continue
-            if isinstance(args, str):
+            if not isinstance(args, dict):
                 args = {"color": args}
             args = {**defaults, **args}
             result[label] = matplotlib.pyplot.quiver(
@@ -266,7 +268,9 @@ class Lines(Points):
 
         >>> import matplotlib.pyplot as plt
         >>> lines.plot()
-        {..., 'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        {'observed': [<matplotlib.lines.Line2D ...>, <matplotlib.lines.Line2D ...>],
+        'predicted': [<matplotlib.lines.Line2D ...>],
+        'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
         >>> plt.show()  # doctest: SKIP
         >>> plt.close()
 
@@ -357,10 +361,10 @@ class Lines(Points):
     def plot(
         self,
         index: Index = slice(None),
-        selected: Union[str, dict] = "red",
-        unselected: Union[str, dict] = None,
-        observed: Union[str, dict] = "green",
-        predicted: Union[str, dict] = "yellow",
+        selected: ColorArgs = "red",
+        unselected: ColorArgs = "gray",
+        observed: ColorArgs = "green",
+        predicted: ColorArgs = "yellow",
         **kwargs: Any
     ) -> Dict[
         str, Optional[Union[matplotlib.quiver.Quiver, List[matplotlib.lines.Line2D]]]
@@ -373,13 +377,13 @@ class Lines(Points):
         Arguments:
             index: Indices of points to select.
             selected: For selected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             unselected: For unselected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             observed: For image lines, optional arguments to
-                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.plot (dict), color, or `None` to hide.
             predicted: For world lines, optional arguments to
-                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.plot (dict), color, or `None` to hide.
             **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
         new_plot = not matplotlib.pyplot.get_fignums()
@@ -395,7 +399,7 @@ class Lines(Points):
             if args is None:
                 result[label] = None
                 continue
-            if isinstance(args, str):
+            if not isinstance(args, dict):
                 args = {"color": args}
             # matplotlib.pyplot.plot returns a list even for a single line
             result[label] = [
@@ -408,20 +412,20 @@ class Lines(Points):
             "angles": "xy",
             "units": "xy",
             "width": self.cam.imgsz[0] * 0.005,
-            "color": "red",
             **kwargs,
         }
-        unindex = np.delete(np.arange(self.size), index)
         uv = self.observed()
         duv = self.predicted() - uv
+        full = np.arange(self.size)
+        index, unindex = full[index], np.delete(full, index)
         for idx, args, label in [
             (unindex, unselected, "unselected"),
             (index, selected, "selected"),
         ]:
-            if args is None:
+            if not len(idx) or args is None:
                 result[label] = None
                 continue
-            if isinstance(args, str):
+            if not isinstance(args, dict):
                 args = {"color": args}
             args = {**defaults, **args}
             result[label] = matplotlib.pyplot.quiver(
@@ -483,7 +487,7 @@ class Matches:
 
         >>> import matplotlib.pyplot as plt
         >>> matches.plot(scale=0.5)
-        {'unselected': None, 'selected': <matplotlib.quiver.Quiver object at ...>}
+        {'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
         >>> plt.show()  # doctest: SKIP
         >>> plt.close()
 
@@ -572,8 +576,8 @@ class Matches:
         self,
         cam: CamIndex = 0,
         index: Index = slice(None),
-        selected: Union[str, dict] = "red",
-        unselected: Union[str, dict] = None,
+        selected: ColorArgs = "red",
+        unselected: ColorArgs = "gray",
         **kwargs: Any
     ) -> Dict[str, matplotlib.quiver.Quiver]:
         """
@@ -585,9 +589,9 @@ class Matches:
             cam: Camera to plot.
             index: Indices of points to select.
             selected: For selected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             unselected: For unselected points, optional arguments to
-                matplotlib.pyplot.quiver (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
             **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
         new_plot = not matplotlib.pyplot.get_fignums()
@@ -598,22 +602,22 @@ class Matches:
             "angles": "xy",
             "units": "xy",
             "width": self.cams[c].imgsz[0] * 0.005,
-            "color": "red",
             **kwargs,
         }
         uv = self.observed(cam=cam)
         duv = self.predicted(cam=cam) - uv
-        unindex = np.delete(np.arange(self.size), index)
+        full = np.arange(self.size)
+        index, unindex = full[index], np.delete(full, index)
         # Plot selected points on top
         result: Dict[str, matplotlib.quiver.Quiver] = {}
         for idx, args, label in [
             (unindex, unselected, "unselected"),
             (index, selected, "selected"),
         ]:
-            if args is None:
+            if not len(idx) or args is None:
                 result[label] = None
                 continue
-            if isinstance(args, str):
+            if not isinstance(args, dict):
                 args = {"color": args}
             args = {**defaults, **args}
             result[label] = matplotlib.pyplot.quiver(
@@ -1069,9 +1073,9 @@ class Polynomial:
         self,
         params: np.ndarray = None,
         index: Index = slice(None),
-        selected: Optional[Union[str, dict]] = "red",
-        unselected: Optional[Union[str, dict]] = "gray",
-        predicted: Optional[Union[str, dict]] = "red",
+        selected: ColorArgs = "red",
+        unselected: ColorArgs = "gray",
+        predicted: ColorArgs = "red",
         **kwargs: Any
     ) -> Dict[
         str,
@@ -1086,26 +1090,27 @@ class Polynomial:
             params: Values of the polynomial, from highest to lowest degree component.
             index: Indices of points to select.
             selected: For selected points, optional arguments to
-                matplotlib.pyplot.scatter (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.scatter (dict), color, or `None` to hide.
             unselected: For unselected points, optional arguments to
-                matplotlib.pyplot.scatter (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.scatter (dict), color, or `None` to hide.
             predicted: For polynomial fit, optional arguments to
-                matplotlib.pyplot.plot (dict), color (str), or `None` to hide.
+                matplotlib.pyplot.plot (dict), color, or `None` to hide.
             **kwargs: Optional arguments to matplotlib.pyplot.scatter for all points.
         """
         if params is None:
             params = self.fit(index)
         defaults = {}
         result = {}
-        unindex = np.delete(np.arange(self.size), index)
+        full = np.arange(self.size)
+        index, unindex = full[index], np.delete(full, index)
         for idx, args, label in [
             (unindex, unselected, "unselected"),
             (index, selected, "selected"),
         ]:
-            if args is None:
+            if not len(idx) or args is None:
                 result = None
                 continue
-            if isinstance(args, str):
+            if not isinstance(args, dict):
                 args = {"c": args}
             result[label] = matplotlib.pyplot.scatter(
                 self.xy[idx, 0], self.xy[idx, 1], **{**args, **kwargs}
@@ -1113,7 +1118,7 @@ class Polynomial:
         if predicted is None:
             result["predicted"] = None
         else:
-            if isinstance(predicted, str):
+            if not isinstance(predicted, dict):
                 predicted = {"color": predicted}
             result["predicted"] = matplotlib.pyplot.plot(
                 self.xy[:, 0], self.predict(params), **predicted

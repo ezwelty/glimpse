@@ -2077,7 +2077,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
     err = np.inf
     inlier_idx = None
     while i < iterations:
-        maybe_idx, test_idx = ransac_sample(sample_size, model.size)
+        maybe_idx, test_idx = _ransac_sample(sample_size, model.size)
         # maybe_inliers = data[maybe_idx]
         maybe_params = model.fit(maybe_idx, **fit_kws)
         if maybe_params is None:
@@ -2105,7 +2105,7 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
     return params, inlier_idx
 
 
-def ransac_sample(sample_size, data_size):
+def _ransac_sample(sample_size, data_size):
     """
     Generate index arrays for a random sample and its outliers.
 

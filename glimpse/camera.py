@@ -2,6 +2,7 @@
 import copy
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
+import matplotlib.pyplot
 import numpy as np
 import pandas
 import scipy.interpolate
@@ -1133,6 +1134,11 @@ class Camera:
             pool.map(func=process, reduce=reduce, sequence=tile_indices)
         bar.finish()
         return I
+
+    def set_plot_limits(self) -> None:
+        """Set limits of current plot axes to image extent."""
+        matplotlib.pyplot.xlim(0, self.imgsz[0])
+        matplotlib.pyplot.ylim(self.imgsz[1], 0)
 
     # ---- Methods (private) ----
 

@@ -255,8 +255,7 @@ class Image:
             >>> ax.get_ylim() == (img.cam.imgsz[1], 0)
             True
         """
-        matplotlib.pyplot.xlim(0, self.cam.imgsz[0])
-        matplotlib.pyplot.ylim(self.cam.imgsz[1], 0)
+        self.cam.set_plot_limits()
 
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """

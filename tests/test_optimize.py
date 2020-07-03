@@ -24,6 +24,6 @@ def test_ransac_camera_viewdir():
     values = model.fit()
     assert any(abs(values - viewdir) > 0.1)
     rvalues, rindex = glimpse.optimize.ransac(
-        model, sample_size=12, max_error=5, min_inliers=10, iterations=10
+        model, n=12, max_error=5, min_inliers=10, iterations=10
     )
     assert all(abs(rvalues - viewdir) < 0.1)

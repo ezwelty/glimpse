@@ -1009,7 +1009,7 @@ class Polynomial:
         The polynomial coefficients of the fit are now much closer to the ideal (1, 0).
 
         >>> params, inliers = ransac(
-        >>>     model, sample_size=2, max_error=0.2, min_inliers=2, iterations=100
+        >>>     model, n=2, max_error=0.2, min_inliers=2, iterations=100
         >>> )
         >>> inliers
         array([0, 1, 2, 3, 4])
@@ -1791,7 +1791,7 @@ class Cameras(object):
                     if isinstance(index, slice):
                         jac_index = np.arange(self.size)[index]
                     else:
-                        jac_index = index
+                        jac_index = np.asarray(index)
                     jac_index = np.dstack((2 * jac_index, 2 * jac_index + 1)).ravel()
                     kwargs["jac_sparsity"] = self.sparsity[jac_index]
 
@@ -2045,50 +2045,53 @@ class ObserverCameras(object):
 
 # ---- RANSAC ----
 
+Model = Union[Polynomial, Cameras]
 
-def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws):
+
+def ransac(
+    model: Model,
+    n: int,
+    max_error: float,
+    min_inliers: int,
+    iterations: int = 100,
+    **kwargs: Any
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Fit model parameters to data using the Random Sample Consensus (RANSAC) algorithm.
-
-    Inspired by the pseudocode at https://en.wikipedia.org/wiki/Random_sample_consensus
+    Fit model parameters using the Random Sample Consensus (RANSAC) algorithm.
+    
+    Samples are drawn without replacement and are guaranteed to be non-repeating.
+    See Schattschneider & Green 2012 (https://doi.org/10.1145/2425836.2425878).
 
     Arguments:
-        model (object): Model and data object with the following methods:
-
-            - `size`: Maximum sample size
-            - `fit(index)`: Accepts sample indices and returns model parameters
+        model: Object with the following attributes and methods.
+            - `size`: Maximum sample size.
+            - `fit(index)`: Accepts sample indices and returns model parameters.
             - `errors(params, index)`: Accepts sample indices and model parameters and
-                returns an error for each sample
-
-        sample_size (int): Size of sample used to fit the model in each iteration
-        max_error (float): Error below which a sample element is considered
-            a model inlier
-        min_inliers (int): Number of inliers (in addition to `sample_size`) for a model
-            to be considered valid
-        iterations (int): Number of iterations
-        **fit_kws: Additional arguments to `model.fit()`
+                returns an error for each sample member.
+        n: Size of sample used to fit the model in each iteration.
+        max_error: Error below which a sample member is considered an inlier.
+        min_inliers: Number of inliers (in addition to `n`) for a sample to be valid.
+        iterations: Maximum number of different samples to fit.
+        **kwargs: Additional arguments to `model.fit()`.
 
     Returns:
-        array (int): Values of model parameters
-        array (int): Indices of model inliers
+        Values of model parameters.
+        Indices of model inliers.
     """
-    i = 0
     params = None
     err = np.inf
-    inlier_idx = None
-    while i < iterations:
-        maybe_idx, test_idx = _ransac_sample(sample_size, model.size)
-        # maybe_inliers = data[maybe_idx]
-        maybe_params = model.fit(maybe_idx, **fit_kws)
+    inliers = None
+    full = np.arange(model.size)
+    for maybe_idx in _ransac_samples(n=n, size=model.size, iterations=iterations):
+        maybe_params = model.fit(maybe_idx, **kwargs)
         if maybe_params is None:
             continue
-        # test_data = data[test_idx]
+        test_idx = np.delete(full, maybe_idx)
         test_errs = model.errors(maybe_params, test_idx)
         also_idx = test_idx[test_errs < max_error]
         if len(also_idx) > min_inliers:
-            # also_inliers = data[also_idx]
             better_idx = np.concatenate((maybe_idx, also_idx))
-            better_params = model.fit(better_idx, **fit_kws)
+            better_params = model.fit(better_idx, **kwargs)
             if better_params is None:
                 continue
             better_errs = model.errors(better_params, better_idx)
@@ -2096,32 +2099,48 @@ def ransac(model, sample_size, max_error, min_inliers, iterations=100, **fit_kws
             if this_err < err:
                 params = better_params
                 err = this_err
-                inlier_idx = better_idx
-        i += 1
+                inliers = better_idx
     if params is None:
         raise ValueError("Best fit does not meet acceptance criteria")
     # HACK: Recompute inlier index on best params
-    inlier_idx = np.where(model.errors(params) <= max_error)[0]
-    return params, inlier_idx
+    inliers = np.where(model.errors(params) <= max_error)[0]
+    return params, inliers
 
 
-def _ransac_sample(sample_size, data_size):
+def _ransac_samples(n: int, size: int, iterations: int = 100) -> List[int]:
     """
-    Generate index arrays for a random sample and its outliers.
+    Generate non-repeating combinations of indices for random samples.
 
     Arguments:
-        sample_size (int): Size of sample
-        data_size (int): Size of data
+        n: Number of items in each sample.
+        size: Number of items to sample from.
+        iterations: Maximum number of iterations.
 
     Returns:
-        array (int): Sample indices
-        array (int): Outlier indices
+        Sample indices.
+
+    Example:
+        >>> sorted(_ransac_samples(n=2, size=4))
+        [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]
     """
-    if sample_size >= data_size:
-        raise ValueError("`sample_size` is larger or equal to `data_size`")
-    indices = np.arange(data_size)
-    np.random.shuffle(indices)
-    return indices[:sample_size], indices[sample_size:]
+    if n >= size:
+        raise ValueError("Sample size is larger or equal to total size")
+    # Estimate factorial with log(gamma) to avoid overflow
+    log = (
+        np.math.lgamma(size + 1) - np.math.lgamma(n + 1) - np.math.lgamma(size - n + 1)
+    )
+    if log:
+        # Compute max iterations if no float overflow
+        max_iterations = np.floor(np.exp(log))
+        iterations = min(iterations, max_iterations)
+    samples = set()
+    indices = np.arange(size)
+    while len(samples) < iterations:
+        np.random.shuffle(indices)
+        sample = frozenset(indices[:n])
+        if sample not in samples:
+            yield list(sample)
+            samples.add(sample)
 
 
 # ---- Keypoints ----

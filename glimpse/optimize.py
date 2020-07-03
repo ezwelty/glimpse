@@ -88,8 +88,8 @@ class Points:
         if len(uv) != len(xyz):
             raise ValueError("Image and world coordinates have different length")
         self.cam = cam
-        self.uv = np.atleast_2d(uv).astype(float, copy=False)
-        self.xyz = np.atleast_2d(xyz).astype(float, copy=False)
+        self.uv = np.asarray(uv, dtype=float)
+        self.xyz = np.asarray(xyz, dtype=float)
         self.directions = directions
         self._position = cam.xyz.copy()
         self._imgsz = cam.imgsz.copy()
@@ -294,7 +294,7 @@ class Lines(Points):
         density: float = 1,
     ) -> None:
         self.cam = cam
-        self.uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
+        self.uvs = [np.asarray(uv, dtype=float) for uv in uvs]
         self.uv = np.row_stack(self.uvs)
         self.xyzs = xyzs
         self.directions = directions
@@ -510,7 +510,7 @@ class Matches:
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
-        self.uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
+        self.uvs = [np.asarray(uv, dtype=float) for uv in uvs]
         self.weights = weights
         self._test_matches()
         self._test_position()
@@ -765,9 +765,9 @@ class RotationMatches(Matches):
         if uvs is None and xys is None:
             raise ValueError("Both uvs and xys are missing")
         if uvs is not None:
-            uvs = [np.atleast_2d(uv).astype(float, copy=False) for uv in uvs]
+            uvs = [np.asarray(uv, dtype=float) for uv in uvs]
         if xys is not None:
-            xys = [np.atleast_2d(xy).astype(float, copy=False) for xy in xys]
+            xys = [np.asarray(xy, dtype=float) for xy in xys]
         return uvs, xys
 
     def _build_xys(self) -> List[np.ndarray]:
@@ -1028,7 +1028,7 @@ class Polynomial:
     """
 
     def __init__(self, xy: np.ndarray, deg: int = 1) -> None:
-        self.xy = np.atleast_2d(xy)
+        self.xy = np.asarray(xy)
         self.deg = deg
 
     @property
@@ -2158,9 +2158,9 @@ def detect_keypoints(
         Keypoints as :class:`cv2.KeyPoint`.
         Keypoint descriptors as array rows.
     """
-    array = array.astype(np.uint8, copy=False)
+    array = np.asarray(array, dtype=np.uint8)
     if mask is not None:
-        mask = mask.astype(np.uint8, copy=False)
+        mask = np.asarray(mask, dtype=np.uint8)
     if method == "sift":
         try:
             detector = cv2.xfeatures2d.SIFT_create(**kwargs)
@@ -2216,7 +2216,7 @@ def match_keypoints(
         (optional) Ratio of each match (n, ).
     """
     if mask is not None:
-        mask = mask.astype(np.uint8, copy=False)
+        mask = np.asarray(mask, dtype=np.uint8)
     compute_ratios = max_ratio or return_ratios
     n = 2 if compute_ratios else 1
     if len(ka[0]) >= n and len(kb[0]) >= n:
@@ -2227,8 +2227,8 @@ def match_keypoints(
             matches = [m for m in matches if (m[0].queryIdx, m[0].trainIdx) in ba]
         if max_ratio:
             matches = [m for m in matches if m[0].distance / m[1].distance < max_ratio]
-        uva = np.atleast_2d([ka[0][m[0].queryIdx].pt for m in matches])
-        uvb = np.atleast_2d([kb[0][m[0].trainIdx].pt for m in matches])
+        uva = np.asarray([ka[0][m[0].queryIdx].pt for m in matches])
+        uvb = np.asarray([kb[0][m[0].trainIdx].pt for m in matches])
         if return_ratios:
             ratios = np.array([m.distance / n.distance for m, n in matches])
         if max_distance:
@@ -2294,9 +2294,10 @@ class KeypointMatcher(object):
         """
         if I.ndim > 2:
             I = helpers.rgb_to_gray(I, method="average", weights=None)
+        I = I.astype(np.uint8, copy=False)
         if self.clahe is not None:
-            I = self.clahe.apply(I.astype(np.uint8, copy=False))
-        return I.astype(np.uint8, copy=False)
+            I = self.clahe.apply(I)
+        return I
 
     def build_keypoints(
         self,

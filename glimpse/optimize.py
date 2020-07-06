@@ -1853,9 +1853,7 @@ class Cameras(object):
         self,
         params=None,
         cam=0,
-        index=None,
-        scale=1,
-        width=5,
+        index=slice(None),
         selected="red",
         unselected=None,
         lines_observed="green",
@@ -1874,8 +1872,6 @@ class Cameras(object):
             index (array or slice): Indices of points to plot.
                 If `None` (default), all points are plotted.
                 Other values require `self.test_ransac()` to be True.
-            scale (float): Scale of quivers
-            width (float): Width of quivers
             selected: For selected points,further arguments to
                 matplotlib.pyplot.quiver (dict), `None` to hide, or color
             unselected: For unselected points, further arguments to
@@ -1885,7 +1881,7 @@ class Cameras(object):
             lines_predicted: For world lines, further arguments to
                 matplotlib.pyplot.plot (dict), `None` to hide, or color
         """
-        if index is not None and len(self.controls) > 1:
+        if index != slice(None) and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
             raise ValueError(
                 "Plotting with `index` not yet supported with multiple controls"
@@ -1899,8 +1895,6 @@ class Cameras(object):
             if isinstance(control, Lines):
                 control.plot(
                     index=index,
-                    scale=scale,
-                    width=width,
                     selected=selected,
                     unselected=unselected,
                     observed=lines_observed,
@@ -1909,8 +1903,6 @@ class Cameras(object):
             elif isinstance(control, Points):
                 control.plot(
                     index=index,
-                    scale=scale,
-                    width=width,
                     selected=selected,
                     unselected=unselected,
                 )
@@ -1918,8 +1910,6 @@ class Cameras(object):
                 control.plot(
                     cam=cam,
                     index=index,
-                    scale=scale,
-                    width=width,
                     selected=selected,
                     unselected=unselected,
                 )

@@ -1260,7 +1260,9 @@ class Cameras(object):
         return labels
 
     def _get_cams(self, control):
-        return getattr(control, "cams") or [getattr(control, "cam")]
+        if isinstance(control, (Points, Lines)):
+            return [control.cam]
+        return control.cams
 
     def prune_controls(self, controls, cams):
         """

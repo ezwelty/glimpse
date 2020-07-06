@@ -1800,7 +1800,7 @@ def elevation_corrections(
     # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
     if squared_distances is None:
         squared_distances = np.sum((xyz[:, 0:2] - origin[0:2]) ** 2, axis=1)
-    return (refraction - 1) * squared_distances / (2 * earth_radius)
+    return (refraction - 1) * squared_distances / (2 * radius)
 
 
 # ---- Time ----

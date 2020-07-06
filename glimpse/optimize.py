@@ -1312,14 +1312,14 @@ class Cameras(object):
                     and not control.directions
                 ):
                     weights.append(control.size)
-                    if isinstance(control, Points):
-                        means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
-                    elif isinstance(control, Lines):
+                    if isinstance(control, Lines):
                         means.append(
                             np.linalg.norm(
                                 np.vstack(control.xyzs).mean(axis=0) - cam.xyz
                             )
                         )
+                    elif isinstance(control, Points):
+                        means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
             if means:
                 dpixels[0:3] = cam.f.mean() / np.average(means, weights=weights)
         # viewdir[0, 1]

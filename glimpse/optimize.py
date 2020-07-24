@@ -1126,6 +1126,11 @@ class Polynomial:
         return result
 
 
+Control = Union[Points, Lines, Matches, RotationMatches]
+Params = Dict[str, Union[bool, int, Sequence[int]]]
+FitParams = Union[Sequence[float], lmfit.parameter.Parameters]
+
+
 class Cameras(object):
     """
     Multi-camera optimization.
@@ -1137,41 +1142,43 @@ class Cameras(object):
         - image-world line coordinates (Lines)
         - image-image point coordinates (Matches)
 
-    If used with RANSAC (see `optimize.ransac`) with multiple control objects,
+    If used with RANSAC (see :func:`ransac`) with multiple control objects,
     results may be unstable since samples are drawn randomly from all observations,
-    and computation will be slow since errors are calculated for all points then subset.
+    and computation will be slow since errors are calculated for all points,
+    then subset.
 
     Arguments:
-        scales (bool): Whether to compute and use scale factors for each parameter
-        sparsity (bool): Whether compute and use a sparsity structure for the
-            estimation of the Jacobian matrix
+        scales: Whether to compute and use scale factors for each parameter
+            (can be more stable).
+        sparsity: Whether to compute and use a sparsity structure for the
+            estimation of the Jacobian matrix (much faster for large, sparse systems).
 
     Attributes:
-        cams (list): Cameras
-        controls (list): Camera control (Points, Lines, and Matches objects)
-        cam_params (list): Parameters to optimize seperately for each camera
-            (see `parse_params()`)
-        group_indices (list): Integer index of `cams` belonging to each group
-        group_params (list): Parameters to optimize together for all cameras in
-            each group (see `parse_params()`)
-        weights (array): Weights for each control point
-        scales (array): Scale factors for each parameter (see `camera_scales()`)
+        cams (list of Camera): Cameras.
+        controls (list of Control): Camera control.
+        cam_params (list of dict): Parameters to optimize seperately for each camera
+            (see :meth:`Cameras.parse_params`).
+        group_indices (np.ndarray): Integer index of `cams` belonging to each group.
+        group_params (list of dict): Parameters to optimize together for all cameras in
+            each group (see :meth:`Cameras.parse_params`).
+        weights (np.ndarray): Weights for each control point.
+        scales (np.ndarray): Scale factors for each parameter (see `camera_scales()`).
         sparsity (sparse matrix): Sparsity structure for the estimation of the
-            Jacobian matrix
-        vectors (list): Original camera vectors
-        params (`lmfit.Parameters`): Parameter initial values and bounds
+            Jacobian matrix.
+        vectors (list of np.ndarray): Original camera vectors.
+        params (lmfit.Parameters): Parameter initial values and bounds.
     """
 
     def __init__(
         self,
-        cams,
-        controls,
-        cam_params=None,
-        group_indices=None,
-        group_params=None,
-        weights=None,
-        scales=True,
-        sparsity=True,
+        cams: Sequence[Camera],
+        controls: Sequence[Control],
+        cam_params: Sequence[Params] = None,
+        group_indices: Sequence[int] = None,
+        group_params: Sequence[Params] = None,
+        weights: np.ndarray = None,
+        scales: bool = True,
+        sparsity: bool = True,
     ):
         (
             cams,
@@ -1214,11 +1221,11 @@ class Cameras(object):
             self._build_sparsity()
 
     @property
-    def weights(self):
+    def weights(self) -> np.ndarray:
         return self._weights
 
     @weights.setter
-    def weights(self, value):
+    def weights(self, value: np.ndarray) -> None:
         if value is None:
             self._weights = value
         else:
@@ -1264,16 +1271,18 @@ class Cameras(object):
             return [control.cam]
         return control.cams
 
-    def prune_controls(self, controls, cams):
+    def prune_controls(
+        self, controls: List[Control], cams: List[Params]
+    ) -> List[Control]:
         """
         Return the controls which reference the specified cameras.
 
         Arguments:
-            controls (list): Camera control (Points, Lines, and Matches)
-            cams (list): Camera objects
+            controls: Control objects.
+            cams: Camera objects.
 
         Returns:
-            list: Control which reference the cameras in `cams`
+            Controls which reference one or more cameras in `cams`.
         """
         return [
             control
@@ -1282,7 +1291,9 @@ class Cameras(object):
         ]
 
     @staticmethod
-    def camera_scales(cam, controls=None):
+    def camera_scales(
+        cam: Camera, controls: List[Union[Points, Lines]] = None
+    ) -> np.ndarray:
         """
         Return camera parameter scale factors.
 
@@ -1290,8 +1301,8 @@ class Cameras(object):
         to displace the image coordinates of a feature by one pixel.
 
         Arguments:
-            cam (Camera): Camera object
-            controls (list): Camera control (Points, Lines),
+            cam: Camera object.
+            controls: World control (Points, Lines),
                 used to estimate impact of camera position (`cam.xyz`).
         """
         # Compute pixels per unit change for each variable
@@ -1364,11 +1375,19 @@ class Cameras(object):
         return 1 / dpixels
 
     @staticmethod
-    def camera_bounds(cam):
+    def camera_bounds(cam: Camera) -> np.ndarray:
         """
-        Return camera parameter bounds.
+        Return default camera parameter bounds.
+
+        Bounds for distortion coefficients are based on tested limits of the
+        default :class:`Camera` undistort routine.
+
+        Arguments:
+            cam: Camera object.
+
+        Returns:
+            Bounds for each parameter, in the order of :meth:`Camera.to_array` (n, 2).
         """
-        # Distortion bounds based on tested limits of Camera.undistort_oulu()
         k = cam.f.mean() / 4000
         p = cam.f.mean() / 40000
         return np.array(
@@ -1405,12 +1424,14 @@ class Cameras(object):
         )
 
     @staticmethod
-    def parse_params(params=None, default_bounds=None):
+    def parse_params(
+        params: Params = None, default_bounds: np.ndarray = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Return a mask of selected camera parameters and associated bounds.
 
         Arguments:
-            params (dict): Parameters to select by name and indices. For example:
+            params: Parameters to select by name and indices. For example:
 
                 - {'viewdir': True} : All `viewdir` elements
                 - {'viewdir': 0} : First `viewdir` element
@@ -1428,8 +1449,8 @@ class Cameras(object):
                 or (-)`np.inf` if `None`.
 
         Returns:
-            array: Parameter boolean mask (20, )
-            array: Parameter min and max bounds (20, 2)
+            np.ndarray: Parameter boolean mask (20, )
+            np.ndarray: Parameter min and max bounds (20, 2)
         """
         if params is None:
             params = {}
@@ -1560,7 +1581,7 @@ class Cameras(object):
                     S[ctrl_slice, group_slice] = 1
         self.sparsity = S
 
-    def update_params(self):
+    def update_params(self) -> None:
         """
         Update parameter bounds and initial values from current state.
         """
@@ -1619,16 +1640,16 @@ class Cameras(object):
             + [np.count_nonzero(mask) for mask in self.cam_masks]
         )
 
-    def set_cameras(self, params):
+    def set_cameras(self, params: FitParams) -> None:
         """
         Set camera parameter values.
 
         The operation can be reversed with `self.reset_cameras()`.
 
         Arguments:
-            params (iterable or `lmfit.Parameters`): Parameter values ordered first
+            params: Parameter values ordered first
                 by group or camera [group0 | group1 | cam0 | cam1 | ...],
-                then ordered by position in `Camera.vector`.
+                then ordered by position in :meth:`Camera.to_array`.
         """
         if isinstance(params, lmfit.parameter.Parameters):
             params = list(params.valuesdict().values())
@@ -1641,14 +1662,16 @@ class Cameras(object):
                     self.cam_breaks[j] : self.cam_breaks[j + 1]
                 ]
 
-    def reset_cameras(self, vectors=None, save=False):
+    def reset_cameras(
+        self, vectors: Sequence[np.ndarray] = None, save: bool = False
+    ) -> None:
         """
-        Reset camera parameters to their saved values.
+        Reset camera parameters.
 
         Arguments:
-            vectors (iterable): Camera vectors.
+            vectors: Camera vectors.
                 If `None`, the saved vectors are used (`self.vectors`).
-            save (bool): Whether to save `vectors` as new defaults.
+            save: Whether to save `vectors` as new defaults.
         """
         if vectors is None:
             vectors = self.vectors
@@ -1659,43 +1682,37 @@ class Cameras(object):
             cam._vector = vector.copy()
 
     @property
-    def size(self):
+    def size(self) -> int:
         """
         Return the total number of data points.
         """
         return np.sum([control.size for control in self.controls])
 
-    def observed(self, index=None):
+    def observed(self, index: Index = slice(None)):
         """
         Return the observed image coordinates for all camera control.
 
         See control `observed()` method for more details.
 
         Arguments:
-            index (array or slice): Indices of points to return, or all if `None`
+            index: Indices of points to return.
         """
-        if index is None:
-            index = slice(None)
         if len(self.controls) == 1:
             return self.controls[0].observed(index=index)
-        else:
-            # TODO: Map index to subindices for each control
-            return np.vstack([control.observed() for control in self.controls])[index]
+        return np.vstack([control.observed() for control in self.controls])[index]
 
-    def predicted(self, params=None, index=None):
+    def predicted(
+        self, params: FitParams = None, index: Index = slice(None)
+    ) -> np.ndarray:
         """
         Return the predicted image coordinates for all camera control.
 
         See control `predicted()` method for more details.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values
-                (see `.set_cameras()`)
-            index (array or slice): Indices of points to return,
-                or all if `None` (default)
+            params: Parameter values (see :meth:`Cameras.set_cameras`).
+            index: Indices of points to return.
         """
-        if index is None:
-            index = slice(None)
         if params is not None:
             vectors = [cam.to_array() for cam in self.cams]
             self.set_cameras(params)
@@ -1710,49 +1727,48 @@ class Cameras(object):
             self.reset_cameras(vectors)
         return result
 
-    def residuals(self, params=None, index=None):
+    def residuals(
+        self, params: FitParams = None, index: Index = slice(None)
+    ) -> np.ndarray:
         """
         Return the reprojection residuals for all camera control.
 
-        Residuals are the difference between `.predicted()` and `.observed()`.
+        Residuals are the difference between :meth:`Cameras.predicted` and
+        :meth:`Cameras.observed`.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values
-                (see `.set_cameras()`)
-            index (array_like or slice): Indices of points to include, or all if `None`
+            params: Parameter values (see :meth:`Cameras.set_cameras`).
+            index: Indices of points to return.
         """
         d = self.predicted(params=params, index=index) - self.observed(index=index)
         if self.weights is None:
             return d
-        else:
-            if index is None:
-                index = slice(None)
-            return d * self.weights[index]
+        return d * self.weights[index]
 
-    def errors(self, params=None, index=None):
+    def errors(
+        self, params: FitParams = None, index: Index = slice(None)
+    ) -> np.ndarray:
         """
         Return the reprojection errors for all camera control.
 
-        Errors are the Euclidean distance between `.predicted()` and `.observed()`.
+        Errors are the Euclidean distance between :meth:`Cameras.predicted` and
+        :meth:`Cameras.observed`.
 
         Arguments:
-            params (array or `lmfit.Parameters`): Parameter values
-                (see `.set_cameras()`)
-            index (array or slice): Indices of points to include, or all if `None`
+            params: Parameter values (see :meth:`Cameras.set_cameras`).
+            index: Indices of points to return.
         """
         return np.linalg.norm(self.residuals(params=params, index=index), axis=1)
 
     def fit(
         self,
-        index=None,
-        cam_params=None,
-        group_params=None,
-        full=False,
-        method="least_squares",
-        nan_policy="omit",
-        reduce_fcn=None,
-        **kwargs
-    ):
+        index: Index = slice(None),
+        cam_params: List[List[Params]] = None,
+        group_params: List[List[Params]] = None,
+        full: bool = False,
+        method: str = "least_squares",
+        **kwargs: Any
+    ) -> FitParams:
         """
         Return optimal camera parameter values.
 
@@ -1761,12 +1777,12 @@ class Cameras(object):
         See `lmfit.minimize()` (https://lmfit.github.io/lmfit-py/fitting.html).
 
         Arguments:
-            index (array or slice): Indices of residuals to include, or all if `None`
-            cam_params (list): Sequence of `cam_params` to fit iteratively
+            index: Indices of residuals to include.
+            cam_params: Sequence of `cam_params` to fit iteratively
                 before the final run. Must be `None` or same length as `group_params`.
-            group_params (list): Sequence of `group_params` to fit iteratively
+            group_params: Sequence of `group_params` to fit iteratively
                 before the final run. Must be `None` or same length as `cam_params`.
-            full (bool): Whether to return the full result of `lmfit.Minimize()`
+            full: Whether to return the full result of `lmfit.Minimize()`.
             **kwargs: Additional arguments to `lmfit.minimize()`.
                 `self.scales` and `self.jac_sparsity` (if computed) are applied
                 to the following arguments if not provided:
@@ -1776,10 +1792,11 @@ class Cameras(object):
                     `method='least_squares'`
 
         Returns:
-            array or `lmfit.Parameters` (`full=True`): Parameter values ordered first
+            Parameter values ordered first
                 by group or camera (group, cam0, cam1, ...),
-                then ordered by position in `Camera._vector`.
+                then ordered by position in :meth:`Camera.to_array()`.
         """
+        kwargs = {"nan_policy": "omit", **kwargs}
         if method == "leastsq":
             if self.scales is not None and not hasattr(kwargs, "diag"):
                 kwargs["diag"] = self.scales
@@ -1818,13 +1835,7 @@ class Cameras(object):
                     cam_params=iter_cam_params,
                     group_params=iter_group_params,
                 )
-                values = model.fit(
-                    index=index,
-                    method=method,
-                    nan_policy=nan_policy,
-                    reduce_fcn=reduce_fcn,
-                    **kwargs
-                )
+                values = model.fit(index=index, method=method, **kwargs)
                 if values is not None:
                     model.set_cameras(params=values)
             self.update_params()
@@ -1834,8 +1845,6 @@ class Cameras(object):
             kws={"index": index},
             iter_cb=callback,
             method=method,
-            nan_policy=nan_policy,
-            reduce_fcn=reduce_fcn,
             **kwargs
         )
         sys.stdout.write("\n")
@@ -1851,35 +1860,41 @@ class Cameras(object):
 
     def plot(
         self,
-        params=None,
-        cam=0,
-        index=slice(None),
-        selected="red",
-        unselected=None,
-        lines_observed="green",
-        lines_predicted="yellow",
-    ):
+        params: FitParams = None,
+        cam: CamIndex = 0,
+        index: Index = slice(None),
+        selected: ColorArgs = "red",
+        unselected: ColorArgs = "gray",
+        lines_observed: ColorArgs = "green",
+        lines_predicted: ColorArgs = "yellow",
+        **kwargs: Any
+    ) -> List[
+        Dict[
+            str,
+            Optional[Union[matplotlib.quiver.Quiver, List[matplotlib.lines.Line2D]]],
+        ]
+    ]:
         """
-        Plot reprojection errors.
+        Plot reprojection errors as quivers.
 
-        See control object `plot()` methods for details.
+        Arrows point from observed to predicted image coordinates.
 
         Arguments:
-            params (array): Parameter values [group | cam0 | cam1 | ...].
+            params: Parameter values [group | cam0 | cam1 | ...].
                 If `None` (default), cameras are used unchanged.
-            cam (Camera or int): Camera to plot in
-                (as object or position in `self.cams`)
-            index (array or slice): Indices of points to plot.
-                If `None` (default), all points are plotted.
-                Other values require `self.test_ransac()` to be True.
-            selected: For selected points,further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            unselected: For unselected points, further arguments to
-                matplotlib.pyplot.quiver (dict), `None` to hide, or color
-            lines_observed: For image lines, further arguments to
-                matplotlib.pyplot.plot (dict), `None` to hide, or color
-            lines_predicted: For world lines, further arguments to
-                matplotlib.pyplot.plot (dict), `None` to hide, or color
+            cam: Camera to plot in (as object or position in `self.cams`).
+            index: Indices of points to plot.
+                By default, all points are plotted.
+                Other values are only supported for a single control.
+            selected: For selected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
+            unselected: For unselected points, optional arguments to
+                matplotlib.pyplot.quiver (dict), color, or `None` to hide.
+            lines_observed: For image lines, optional arguments to
+                matplotlib.pyplot.plot (dict), color, or `None` to hide.
+            lines_predicted: For world lines, optional arguments to
+                matplotlib.pyplot.plot (dict), color, or `None` to hide.
+            **kwargs: Optional arguments to matplotlib.pyplot.quiver for all points.
         """
         if index != slice(None) and len(self.controls) > 1:
             # TODO: Map index to subindices for each control
@@ -1891,34 +1906,37 @@ class Cameras(object):
             self.set_cameras(params)
         cam = self.cams[cam] if isinstance(cam, int) else cam
         cam_controls = self.prune_controls(self.controls, cams=[cam])
+        results = []
         for control in cam_controls:
             if isinstance(control, Lines):
-                control.plot(
+                result = control.plot(
                     index=index,
                     selected=selected,
                     unselected=unselected,
                     observed=lines_observed,
                     predicted=lines_predicted,
+                    **kwargs
                 )
             elif isinstance(control, Points):
-                control.plot(
-                    index=index,
-                    selected=selected,
-                    unselected=unselected,
+                result = control.plot(
+                    index=index, selected=selected, unselected=unselected, **kwargs
                 )
             elif isinstance(control, Matches):
-                control.plot(
+                result = control.plot(
                     cam=cam,
                     index=index,
                     selected=selected,
                     unselected=unselected,
+                    **kwargs
                 )
+            results.append(result)
         if params is not None:
             self.reset_cameras(vectors)
+        return results
 
-    def plot_weights(self, index=None, scale=1, cmap=None):
-        if index is None:
-            index = slice(None)
+    def plot_weights(
+        self, index: Index = slice(None), scale: float = 1, cmap: str = None
+    ) -> None:
         weights = np.ones(self.size) if self.weights is None else self.weights
         uv = self.observed(index=index)
         matplotlib.pyplot.scatter(

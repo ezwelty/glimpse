@@ -21,7 +21,9 @@ Rect = TypedDict("Rect", {"x": str, "y": str, "width": str, "height": str})
 SVG = TypedDict("SVG", {"viewBox": str}, total=False)
 Path = TypedDict("Path", {"d": str})
 
-COORD_REGEX = re.compile(r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)")
+COORD_REGEX = re.compile(
+    r"(?:\+|\-)?(?:\.[0-9]+|[0-9]+(?:\.[0-9]+)?)(?:[Ee][+-]?[0-9]+)?"
+)
 
 
 def _strip_etree_namespaces(tree: ET.ElementTree) -> None:
@@ -657,8 +659,8 @@ class Points:
     def _from_path(cls, d: str = "") -> "Points":
         # NOTE: Only vertices are preserved. All curvature information is discarded.
         regex = {
-            "cmd": re.compile(r"[a-zA-Z]+"),
-            "seq": re.compile(r"[^a-zA-Z]+"),
+            "cmd": re.compile(r"[a-df-zA-DF-Z]+"),
+            "seq": re.compile(r"[^a-df-zA-DF-Z]+"),
             "coord": COORD_REGEX,
         }
         commands = regex["cmd"].findall(d)

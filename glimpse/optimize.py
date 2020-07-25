@@ -1807,13 +1807,13 @@ class Cameras(object):
         """
         kwargs = {"nan_policy": "omit", **kwargs}
         if method == "leastsq":
-            if self.scales is not None and not hasattr(kwargs, "diag"):
+            if self.scales is not None and "diag" not in kwargs:
                 kwargs["diag"] = self.scales
         if method == "least_squares":
-            if self.scales is not None and not hasattr(kwargs, "x_scale"):
+            if self.scales is not None and "x_scale" not in kwargs:
                 kwargs["x_scale"] = self.scales
-            if self.sparsity is not None and not hasattr(kwargs, "jac_sparsity"):
-                if index is None:
+            if self.sparsity is not None and "jac_sparsity" not in kwargs:
+                if index == slice(None):
                     kwargs["jac_sparsity"] = self.sparsity
                 else:
                     if isinstance(index, slice):

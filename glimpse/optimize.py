@@ -1266,13 +1266,15 @@ class Cameras(object):
             labels = ["group" + str(group) + "_" + label for label in labels]
         return labels
 
-    def _get_cams(self, control):
+    @staticmethod
+    def _get_control_cams(control):
         if isinstance(control, (Points, Lines)):
             return [control.cam]
         return control.cams
 
+    @classmethod
     def prune_controls(
-        self, controls: List[Control], cams: List[Params]
+        cls, controls: List[Control], cams: List[Params]
     ) -> List[Control]:
         """
         Return the controls which reference the specified cameras.
@@ -1287,7 +1289,7 @@ class Cameras(object):
         return [
             control
             for control in controls
-            if len(set(cams) & set(self._get_cams(control))) > 0
+            if len(set(cams) & set(cls._get_control_cams(control))) > 0
         ]
 
     @staticmethod
@@ -1520,7 +1522,7 @@ class Cameras(object):
                 )
         # Error: Some cameras with params do not appear in controls
         control_cams = [
-            cam for control in self.controls for cam in self._get_cams(control)
+            cam for control in self.controls for cam in self._get_control_cams(control)
         ]
         cams_with_params = [
             cam
@@ -1565,7 +1567,7 @@ class Cameras(object):
         control_breaks = np.cumsum([0] + m_control)
         for i, control in enumerate(self.controls):
             ctrl_slice = slice(control_breaks[i], control_breaks[i + 1])
-            for cam in self._get_cams(control):
+            for cam in self._get_control_cams(control):
                 try:
                     j = self.cams.index(cam)
                 except ValueError:

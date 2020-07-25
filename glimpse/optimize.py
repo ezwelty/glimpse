@@ -1285,6 +1285,20 @@ class Cameras(object):
 
         Returns:
             Controls which reference one or more cameras in `cams`.
+
+        Example:
+            >>> cams = [Camera(imgsz=100, f=10), Camera(imgsz=100, f=10)]
+            >>> controls = [
+                    Points(cam=cams[0], uv=[(0, 0)], xyz=[(0, 0, 0)]),
+                    Lines(cam=cams[1], uvs=[[(0, 0)]], xyzs=[[(0, 0, 0)]]),
+                    Matches(cams=cams, uvs=[[(0, 0)], [(0, 0)]])
+                ]
+            >>> Cameras.prune_controls(controls, cams)
+            [<...Points...>, <...Lines...>, <...Matches...>]
+            >>> Cameras.prune_controls(controls, cams[0:1])
+            [<...Points...>, <...Matches...>]
+            >>> Cameras.prune_controls(controls, cams[1:2])
+            [<...Lines...>, <...Matches...>]
         """
         return [
             control

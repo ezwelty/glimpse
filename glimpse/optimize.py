@@ -1156,7 +1156,7 @@ class Cameras(object):
     Attributes:
         cams (list of Camera): Cameras.
         controls (list of Control): Camera control.
-        cam_params (list of dict): Parameters to optimize seperately for each camera
+        cam_params (list of dict): Parameters to optimize separately for each camera
             (see :meth:`Cameras.parse_params`).
         group_indices (np.ndarray): Integer index of `cams` belonging to each group.
         group_params (list of dict): Parameters to optimize together for all cameras in
@@ -1640,16 +1640,18 @@ class Cameras(object):
             + [np.count_nonzero(mask) for mask in self.cam_masks]
         )
 
-    def set_cameras(self, params: FitParams) -> None:
+    def set_cameras(self, params: FitParams, save: bool = False) -> None:
         """
         Set camera parameter values.
 
-        The operation can be reversed with `self.reset_cameras()`.
+        The operation can be reversed with :meth:`Cameras.reset_cameras()`.
 
         Arguments:
             params: Parameter values ordered first
                 by group or camera [group0 | group1 | cam0 | cam1 | ...],
                 then ordered by position in :meth:`Camera.to_array`.
+            save: Whether to save the new state of the cameras as the fallback for
+                :meth:`Cameras.reset_cameras()`.
         """
         if isinstance(params, lmfit.parameter.Parameters):
             params = list(params.valuesdict().values())
@@ -1661,24 +1663,14 @@ class Cameras(object):
                 self.cams[j]._vector[self.cam_masks[j]] = params[
                     self.cam_breaks[j] : self.cam_breaks[j + 1]
                 ]
+        if save:
+            self.vectors = [cam.to_array() for cam in self.cams]
 
-    def reset_cameras(
-        self, vectors: Sequence[np.ndarray] = None, save: bool = False
-    ) -> None:
+    def reset_cameras(self) -> None:
         """
-        Reset camera parameters.
-
-        Arguments:
-            vectors: Camera vectors.
-                If `None`, the saved vectors are used (`self.vectors`).
-            save: Whether to save `vectors` as new defaults.
+        Reset camera parameters to their previously saved state.
         """
-        if vectors is None:
-            vectors = self.vectors
-        else:
-            if save:
-                self.vectors = vectors
-        for cam, vector in zip(self.cams, vectors):
+        for cam, vector in zip(self.cams, self.vectors):
             cam._vector = vector.copy()
 
     @property
@@ -1724,7 +1716,8 @@ class Cameras(object):
                 index
             ]
         if params is not None:
-            self.reset_cameras(vectors)
+            for cam, vector in zip(self.cams, vectors):
+                cam._vector = vector
         return result
 
     def residuals(
@@ -1931,7 +1924,8 @@ class Cameras(object):
                 )
             results.append(result)
         if params is not None:
-            self.reset_cameras(vectors)
+            for cam, vector in zip(self.cams, vectors):
+                cam._vector = vector
         return results
 
     def plot_weights(

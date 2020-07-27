@@ -42,6 +42,13 @@ autoclass_content = "class"
 autodoc_member_order = "bysource"
 autodoc_default_flags = ["members"]
 
+# -- Matplotlib configuration -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
+
+plot_include_source = True
+plot_html_show_source_link = False
+plot_working_directory = ".."
+
 # -- General configuration ---------------------------------------------------
 
 extensions = [

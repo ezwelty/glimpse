@@ -290,9 +290,9 @@ class Grid(object):
             grid (bool): Whether `xy` defines a grid or invidual points
 
         Returns:
-            array (`grid` is False): Whether each point is inbounds (n, 1)
-            tuple (`grid` is True): Whether each grid column or row is inbounds
-                (n, ), (m, )
+            Either an array whether each point is inbounds (n, 1) if `grid` is False, 
+                or a tuple of whether each grid column or row is inbounds (n, ), (m, )
+                if `grid` is True.
         """
         if grid:
             return (
@@ -1212,6 +1212,8 @@ class Raster(Grid):
 
 class RasterInterpolant(object):
     """
+    Interpolation of a raster timeseries.
+
     Attributes:
         means (iterable): Mean values as Rasters, paths to raster files,
             or numbers (interpreted as infinite rasters)

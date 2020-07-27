@@ -106,17 +106,19 @@ class MatlabCamera:
         **kwargs: Any,
     ) -> "MatlabCamera":
         """
-        Convert from `:class:Camera` object.
+        Convert from :class:`Camera` object.
 
         Arguments:
             cam: Camera object.
-            optimize: Whether and which `:class:MatlabCamera` parameters to optimize to
+            optimize: Whether and which :class:`MatlabCamera` parameters to optimize to
                 minimize the residuals between the cameras. If `Camera.k[3:6]` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
-                    - If `True`, optimizes `:attr:kc`.
+
+                    - If `True`, optimizes :attr:`kc`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -171,16 +173,18 @@ class MatlabCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to `:class:Camera` object.
+        Convert to :class:`Camera` object.
 
         Arguments:
-            optimize: Whether and which `:class:Camera` parameters to optimize to
-                minimize the residuals between the cameras. If `:attr:alpha_c` is zero,
+            optimize: Whether and which :class:`Camera` parameters to optimize to
+                minimize the residuals between the cameras. If :attr:`alpha_c` is zero,
                 the conversion is exact and no optimization is performed. Otherwise:
+
                     - If `True`, optimizes `Camera.f`, `c`, `k`, and `p`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -305,17 +309,19 @@ class AgisoftCamera:
         **kwargs: Any,
     ) -> "AgisoftCamera":
         """
-        Convert from `:class:Camera` object.
+        Convert from :class:`Camera` object.
 
         Arguments:
             cam: Camera object.
-            optimize: Whether and which `:class:AgisoftCamera` parameters to optimize to
+            optimize: Whether and which :class:`AgisoftCamera` parameters to optimize to
                 minimize the residuals between the cameras. If `Camera.k[3:6]` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
-                    - If `True`, optimizes `:attr:k1`, `:attr:k2`, and `:attr:k3`.
+
+                    - If `True`, optimizes :attr:`k1`, :attr:`k2`, and :attr:`k3`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -369,18 +375,20 @@ class AgisoftCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to `:class:Camera` object.
+        Convert to :class:`Camera` object.
 
         Arguments:
-            optimize: Whether and which `:class:Camera` parameters to optimize to
-                minimize the residuals between the cameras. If `:attr:k4` and `:attr:b2`
+            optimize: Whether and which :class:`Camera` parameters to optimize to
+                minimize the residuals between the cameras. If :attr:`k4` and :attr:`b2`
                 are zero, the conversion is exact and no optimization is performed.
                 Otherwise:
-                    - If `True`, optimizes `Camera.k` if `:attr:k4` is non-zero and
-                        `Camera.f`, `c`, and `k` if `:attr:b2` is non-zero.
+
+                    - If `True`, optimizes `Camera.k` if :attr:`k4` is non-zero and
+                        `Camera.f`, `c`, and `k` if :attr:`b2` is non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -576,7 +584,7 @@ class OpenCVCamera:
     @classmethod
     def from_camera(cls, cam: Camera) -> "OpenCVCamera":
         """
-        Convert from `:class:Camera` object.
+        Convert from :class:`Camera` object.
 
         Since the OpenCV camera model is a superset of the glimpse camera model,
         the conversion is exact and no optimization is needed.
@@ -623,17 +631,19 @@ class OpenCVCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to `:class:Camera` object.
+        Convert to :class:`Camera` object.
 
         Arguments:
-            optimize: Whether and which `:class:Camera` parameters to optimize to
-                minimize the residuals between the cameras. If `:attr:s1`, `:attr:s2`,
-                `:attr:s3`, and `:attr:s4` are zero, the conversion is exact and
+            optimize: Whether and which :class:`Camera` parameters to optimize to
+                minimize the residuals between the cameras. If :attr:`s1`, :attr:`s2`,
+                :attr:`s3`, and :attr:`s4` are zero, the conversion is exact and
                 no optimization is performed. Otherwise:
+
                     - If `True`, optimizes `Camera.k` and `p`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -749,24 +759,26 @@ class PhotoModelerCamera:
         **kwargs: Any,
     ) -> "PhotoModelerCamera":
         """
-        Convert from `:class:Camera` object.
+        Convert from :class:`Camera` object.
 
         `Camera.sensorsz` is required.
 
         Arguments:
             cam: Camera object.
-            optimize: Whether and which `:class:PhotoModelerCamera` parameters to
+            optimize: Whether and which :class:`PhotoModelerCamera` parameters to
                 optimize to minimize the residuals between the cameras. If `Camera.fmm`
                 are equal and all `Camera.k` and `Camera.p` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
-                    - If `True`, optimizes `:attr:focal`, `:attr:fw`, `:attr:fh`,
-                        `:attr:xp`, and `:attr:yp` if `Camera.fmm` are not equal,
-                        `:attr:k1`, `:attr:k2`, and `:attr:k3` if any `Camera.k`
+
+                    - If `True`, optimizes :attr:`focal`, :attr:`fw`, :attr:`fh`,
+                        :attr:`xp`, and :attr:`yp` if `Camera.fmm` are not equal,
+                        :attr:`k1`, :attr:`k2`, and :attr:`k3` if any `Camera.k`
                         are non-zero,
-                        and `:attr:p1` and `:attr:p2` if any `Camera.p` are non-zero.
+                        and :attr:`p1` and :attr:`p2` if any `Camera.p` are non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
@@ -837,19 +849,21 @@ class PhotoModelerCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to `:class:Camera` object.
+        Convert to :class:`Camera` object.
 
         Arguments:
-            optimize: Whether and which `:class:Camera` parameters to optimize to
-                minimize the residuals between the cameras. If `:attr:k1`, `:attr:k2`,
-                `:attr:k3`, `:attr:p1`, and `:attr:p2` is zero,
+            optimize: Whether and which :class:`Camera` parameters to optimize to
+                minimize the residuals between the cameras. If :attr:`k1`, :attr:`k2`,
+                :attr:`k3`, :attr:`p1`, and :attr:`p2` is zero,
                 the conversion is exact and no optimization is performed. Otherwise:
-                    - If `True`, optimizes `Camera.k` if `:attr:k1`, `:attr:k2`, or
-                        `:attr:k3` is non-zero, and `Camera.p` if `:attr:p1` or
-                        `:attr:p2` is non-zero.
+
+                    - If `True`, optimizes `Camera.k` if :attr:`k1`, :attr:`k2`, or
+                        :attr:`k3` is non-zero, and `Camera.p` if :attr:`p1` or
+                        :attr:`p2` is non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                         format as `Converter.optimize_cam()`.
+
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
             **kwargs: Optional arguments to `scipy.optimize.least_squares()`.

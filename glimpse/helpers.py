@@ -622,10 +622,12 @@ def compute_cdf(array, return_inverse=False):
             `values` that reconstruct `array`
 
     Returns:
-        array: Sorted unique values
-        array: Quantile of each value in `values`
-        array (optional): Indices of `values` which reconstruct `array`.
-            Only returned if `return_inverse=True`.
+        tuple:
+
+            - array: Sorted unique values
+            - array: Quantile of each value in `values`
+            - array (optional): Indices of `values` which reconstruct `array`.
+                Only returned if `return_inverse=True`.
     """
     results = np.unique(array, return_inverse=return_inverse, return_counts=True)
     # Normalize cumulative sum of counts by the number of pixels

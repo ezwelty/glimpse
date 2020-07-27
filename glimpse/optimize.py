@@ -821,7 +821,7 @@ class RotationMatchesXY(RotationMatches):
 
     Unlike :class:`Matches`, normalized camera coordinates are pre-computed for speed,
     so internal camera parameters cannot change after initialization.
-    Unlike :clas:`RotationMatches`, image coordinates may be discarded to save memory.
+    Unlike :class:`RotationMatches`, image coordinates may be discarded to save memory.
     :meth:`predicted` and :meth:`observed` return normalized camera coordinates
     rather than image coordinates.
 
@@ -916,7 +916,7 @@ class RotationMatchesXYZ(RotationMatchesXY):
 
     Unlike :class:`Matches`, normalized camera coordinates are pre-computed for speed,
     so internal camera parameters cannot change after initialization.
-    Unlike :clas:`RotationMatches`, image coordinates may be discarded to save memory.
+    Unlike :class:`RotationMatches`, image coordinates may be discarded to save memory.
     :meth:`predicted` returns world ray directions and :meth:`observed` is disabled.
     Exclusively for use with :class:`ObserverCameras`.
 
@@ -1792,11 +1792,10 @@ class Cameras(object):
             full: Whether to return the full result of `lmfit.Minimize()`.
             **kwargs: Additional arguments to `lmfit.minimize()`.
                 `self.scales` and `self.jac_sparsity` (if computed) are applied
-                to the following arguments if not provided:
-
-                    - `diag=self.scales` for `method='leastsq'`
-                    - `x_scale=self.scales` and `jac_sparsity=self.sparsity` for
-                    `method='least_squares'`
+                to the following arguments based on `method`:
+                `diag=self.scales` for 'leastsq' and
+                `x_scale=self.scales` and `jac_sparsity=self.sparsity`
+                for 'least_squares'.
 
         Returns:
             Parameter values ordered first
@@ -2082,10 +2081,12 @@ def ransac(
 
     Arguments:
         model: Object with the following attributes and methods.
+
             - `size`: Maximum sample size.
             - `fit(index)`: Accepts sample indices and returns model parameters.
             - `errors(params, index)`: Accepts sample indices and model parameters and
                 returns an error for each sample member.
+
         n: Size of sample used to fit the model in each iteration.
         max_error: Error below which a sample member is considered an inlier.
         min_inliers: Number of inliers (in addition to `n`) for a sample to be valid.
@@ -2178,6 +2179,7 @@ def detect_keypoints(
         array: 2 or 3-dimensional image array (cast to uint8).
         mask: Pixel regions in which to detect keypoints (cast to uint8).
         method: The keypoint detection algorithm to use.
+
             - 'sift': Scale-invariant feature transform (SIFT) by
                 Lowe 2004 (https://doi.org/10.1023/B:VISI.0000029664.99615.94.
                 Uses :class:`cv2.xfeatures2d.SIFT`
@@ -2186,6 +2188,7 @@ def detect_keypoints(
                 Bay et al. 2006 (https://doi.org/10.1016/j.cviu.2007.09.014).
                 Uses :class:`cv2.xfeatures2d.SURF`
                 (https://docs.opencv.org/4.1.1/d5/df7/classcv_1_1xfeatures2d_1_1SURF.html).
+
         root: Whether to return square-root L1-normalized descriptors, as described by
              Arandjelović & Zisserman 2012 (https://doi.org/10.1109/CVPR.2012.6248018).
         **kwargs: Additional arguments passed to

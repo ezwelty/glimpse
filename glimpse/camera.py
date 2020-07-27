@@ -1012,7 +1012,7 @@ class Camera:
 
         Raises:
             ValueError: `values` does not have same 2-d shape as `dem`.
-            ValueError: `mask` does not have the same 2-d shape as `dem.
+            ValueError: `mask` does not have the same 2-d shape as `dem`.
             ValueError: `values` is missing and `return_depth` is false.
 
         Example:

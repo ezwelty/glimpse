@@ -15,7 +15,7 @@ from .raster import Raster
 
 class Tracker(object):
     """
-    A `Tracker' estimates the trajectory of world points through time.
+    A `Tracker` estimates the trajectory of world points through time.
 
     Attributes:
         observers (list): Observer objects
@@ -467,9 +467,9 @@ class Tracker(object):
                 The histogram is computed before the low-pass filter.
 
         Returns:
-            array: Image tile
-            tuple (if `return_histogram = True`): Histogram (values, quantiles)
-                of image tile computed before the low-pass filter
+            Either an image tile or, if `return_histogram = True`,
+                a tuple with additionally a histogram (values, quantiles)
+                of the image tile computed before the low-pass filter.
         """
         tile = self.observers[obs].extract_tile(box=box, img=img)
         if tile.ndim > 2:
@@ -578,7 +578,7 @@ class Tracker(object):
 
 class Tracks(object):
     """
-    A `Tracks' contains the estimated trajectories of world points.
+    A `Tracks` contains the estimated trajectories of world points.
 
     In the array dimensions below, n: number of tracks, m: number of datetimes,
     p: number of particles.

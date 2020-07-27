@@ -45,7 +45,6 @@ flake8-black = "^0.2.0"
 uncertainties = "^3.1.4"
 flake8-annotations = "^2.1.0"
 mypy = "^0.780"
-xdoctest = "^0.12.0"
 coverage = {extras = ["toml"], version = "^5.1"}
 pytest-cov = "^2.10.0"
 typeguard = "^2.9.1"
@@ -64,4 +63,3 @@ show_missing = true
 [build-system]
 requires = ["poetry>=0.12"]
 build-backend = "poetry.masonry.api"
-

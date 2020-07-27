@@ -62,9 +62,9 @@ class Image:
         If all of these are provided, image metadata is not read, which is faster.
 
         >>> img = Image(
-        >>>     path,
-        >>>     cam={'imgsz': (800, 536), 'sensorsz': (23.6, 15.8), 'fmm': 20},
-        >>>     datetime=datetime.datetime(2014, 10, 13, 2, 3, 36, 280000))
+        ...     path,
+        ...     cam={'imgsz': (800, 536), 'sensorsz': (23.6, 15.8), 'fmm': 20},
+        ...     datetime=datetime.datetime(2014, 10, 13, 2, 3, 36, 280000))
         >>> img.exif is None
         True
 
@@ -246,9 +246,12 @@ class Image:
             >>> import matplotlib.pyplot as plt
             >>> img = Image('tests/AK10b_20141013_020336.JPG')
             >>> img.plot()
+            <matplotlib.image.AxesImage ...>
             >>> ax = plt.gca()
             >>> ax.set_xlim(0, 1)
+            (0.0, 1.0)
             >>> ax.set_ylim(1, 0)
+            (1.0, 0.0)
             >>> img.set_plot_limits()
             >>> ax.get_xlim() == (0, img.cam.imgsz[0])
             True
@@ -278,6 +281,7 @@ class Image:
             >>> cam.viewdir = (5, 4, 0)
             >>> I = img.project(cam, method="nearest")
             >>> plt.imshow(I)
+            <matplotlib.image.AxesImage ...>
             >>> plt.show()  #doctest: +SKIP
             >>> plt.close()
         """

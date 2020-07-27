@@ -403,6 +403,7 @@ class Camera:
             >>> cam.f[0] += 1
             >>> cam.reset()
             >>> cam.f[0] == 1
+            True
         """
         self._vector = self._original_vector.copy()
 
@@ -417,8 +418,8 @@ class Camera:
 
         Example:
             >>> cam = Camera(
-            >>>     xyz=(1, 2, 3), viewdir=(4, 5, 6), imgsz=(7, 8), f=(9, 10),
-            >>>     c=(11, 12), k=(13, 14, 15, 16, 17, 18), p=(19, 20))
+            ...     xyz=(1, 2, 3), viewdir=(4, 5, 6), imgsz=(7, 8), f=(9, 10),
+            ...     c=(11, 12), k=(13, 14, 15, 16, 17, 18), p=(19, 20))
             >>> cam.to_array()
             array([ 1.,  2.,  3.,  4.,  5.,  6.,  7.,  8.,  9., 10., 11., 12., 13.,
                    14., 15., 16., 17., 18., 19., 20.])

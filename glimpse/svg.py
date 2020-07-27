@@ -84,18 +84,18 @@ def read(
     Example:
         >>> import io
         >>> xml = '''
-        >>> <svg xmlns="http://www.w3.org/2000/svg">
-        >>>     <image width="6" height="4" />
-        >>>     <g id="gcp">
-        >>>         <circle id="flag" cx="1" cy="2" />
-        >>>         <circle id="cairn" cx="1.1" cy="1.5" />
-        >>>     </g>
-        >>>     <g id="horizon">
-        >>>         <path d="M 0,0 L 1,0" />
-        >>>         <path d="M 2,1 L 3,1" />
-        >>>     </g>
-        >>> </svg>
-        >>> '''
+        ... <svg xmlns="http://www.w3.org/2000/svg">
+        ...     <image width="6" height="4" />
+        ...     <g id="gcp">
+        ...         <circle id="flag" cx="1" cy="2" />
+        ...         <circle id="cairn" cx="1.1" cy="1.5" />
+        ...     </g>
+        ...     <g id="horizon">
+        ...         <path d="M 0,0 L 1,0" />
+        ...         <path d="M 2,1 L 3,1" />
+        ...     </g>
+        ... </svg>
+        ... '''
         >>> xy = read(io.StringIO(xml), key='id')
         >>> xy['gcp']
         {'flag': [(1, 2)], 'cairn': [(1.1, 1.5)]}
@@ -391,9 +391,9 @@ def write(
 
     Example:
         >>> children = (
-        >>>     path([(0, 0), (1, 1)], id='horizon'),
-        >>>     image(href='photo.jpeg', width=12, height=8)
-        >>> )
+        ...     path([(0, 0), (1, 1)], id='horizon'),
+        ...     image(href='photo.jpeg', width=12, height=8)
+        ... )
         >>> e = svg(*children)
         >>> print(write(e, indent=4))
         <svg height="8" width="12" xmlns=".../svg" xmlns:xlink=".../xlink">

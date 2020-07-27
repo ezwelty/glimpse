@@ -69,7 +69,7 @@ class Points:
         >>> import matplotlib.pyplot as plt
         >>> points.plot()
         {'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
-        >>> plt.show()  # doctest: SKIP
+        >>> plt.show()  # doctest: +SKIP
         >>> plt.close()
 
         In this case, the errors are symmetric and increasing from the image center,
@@ -271,7 +271,7 @@ class Lines(Points):
         {'observed': [<matplotlib.lines.Line2D ...>, <matplotlib.lines.Line2D ...>],
         'predicted': [<matplotlib.lines.Line2D ...>],
         'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
-        >>> plt.show()  # doctest: SKIP
+        >>> plt.show()  # doctest: +SKIP
         >>> plt.close()
 
         The errors all point straight down,
@@ -488,7 +488,7 @@ class Matches:
         >>> import matplotlib.pyplot as plt
         >>> matches.plot(scale=0.5)
         {'unselected': None, 'selected': <matplotlib.quiver.Quiver ...>}
-        >>> plt.show()  # doctest: SKIP
+        >>> plt.show()  # doctest: +SKIP
         >>> plt.close()
 
         The errors all point right. If we assume the first camera is fixed,
@@ -1009,8 +1009,7 @@ class Polynomial:
         The polynomial coefficients of the fit are now much closer to the ideal (1, 0).
 
         >>> params, inliers = ransac(
-        >>>     model, n=2, max_error=0.2, min_inliers=2, iterations=100
-        >>> )
+        ...     model, n=2, max_error=0.2, min_inliers=2, iterations=100)
         >>> inliers
         array([0, 1, 2, 3, 4])
         >>> params
@@ -1023,7 +1022,7 @@ class Polynomial:
         {'unselected': <matplotlib.collections.PathCollection ...>,
         'selected': <matplotlib.collections.PathCollection ...>, 
         'predicted': [<matplotlib.lines.Line2D ...>]}
-        >>> plt.show()  # doctest: SKIP
+        >>> plt.show()  # doctest: +SKIP
         >>> plt.close()
     """
 
@@ -1163,7 +1162,7 @@ class Cameras(object):
             each group (see :meth:`Cameras.parse_params`).
         weights (np.ndarray): Weights for each control point.
         scales (np.ndarray): Scale factors for each parameter (see `camera_scales()`).
-        sparsity (sparse matrix): Sparsity structure for the estimation of the
+        sparsity (scipy.sparse.spmatrix): Sparsity structure for the estimation of the
             Jacobian matrix.
         vectors (list of np.ndarray): Original camera vectors.
         params (lmfit.Parameters): Parameter initial values and bounds.
@@ -1289,10 +1288,10 @@ class Cameras(object):
         Example:
             >>> cams = [Camera(imgsz=100, f=10), Camera(imgsz=100, f=10)]
             >>> controls = [
-                    Points(cam=cams[0], uv=[(0, 0)], xyz=[(0, 0, 0)]),
-                    Lines(cam=cams[1], uvs=[[(0, 0)]], xyzs=[[(0, 0, 0)]]),
-                    Matches(cams=cams, uvs=[[(0, 0)], [(0, 0)]])
-                ]
+            ...     Points(cam=cams[0], uv=[(0, 0)], xyz=[(0, 0, 0)]),
+            ...     Lines(cam=cams[1], uvs=[[(0, 0)]], xyzs=[[(0, 0, 0)]]),
+            ...     Matches(cams=cams, uvs=[[(0, 0)], [(0, 0)]])
+            ... ]
             >>> Cameras.prune_controls(controls, cams)
             [<...Points...>, <...Lines...>, <...Matches...>]
             >>> Cameras.prune_controls(controls, cams[0:1])
@@ -1313,42 +1312,39 @@ class Cameras(object):
         """
         Return camera parameter scale factors.
 
-        These represent the estimated change in each variable in a camera vector needed
-        to displace the image coordinates of a feature by one pixel.
+        These represent the estimated change in each camera parameter needed
+        to displace the image coordinates of a point by one pixel.
 
         Arguments:
             cam: Camera object.
-            controls: World control (Points, Lines),
-                used to estimate impact of camera position (`cam.xyz`).
+            controls: World control (:class:`Points`, :class:`Lines`),
+                used to estimate the impact of changing camera position (`cam.xyz`).
         """
         # Compute pixels per unit change for each variable
         dpixels = np.ones(20, dtype=float)
         # Compute average distance from image center
-        # https://math.stackexchange.com/questions/15580/what-is-average-distance-from-center-of-square-to-some-point
+        # https://math.stackexchange.com/a/100823
         mean_r_uv = (cam.imgsz.mean() / 6) * (np.sqrt(2) + np.log(1 + np.sqrt(2)))
         mean_r_xy = mean_r_uv / cam.f.mean()
         # xyz (if f is not descaled)
         # Compute mean distance to world features
         if controls:
-            means = []
-            weights = []
+            xyz = []
             for control in controls:
                 if (
                     isinstance(control, (Points, Lines))
                     and cam is control.cam
                     and not control.directions
                 ):
-                    weights.append(control.size)
-                    if isinstance(control, Lines):
-                        means.append(
-                            np.linalg.norm(
-                                np.vstack(control.xyzs).mean(axis=0) - cam.xyz
-                            )
-                        )
-                    elif isinstance(control, Points):
-                        means.append(np.linalg.norm(control.xyz.mean(axis=0) - cam.xyz))
-            if means:
-                dpixels[0:3] = cam.f.mean() / np.average(means, weights=weights)
+                    if isinstance(control, Points):
+                        xyz.append(control.xyz)
+                    elif isinstance(control, Lines):
+                        xyz.extend(control.xyzs)
+            if xyz:
+                # NOTE: Upper bound (assumes motion perpendicular to feature direction)
+                dpixels[0:3] = (
+                    cam.f.mean() / np.linalg.norm(np.vstack(xyz) - cam.xyz).mean()
+                )
         # viewdir[0, 1]
         # First angle rotates camera left-right
         # Second angle rotates camera up-down
@@ -1359,30 +1355,32 @@ class Cameras(object):
         theta = np.pi / 180
         dpixels[5] = 2 * mean_r_uv * np.sin(theta / 2)  # pixels per degree
         # imgsz
+        # NOTE: Correct
         dpixels[6:8] = 0.5
         # f (if not descaled)
+        # NOTE: Correct for f += (1, 1), not f += (1, 0) or (0, 1)
         dpixels[8:10] = mean_r_xy
         # c
+        # NOTE: Correct
         dpixels[10:12] = 1
         # k (if f is not descaled)
         # Approximate at mean radius
-        # NOTE: Not clear why '2**power' terms are needed
         dpixels[12:18] = [
-            mean_r_xy ** 3 * cam.f.mean() * 2 ** (1.0 / 2),
-            mean_r_xy ** 5 * cam.f.mean() * 2 ** (3.0 / 2),
-            mean_r_xy ** 7 * cam.f.mean() * 2 ** (5.0 / 2),
+            mean_r_xy ** 3 * cam.f.mean() * 2 ** (1 / 2),
+            mean_r_xy ** 5 * cam.f.mean() * 2 ** (3 / 2),
+            mean_r_xy ** 7 * cam.f.mean() * 2 ** (5 / 2),
             mean_r_xy ** 3
             / (1 + cam.k[3] * mean_r_xy ** 2)
             * cam.f.mean()
-            * 2 ** (1.0 / 2),
+            * 2 ** (1 / 2),
             mean_r_xy ** 5
             / (1 + cam.k[4] * mean_r_xy ** 4)
             * cam.f.mean()
-            * 2 ** (3.0 / 2),
+            * 2 ** (3 / 2),
             mean_r_xy ** 7
             / (1 + cam.k[5] * mean_r_xy ** 6)
             * cam.f.mean()
-            * 2 ** (5.0 / 2),
+            * 2 ** (5 / 2),
         ]
         # p (if f is not descaled)
         # Approximate at mean radius at 45 degree angle
@@ -1813,7 +1811,7 @@ class Cameras(object):
             if self.scales is not None and "x_scale" not in kwargs:
                 kwargs["x_scale"] = self.scales
             if self.sparsity is not None and "jac_sparsity" not in kwargs:
-                if index == slice(None):
+                if isinstance(index, slice) and index == slice(None):
                     kwargs["jac_sparsity"] = self.sparsity
                 else:
                     if isinstance(index, slice):

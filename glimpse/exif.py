@@ -236,6 +236,7 @@ class Exif:
             >>> import shutil, tempfile
             >>> path = tempfile.NamedTemporaryFile().name
             >>> shutil.copy('tests/AK10b_20141013_020336.JPG', path)
+            '...'
             >>> # Read image exif
             >>> exif = Exif(path)
             >>> exif.iso

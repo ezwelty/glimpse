@@ -36,7 +36,7 @@ class Observer:
         datetimes: Sequence[datetime.datetime] = None,
         sigma: float = 0.3,
         cache: bool = True,
-    ):
+    ) -> None:
         if len(images) < 2:
             raise ValueError("Observer must have two or more images")
         self.xyz = images[0].cam.xyz

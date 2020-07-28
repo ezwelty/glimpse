@@ -84,7 +84,7 @@ class Points:
 
     def __init__(
         self, cam: Camera, uv: np.ndarray, xyz: np.ndarray, directions: bool = False,
-    ):
+    ) -> None:
         if len(uv) != len(xyz):
             raise ValueError("Image and world coordinates have different length")
         self.cam = cam
@@ -292,7 +292,7 @@ class Lines(Points):
         xyzs: Sequence[np.ndarray],
         directions: bool = False,
         density: float = 1,
-    ):
+    ) -> None:
         self.cam = cam
         self.uvs = [np.asarray(uv, dtype=float) for uv in uvs]
         self.uv = np.row_stack(self.uvs)
@@ -508,7 +508,7 @@ class Matches:
         cams: Sequence[Camera],
         uvs: Sequence[np.ndarray],
         weights: np.ndarray = None,
-    ):
+    ) -> None:
         self.cams = cams
         self.uvs = [np.asarray(uv, dtype=float) for uv in uvs]
         self.weights = weights
@@ -749,7 +749,7 @@ class RotationMatches(Matches):
         uvs: Sequence[np.ndarray] = None,
         xys: Sequence[np.ndarray] = None,
         weights: np.ndarray = None,
-    ):
+    ) -> None:
         self.cams = cams
         self.uvs, self.xys = self._initialize_uvs_xys(uvs, xys)
         self.uvs = self._build_uvs()
@@ -846,7 +846,7 @@ class RotationMatchesXY(RotationMatches):
         uvs: Sequence[np.ndarray] = None,
         xys: Sequence[np.ndarray] = None,
         weights: np.ndarray = None,
-    ):
+    ) -> None:
         self.cams = cams
         self.uvs, self.xyz = self._initialize_uvs_xys(uvs, xys)
         self.xys = self._build_xys()
@@ -941,7 +941,7 @@ class RotationMatchesXYZ(RotationMatchesXY):
         uvs: Sequence[np.ndarray] = None,
         xys: Sequence[np.ndarray] = None,
         weights: np.ndarray = None,
-    ):
+    ) -> None:
         super().__init__(cams=cams, uvs=uvs, xys=xys, weights=weights)
 
     def __dir__(self) -> list:
@@ -1026,7 +1026,7 @@ class Polynomial:
         >>> plt.close()
     """
 
-    def __init__(self, xy: np.ndarray, deg: int = 1):
+    def __init__(self, xy: np.ndarray, deg: int = 1) -> None:
         self.xy = np.asarray(xy)
         self.deg = deg
 

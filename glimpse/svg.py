@@ -417,7 +417,7 @@ class Points:
         xy: Point coordinates [(x, y), ...]
     """
 
-    def __init__(self, xy: Coordinates):
+    def __init__(self, xy: Coordinates) -> None:
         self.xy = xy
 
     def closed(self) -> bool:

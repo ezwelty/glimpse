@@ -4,11 +4,13 @@ select = ANN, BLK, C, D, DAR, E, F, I, W
 # ANN102: Missing type annotation for cls in classmethod
 # D107: Missing docstring in __init__
 # D212: Multi-line docstring summary should start at the first line
+# DAR101 Missing parameter(s) in Docstring
+# (see https://github.com/terrencepreilly/darglint/issues/120)
 # DAR201 Missing "Returns" in Docstring
 # DAR402 Excess exception(s) in Raises section
 # E203 whitespace before ':'
 # W503 line break before binary operator
-ignore = ANN101, ANN102, DAR201, DAR402, D107, D212, E203, W503
+ignore = ANN101, ANN102, DAR101, DAR201, DAR402, D107, D212, E203, W503
 max-line-length = 88
 docstring-convention = google
 import-order-style = google

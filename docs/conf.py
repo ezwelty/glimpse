@@ -40,7 +40,7 @@ napoleon_use_rtype = True
 
 autoclass_content = "class"
 autodoc_member_order = "bysource"
-autodoc_default_flags = {"members": True}
+autodoc_typehints = "description"
 
 # -- Matplotlib configuration -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html

@@ -87,7 +87,7 @@ class Image:
         cam: Union[dict, Camera] = None,
         datetime: datetime.datetime = None,
         exif: Exif = None,
-    ) -> None:
+    ):
         self.path = path
         if not cam:
             cam = {}

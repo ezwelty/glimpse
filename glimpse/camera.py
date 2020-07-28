@@ -87,7 +87,7 @@ class Camera:
         xyz: Vector = (0, 0, 0),
         viewdir: Vector = (0, 0, 0),
         correction: Union[bool, dict] = False,
-    ) -> None:
+    ):
         if (fmm is not None or cmm is not None) and sensorsz is None:
             raise ValueError("Attributes in mm (fmm, cmm) provided without sensor size")
         if f is not None and fmm is not None:

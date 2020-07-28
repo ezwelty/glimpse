@@ -38,7 +38,7 @@ class MatlabCamera:
         cc: Tuple[float, float] = None,
         kc: Tuple[float, float, float, float, float] = (0, 0, 0, 0, 0),
         alpha_c: float = 0,
-    ) -> None:
+    ):
         self.imgsz = imgsz
         self.fc = fc
         if cc is None:
@@ -239,7 +239,7 @@ class AgisoftCamera:
         p2: float = 0,
         b1: float = 0,
         b2: float = 0,
-    ) -> None:
+    ):
         self.imgsz = imgsz
         self.f = f
         self.cx, self.cy = cx, cy
@@ -462,7 +462,7 @@ class OpenCVCamera:
         s2: float = 0,
         s3: float = 0,
         s4: float = 0,
-    ) -> None:
+    ):
         self.imgsz = imgsz
         self.fx, self.fy = fx, fy
         self.cx = imgsz[0] / 2 if cx is None else cx
@@ -699,7 +699,7 @@ class PhotoModelerCamera:
         k3: float = 0,
         p1: float = 0,
         p2: float = 0,
-    ) -> None:
+    ):
         self.imgsz = imgsz
         self.focal = focal
         self.xp, self.yp = xp, yp
@@ -919,7 +919,7 @@ class Converter:
 
     def __init__(
         self, xcam: ExternalCamera, cam: Camera, uv: Union[np.ndarray, int] = 1000
-    ) -> None:
+    ):
         if any(xcam.imgsz != cam.imgsz):
             raise ValueError("Cameras have different image sizes.")
         self.xcam = xcam

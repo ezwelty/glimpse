@@ -81,7 +81,7 @@ class Exif:
             their article https://dpreview.com/articles/8095816568/sensorsizes.
     """
 
-    def __init__(self, path: str, thumbnail: bool = False) -> None:
+    def __init__(self, path: str, thumbnail: bool = False):
         self.tags = piexif.load(path, key_is_name=True)
         if not thumbnail:
             self.tags.pop("thumbnail", None)

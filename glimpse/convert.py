@@ -106,22 +106,22 @@ class MatlabCamera:
         **kwargs: Any,
     ) -> "MatlabCamera":
         """
-        Convert from :class:`Camera` object.
+        Convert from :class:`~glimpse.Camera` object.
 
         Arguments:
             cam: Camera object.
             optimize: Whether and which :class:`MatlabCamera` parameters to optimize to
-                minimize the residuals between the cameras. If `Camera.k[3:6]` are zero,
+                minimize the residuals between the cameras. If `cam.k[3:6]` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
 
                     - If `True`, optimizes :attr:`kc`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
         """
         xcam = cls._from_camera_initial(cam)
         if not optimize or (cam.k[3:6] == 0).all():
@@ -173,24 +173,26 @@ class MatlabCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to :class:`Camera` object.
+        Convert to :class:`~glimpse.Camera` object.
 
         Arguments:
             optimize: Whether and which :class:`Camera` parameters to optimize to
                 minimize the residuals between the cameras. If :attr:`alpha_c` is zero,
                 the conversion is exact and no optimization is performed. Otherwise:
 
-                    - If `True`, optimizes `Camera.f`, `c`, `k`, and `p`.
+                    - If `True`, optimizes :attr:`~glimpse.Camera.f`,
+                      :attr:`~glimpse.Camera.c`, :attr:`~glimpse.Camera.k`,
+                      and :attr:`~glimpse.Camera.p`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Returns:
-            Exact or best-fitting Camera object.
+            Exact or best-fitting :class:`Camera`.
         """
         cam = self._to_camera_initial()
         if not optimize or not self.alpha_c:
@@ -309,22 +311,22 @@ class AgisoftCamera:
         **kwargs: Any,
     ) -> "AgisoftCamera":
         """
-        Convert from :class:`Camera` object.
+        Convert from :class:`~glimpse.Camera` object.
 
         Arguments:
             cam: Camera object.
             optimize: Whether and which :class:`AgisoftCamera` parameters to optimize to
-                minimize the residuals between the cameras. If `Camera.k[3:6]` are zero,
+                minimize the residuals between the cameras. If `cam.k[3:6]` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
 
                     - If `True`, optimizes :attr:`k1`, :attr:`k2`, and :attr:`k3`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
         """
         xcam = cls._from_camera_initial(cam)
         if not optimize or (cam.k[3:6] == 0).all():
@@ -375,23 +377,25 @@ class AgisoftCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to :class:`Camera` object.
+        Convert to :class:`~glimpse.Camera` object.
 
         Arguments:
-            optimize: Whether and which :class:`Camera` parameters to optimize to
-                minimize the residuals between the cameras. If :attr:`k4` and :attr:`b2`
-                are zero, the conversion is exact and no optimization is performed.
+            optimize: Whether and which :class:`~glimpse.Camera` parameters to optimize
+                to minimize the residuals between the cameras.
+                If :attr:`k4` and :attr:`b2` are zero,
+                the conversion is exact and no optimization is performed.
                 Otherwise:
 
-                    - If `True`, optimizes `Camera.k` if :attr:`k4` is non-zero and
-                        `Camera.f`, `c`, and `k` if :attr:`b2` is non-zero.
+                    - If `True`, optimizes :attr:`~glimpse.Camera.k` if :attr:`k4` is
+                        non-zero and :attr:`~glimpse.Camera.f`, :attr:`~glimpse.Camera.c`,
+                        and :attr:`~glimpse.Camera.k` if :attr:`b2` is non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Returns:
             Exact or best-fitting Camera object.
@@ -584,13 +588,13 @@ class OpenCVCamera:
     @classmethod
     def from_camera(cls, cam: Camera) -> "OpenCVCamera":
         """
-        Convert from :class:`Camera` object.
+        Convert from :class:`~glimpse.Camera` object.
 
-        Since the OpenCV camera model is a superset of the glimpse camera model,
-        the conversion is exact and no optimization is needed.
+        Since the OpenCV camera model is a superset of the :class:`~glimpse.Camera`
+        model, the conversion is exact and no optimization is needed.
 
         Arguments:
-            cam: Camera object.
+            cam: :class:`~glimpse.Camera` object.
         """
         return cls._from_camera_initial(cam)
 
@@ -639,14 +643,15 @@ class OpenCVCamera:
                 :attr:`s3`, and :attr:`s4` are zero, the conversion is exact and
                 no optimization is performed. Otherwise:
 
-                    - If `True`, optimizes `Camera.k` and `p`.
+                    - If `True`, optimizes :attr:`~glimpse.Camera.k` and
+                      :attr:`~glimpse.Camera.p`.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Returns:
             Exact or best-fitting Camera object.
@@ -759,29 +764,27 @@ class PhotoModelerCamera:
         **kwargs: Any,
     ) -> "PhotoModelerCamera":
         """
-        Convert from :class:`Camera` object.
-
-        `Camera.sensorsz` is required.
+        Convert from :class:`~glimpse.Camera` object.
 
         Arguments:
-            cam: Camera object.
+            cam: Camera object with `cam.sensorsz`.
             optimize: Whether and which :class:`PhotoModelerCamera` parameters to
-                optimize to minimize the residuals between the cameras. If `Camera.fmm`
-                are equal and all `Camera.k` and `Camera.p` are zero,
+                optimize to minimize the residuals between the cameras. If `cam.fmm`
+                are equal and all `cam.k` and `cam.p` are zero,
                 the conversion is exact and no optimization is performed. Otherwise:
 
                     - If `True`, optimizes :attr:`focal`, :attr:`fw`, :attr:`fh`,
-                        :attr:`xp`, and :attr:`yp` if `Camera.fmm` are not equal,
-                        :attr:`k1`, :attr:`k2`, and :attr:`k3` if any `Camera.k`
-                        are non-zero,
-                        and :attr:`p1` and :attr:`p2` if any `Camera.p` are non-zero.
+                      :attr:`xp`, and :attr:`yp` if `cam.fmm` are not equal,
+                      :attr:`k1`, :attr:`k2`, and :attr:`k3` if any `cam.k`
+                      are non-zero,
+                      and :attr:`p1` and :attr:`p2` if any `cam.p` are non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Raises:
             ValueError: Camera does not have a sensor size.
@@ -849,24 +852,25 @@ class PhotoModelerCamera:
         **kwargs: Any,
     ) -> Camera:
         """
-        Convert to :class:`Camera` object.
+        Convert to :class:`~glimpse.Camera` object.
 
         Arguments:
-            optimize: Whether and which :class:`Camera` parameters to optimize to
-                minimize the residuals between the cameras. If :attr:`k1`, :attr:`k2`,
-                :attr:`k3`, :attr:`p1`, and :attr:`p2` is zero,
-                the conversion is exact and no optimization is performed. Otherwise:
+            optimize: Whether and which :class:`~glimpse.Camera` parameters to optimize
+                to minimize the residuals between the cameras.
+                If :attr:`k1`, :attr:`k2`, :attr:`k3`, :attr:`p1`, and :attr:`p2` is
+                zero, the conversion is exact and no optimization is performed.
+                Otherwise:
 
-                    - If `True`, optimizes `Camera.k` if :attr:`k1`, :attr:`k2`, or
-                        :attr:`k3` is non-zero, and `Camera.p` if :attr:`p1` or
-                        :attr:`p2` is non-zero.
+                    - If `True`, optimizes :attr:`~glimpse.Camera.k` if :attr:`k1`,
+                      :attr:`k2`, or :attr:`k3` is non-zero,
+                      and `~glimpse.Camera.p` if :attr:`p1` or :attr:`p2` is non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
-                        format as `Converter.optimize_cam()`.
+                      format as :meth:`Converter.optimize_cam`.
 
             uv: Image point coordinates or number of evenly-spaced image points (int)
                 at which to compute the residuals between the cameras.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Returns:
             Exact or best-fitting Camera object.
@@ -888,7 +892,6 @@ class PhotoModelerCamera:
 
 
 ExternalCamera = Union[MatlabCamera, AgisoftCamera, OpenCVCamera, PhotoModelerCamera]
-InverseCamera = Union[PhotoModelerCamera]
 
 
 class Converter:
@@ -941,17 +944,17 @@ class Converter:
         """
         Returns the image coordinate residuals between the two cameras.
 
-        Residuals are calculated as `:attr:cam` - `:attr:xcam`. For `:attr:xcam` with an
-        outgoing distortion model, the original points `:attr:uv` are projected out of
-        `:attr:xcam` and into `:attr:cam`. For `:attr:xcam` with an incoming distortion
-        model, the original points `:attr:uv` are inverse projected out of `:attr:cam`
+        Residuals are calculated as :attr:`cam` - :attr:`xcam`. For :attr:`xcam` with an
+        outgoing distortion model, the original points :attr:`uv` are projected out of
+        :attr:`xcam` and into :attr:`cam`. For :attr:`xcam` with an incoming distortion
+        model, the original points :attr:`uv` are inverse projected out of :attr:`cam`
         (a numerical estimate that is not exact if distortion coefficients are large),
-        then projected into both `:attr:cam` and `:attr:xcam`.
+        then projected into both :attr:`cam` and :attr:`xcam`.
 
         Returns:
             numpy.ndarray: Image coordinate residuals (n, 2).
         """
-        if isinstance(self.xcam, InverseCamera):
+        if isinstance(self.xcam, PhotoModelerCamera):
             # Project out of xcam and into cam
             return self.cam._xy_to_uv(self.xcam._uv_to_xy(self.uv)) - self.uv
         # Inverse project out of cam, then into both cam and xcam
@@ -961,14 +964,16 @@ class Converter:
 
     def optimize_cam(self, params: Parameters, **kwargs: Any) -> None:
         """
-        Optimize `:attr:cam` parameters to best fit `:attr:xcam`.
+        Optimize :attr:`cam` parameters to best fit :attr:`xcam`.
 
         Arguments:
             params: Parameters to optimize by name and indices. For example:
+
                 - {'viewdir': True} : All `viewdir` elements
                 - {'viewdir': 0} : First `viewdir` element
                 - {'viewdir': [0, 1]} : First and second `viewdir` elements
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
         """
         mask, _ = optimize.Cameras.parse_params(params)
 
@@ -981,11 +986,11 @@ class Converter:
 
     def optimize_xcam(self, params: Parameters, **kwargs: Any) -> None:
         """
-        Optimize `:attr:xcam` parameters to best fit `:attr:cam`.
+        Optimize :attr:`xcam` parameters to best fit :attr:`cam`.
 
         Arguments:
-            params: Same as in `optimize_cam()`.
-            **kwargs: Optional arguments to `scipy.optimize.least_squares()`.
+            params: Same as in :meth:`optimize_cam`.
+            **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
         """
         # Drop empty params and normalize value as a numpy index
         indices = {k: slice(None) if v is True else v for k, v in params.items() if v}
@@ -1014,13 +1019,13 @@ class Converter:
         """
         Plot image reprojection errors as quivers.
 
-        Quivers point from `:attr:xcam` image coordinates to `:attr:cam` image
+        Quivers point from :attr:`xcam` image coordinates to :attr:`cam` image
         coordinates.
 
         Arguments:
             **kwargs: Arguments to matplotlib.pyplot.quiver. Defaults to
-                {"scale": 1, "width": 5, "color": "red", "scale_units": "xy",
-                "angles": "xy", "units": "xy"}.
+                `{'scale': 1, 'width': 5, 'color': 'red', 'scale_units': 'xy',
+                'angles': 'xy', 'units': 'xy'}`.
         """
         kwargs = {
             "scale": 1,

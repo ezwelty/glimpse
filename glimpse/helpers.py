@@ -124,7 +124,7 @@ def numpy_to_native(x: Any) -> Any:
     Convert numpy or native type to native type.
 
     Converts numpy types to native type,
-    while leaving other objects (without `tolist()` method) unchanged.
+    while leaving other objects (without :meth:`numpy.ndarray.tolist` method) unchanged.
     """
     # https://stackoverflow.com/a/42923092
     return getattr(x, "tolist", lambda: x)()
@@ -170,7 +170,8 @@ def as_array(a, dtype=None):
     """
     Return object as array.
 
-    Equivalent to `np.asarray()` but faster if already an array or already `dtype`.
+    Equivalent to :func:`numpy.asarray` but faster if already an array or already
+    `dtype`.
 
     Arguments:
         a (array-like): Input data
@@ -305,7 +306,7 @@ def weighted_nanstd(a, weights, axis=None, means=None):
         axis: Axis (int) or axes (iterable) along which to compute standard
             deviation
         means (array-like): Means computed over the same `axis`.
-            If `None`, computed with `weighted_nanmean()`.
+            If `None`, computed with :func:`weighted_nanmean`.
     """
     a = np.asarray(a)
     weights = np.asarray(weights)
@@ -362,7 +363,7 @@ def read_pickle(path, gz=False, binary=True, **kwargs):
         path (str): Path to file
         gz (bool): Whether pickle is gzip compressed
         binary (bool): Whether pickle is binary
-        **kwargs: Arguments to `pickle.load()`
+        **kwargs: Arguments to :func:`pickle.load`.
     """
     mode = "rb" if binary else "r"
     if gz:
@@ -394,7 +395,7 @@ def read_json(path, **kwargs):
 
     Arguments:
         path (str): Path to file
-        **kwargs: Additional arguments passed to `json.load()`
+        **kwargs: Additional arguments passed to :func:`json.load`.
     """
     with open(path, mode="r") as fp:
         return json.load(fp, **kwargs)
@@ -410,7 +411,7 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
         flat_arrays (bool): Whether to flatten json arrays to a single line.
             By default, `json.dumps` puts each array element on a new line if
             `indent` is `0` or greater.
-        **kwargs: Additional arguments passed to `json.dumps()`
+        **kwargs: Additional arguments passed to :func:`json.dumps`.
     """
     txt = json.dumps(obj, **kwargs)
     if flat_arrays and kwargs.get("indent") >= 0:
@@ -476,7 +477,7 @@ def gaussian_filter(array, mask=None, fill=False, **kwargs):
             If `None`, all cells are included.
         fill (bool): Whether to fill cells excluded by `mask` with interpolated values
         **kwargs (dict): Additional arguments to
-            `scipy.ndimage.filters.gaussian_filter()`
+            :func:`scipy.ndimage.filters.gaussian_filter`.
     """
     if mask is None:
         return scipy.ndimage.filters.gaussian_filter(array, **kwargs)
@@ -504,7 +505,7 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
             If `None`, all cells are included.
         fill (bool): Whether to fill cells excluded by `mask` with interpolated values
         **kwargs (dict): Additional arguments to
-            `scipy.ndimage.filters.maximum_filter()`
+            :func:`scipy.ndimage.filters.maximum_filter`.
     """
     if mask is None:
         return scipy.ndimage.filters.maximum_filter(array, **kwargs)
@@ -534,8 +535,8 @@ def median_filter(array, mask=None, fill=False, **kwargs):
             If `None`, all cells are included.
         fill (bool): Whether to fill cells excluded by `mask` with interpolated values
         **kwargs (dict): Additional arguments to either
-            `scipy.ndimage.filters.median_filter` (`mask` is False) or
-            `scipy.ndimage.filters.generic_filter()`
+            :func:`scipy.ndimage.filters.median_filter` (`mask` is False) or
+            :func:`scipy.ndimage.filters.generic_filter`.
     """
     if mask is None:
         return scipy.ndimage.filters.median_filter(array, **kwargs)
@@ -627,7 +628,7 @@ def compute_cdf(array, return_inverse=False):
             - array: Sorted unique values
             - array: Quantile of each value in `values`
             - array (optional): Indices of `values` which reconstruct `array`.
-                Only returned if `return_inverse=True`.
+              Only returned if `return_inverse=True`.
     """
     results = np.unique(array, return_inverse=return_inverse, return_counts=True)
     # Normalize cumulative sum of counts by the number of pixels
@@ -688,8 +689,8 @@ def sp_transform(points, current, target):
     """
     Transform points between spatial coordinate systems.
 
-    Coordinate systems can be specified either as an EPSG code (int),
-    arguments to `pyproj.Proj()` (dict), or `pyproj.Proj`.
+    Coordinate systems can be specified either as an EPSG code (int) or
+    arguments (dict) or instance of :class:`pyproj.proj.Proj`.
 
     Arguments:
         points (array): Point coordinates [[x, y(, z)]]
@@ -728,7 +729,7 @@ def read_geojson(path, key=None, crs=None, **kwargs):
             Assumes GeoJSON coordinates are WGS 84
             [Longitude (degrees), Latitude (degrees), Height above ellipsoid (meters)].
             If `None`, coordinates are unchanged.
-        kwargs (dict): Additional arguments passed to `read_json()`
+        kwargs (dict): Additional arguments passed to :func:`read_json`.
     """
     obj = read_json(path, **kwargs)
     apply_geojson_coords(obj, np.atleast_2d)
@@ -751,7 +752,7 @@ def write_geojson(obj, path=None, crs=None, decimals=None, **kwargs):
         crs: Current coordinate system for transformation to WGS 84
             [Longitude (degrees), Latitude (degrees), Height above ellipsoid (meters)].
             If `None`, coordinates are unchanged.
-        kwargs (dict): Additional arguments passed to `write_json()`
+        kwargs (dict): Additional arguments passed to :func:`write_json`.
     """
 
     def round_coords(coords, decimals):
@@ -1404,9 +1405,8 @@ def pairwise_distance(x, y, metric="sqeuclidean", **params):
     Arguments:
         x (iterable): First set of n-d points
         y (iterable): Second set of n-d points
-        metric (str): Distance metric.
-            See `scipy.spatial.distance.cdist()`.
-        **params (dict): Additional arguments to `scipy.spatial.distance.cdist()`
+        metric (str): Distance metric. See :func:`scipy.spatial.distance.cdist`.
+        **params (dict): Additional arguments to :func:`scipy.spatial.distance.cdist`.
 
     Returns:
         array: Pairwise distances, where [i, j] = distance(x[i], y[j])
@@ -1591,7 +1591,7 @@ def polygon_to_grid_points(polygon, holes=None, **params):
     Arguments:
         polygon (iterable): Polygon vertices
         holes (iterable): Polygons representing holes in `polygon`
-        **params (dict): Arguments passed to `box_to_grid()`
+        **params (dict): Arguments passed to :func:`box_to_grid`.
     """
     box = bounding_box(polygon)
     grid = box_to_grid(box, mode="grids", **params)
@@ -1830,7 +1830,7 @@ def pairwise_distance_datetimes(x, y):
     """
     Return the pairwise distances between two sets of datetimes.
 
-    Datetime wrapper for `pairwise_distance()`.
+    Datetime wrapper for :func:`pairwise_distance`.
 
     Arguments:
         x (iterable): Datetime objects
@@ -1870,7 +1870,7 @@ def interpolate_line_datetimes(vertices, x, xi=None, n=None, dx=None, **kwargs):
             (ignored if `xi` is not `None`)
         dx (timedelta): Nominal timedelta between evenly-spaced points
             (ignored if `xi` or `n` is not `None`)
-        **kwargs (dict): Additional arguments passed to `interpolate_line()`
+        **kwargs (dict): Additional arguments passed to :func:`interpolate_line`.
     """
     t0 = x[0]
     x = np.asarray([(t - t0).total_seconds() for t in x])

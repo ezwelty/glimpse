@@ -1447,24 +1447,23 @@ class Cameras(object):
         Arguments:
             params: Parameters to select by name and indices. For example:
 
-                - {'viewdir': True} : All `viewdir` elements
-                - {'viewdir': 0} : First `viewdir` element
-                - {'viewdir': [0, 1]} : First and second `viewdir` elements
+                    - {'viewdir': True} : All `viewdir` elements
+                    - {'viewdir': 0} : First `viewdir` element
+                    - {'viewdir': [0, 1]} : First and second `viewdir` elements
 
                 Bounds can be specified inside a tuple (indices, min, max).
                 Singletons are expanded as needed, and `np.inf` with the
                 appropriate sign can be used to indicate no bound:
 
-                - {'viewdir': ([0, 1], -np.inf, 180)}
-                - {'viewdir': ([0, 1], -np.inf, [180, 180])}
+                    - {'viewdir': ([0, 1], -np.inf, 180)}
+                    - {'viewdir': ([0, 1], -np.inf, [180, 180])}
 
                 `None` or `np.nan` may also be used. These are replaced by the
                 values in `default_bounds` (for example, from `camera_bounds()`),
                 or (-)`np.inf` if `None`.
 
         Returns:
-            np.ndarray: Parameter boolean mask (20, )
-            np.ndarray: Parameter min and max bounds (20, 2)
+            Parameter boolean mask (20, ) and parameter min and max bounds (20, 2).
         """
         if params is None:
             params = {}
@@ -2290,10 +2289,10 @@ class KeypointMatcher(object):
     """
     `KeypointMatcher` detects and matches image keypoints.
 
-        - Build (and save to file) keypoint descriptors for each image with
-            `self.build_keypoints()`.
-        - Build (and save to file) keypoints matches between image pairs with
-            `self.build_matches()`.
+    - Build (and save to file) keypoint descriptors for each image with
+        `self.build_keypoints()`.
+    - Build (and save to file) keypoints matches between image pairs with
+        `self.build_matches()`.
 
     Arguments:
         clahe: Arguments to `cv2.createCLAHE()` (dict: clipLimit, tileGridSize)

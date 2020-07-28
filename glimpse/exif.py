@@ -63,8 +63,7 @@ class Exif:
                 - `GPS` (GPS IFD): Position and trajectory
                 - `Interop` (Interoperability IFD): Compatibility
 
-            The thumbnail image, if present,
-            is stored as :py:class:`bytes` in`thumbnail`.
+            The thumbnail image, if present, is stored as :class:`bytes` in`thumbnail`.
         imgsz (Tuple[int, int]): Image size in pixels (nx, ny).
             Parsed from `PixelXDimension` and `PixelYDimension`.
         datetime (datetime.datetime): Capture date and time.

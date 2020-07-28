@@ -20,7 +20,7 @@ class Image:
     Arguments:
         path: Path to image file.
         cam: :class:`Camera` or arguments passed to :class:`Camera`.
-            If missing, 'imgsz', 'fmm', and 'sensorsz' are read from **exif**.
+            If missing, `imgsz`, `fmm`, and `sensorsz` are read from **exif**.
         datetime: Image capture date and time. If `None`, read from **exif**.
         exif: Image metadata. If `None` and needed for **cam** or **datetime**,
             read from **path**.
@@ -127,13 +127,13 @@ class Image:
         Read image data from file.
 
         The image is resized as needed to the camera image size
-        (:attr:`cam.imgsz`). The result is cached (:attr:`I`) and reused only if
+        (:attr:`cam`.imgsz). The result is cached (:attr:`I`) and reused only if
         it matches the camera image size. To clear the cache, set :attr:`I` to
         `None`.
 
         Arguments:
             box: Crop extent in image coordinates (left, top, right, bottom)
-                relative to :attr:`cam.imgsz`. If `None`, the full image is returned.
+                relative to :attr:`cam`.imgsz. If `None`, the full image is returned.
             cache: Whether to cache image values.
                 If `True`, the region is extracted from the cached image.
                 If `False`, the region is extracted directly from the file
@@ -224,7 +224,7 @@ class Image:
         upper-left pixel at (0, 0).
 
         Arguments:
-            **kwargs: Arguments passed to `matplotlib.pyplot.imshow`.
+            **kwargs: Arguments passed to :func:`matplotlib.pyplot.imshow`.
 
         Example:
             >>> import matplotlib.pyplot as plt

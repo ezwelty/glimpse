@@ -26,10 +26,10 @@ class Camera:
 
     By default, cameras are initialized at the origin (0, 0, 0), parallel with the
     horizon (xy-plane), and pointed north (+y). All attributes are coerced to
-    `numpy.ndarray` during initialization or when individually set. The focal length in
-    pixels (:attr:`f`) is calculated from :attr:`fmm` and :attr:`sensorsz` if both are
-    provided. The principal point offset in pixels (:attr:`c`) is calculated from
-    :attr:`cmm` and :attr:`sensorsz` if both are provided.
+    :class:`numpy.ndarray` during initialization or when individually set. The focal
+    length in pixels (:attr:`f`) is calculated from :attr:`fmm` and :attr:`sensorsz` if
+    both are provided. The principal point offset in pixels (:attr:`c`) is calculated
+    from :attr:`cmm` and :attr:`sensorsz` if both are provided.
 
     Attributes:
         xyz (numpy.ndarray): Position in world coordinates (x, y, z)
@@ -55,16 +55,16 @@ class Camera:
         Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
-        correction (bool or dict): Whether or how to apply elevation corrections for
+        correction (Union[bool, dict]): Whether or how to apply elevation corrections for
             surface curvature and atmospheric refraction when projecting absolute world
             coordinates to image coordinates. Either `False` to skip,
             `True` for default arguments, or a dictionary of custom arguments:
 
                 - radius (float): Radius of curvature in the same units as :attr:`xyz`.
-                    Default (6.3781e6 m) is the Earth's equatorial radius in meters.
+                  Default (6.3781e6 m) is the Earth's equatorial radius in meters.
                 - refraction (float): Coefficient of refraction of light.
-                    Default (0.13) is an average for standard Earth atmospheric
-                    conditions.
+                  Default (0.13) is an average for standard Earth atmospheric
+                  conditions.
 
     Raises:
         ValueError: Image size is not integer.
@@ -341,7 +341,7 @@ class Camera:
                 These override any parameters read from **path**.
 
         Returns:
-            A :class:`Camera` object
+            A :class:`Camera` object.
         """
         json_args = helpers.read_json(path)
         for key in json_args:
@@ -463,11 +463,11 @@ class Camera:
             path: Path of file to write to.
                 If `None`, a JSON-formatted string is returned.
             attributes: Attributes to include.
-            **kwargs: Additional arguments to :func:`helpers.write_json()`
+            **kwargs: Additional arguments to :func:`helpers.write_json`.
 
         Returns:
             Attribute names and values as a JSON-formatted string,
-                or `None` if **path** is specified.
+            or `None` if **path** is specified.
 
         Example:
             >>> cam = Camera(imgsz=(8, 6), f=(7.9, 6.1))
@@ -706,6 +706,7 @@ class Camera:
             step: Grid spacing for all (float) or each (iterable) dimension.
             snap: Point (x, y) to align grid to.
             mode: Return format:
+
                 - 'vectors' (tuple of np.ndarray): x (nx, ) and y (ny, ) coordinates
                 - 'grids' (tuple of np.ndarray): x (ny, nx) and y (ny, nx) coordinates
                 - 'points' (np.ndarray): x, y coordinates (ny * nx, [x, y])
@@ -861,7 +862,7 @@ class Camera:
 
         Returns:
             Image of aggregated values of the same dimensions as :attr:`imgsz` (ny, nx).
-                Pixels without points are NaN.
+            Pixels without points are NaN.
 
         Example:
             >>> cam = Camera(imgsz=(3, 2), f=1)
@@ -894,8 +895,8 @@ class Camera:
 
         Returns:
             World coordinates (n, [x, y, z]),
-                either absolute (if distances were provided)
-                or relative (if distances were not).
+            either absolute (if distances were provided)
+            or relative (if distances were not).
 
         Example:
             >>> cam = Camera(imgsz=1, f=1, xyz=(0, 0, 0))
@@ -935,6 +936,7 @@ class Camera:
 
         Returns:
             Spherical coordinates (n, [azimuth, altitude(, distance)]).
+
                 - azimuth: Degrees clockwise from north (+y).
                 - altitude: Degrees above horizon (xy-plane).
                 - distance: Distance from camera (only if `directions` is False).
@@ -978,11 +980,11 @@ class Camera:
         """
         Return an image simulated from a digital elevation model.
 
-        If `parallel` is True and inputs are large, ensure that `dem`, `values`,
-        and `mask` are in shared memory (see `sharedmem.copy()`).
+        If `parallel` is `True` and inputs are large, ensure that `dem`, `values`,
+        and `mask` are in shared memory (see :func:`sharedmem.copy`).
 
         Arguments:
-            dem: `Raster` object containing elevations.
+            dem: :class:`Raster` object containing elevations.
             values: Values to use in building the image.
                 Must have the same 2-dimensional shape as `dem.Z` but can have
                 multiple layers stacked along the 3rd dimension.
@@ -995,20 +997,20 @@ class Camera:
             scale: Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
             scale_limits: Min and max values of `scale`.
-            aggregate: Passed as `func` to `pandas.DataFrame.aggregate()`
+            aggregate: Passed as `func` to :meth:`pandas.DataFrame.aggregate`
                 to aggregate values projected onto the same image pixel.
                 Each layer of `values`, and depth if `return_depth` is True,
                 are named by their integer position in the stack (e.g. 0, 1, ...).
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
-                defaults to `os.cpu_count()`.
+                defaults to :func:`os.cpu_count`.
             return_depth: Whether to return a depth map - the distance of the
                 `dem` surface measured along the camera's optical axis.
 
         Returns:
-            Array with 2-dimensional shape (`self.imgsz[1]`, `self.imgsz[0]`)
-                and 3rd dimension corresponding to each layer in `values`.
-                If `return_depth` is True, it is appended as an additional layer.
+            Array with 2-dimensional shape (:attr:`imgsz`[1], :attr:`imgsz`[0])
+            and 3rd dimension corresponding to each layer in `values`.
+            If `return_depth` is True, it is appended as an additional layer.
 
         Raises:
             ValueError: `values` does not have same 2-d shape as `dem`.

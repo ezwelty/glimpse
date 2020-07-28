@@ -73,6 +73,8 @@ intersphinx_mapping = {
     "matplotlib": ("http://matplotlib.sourceforge.net/", None),
     "piexif": ("https://piexif.readthedocs.io/en/latest/", None),
     "PIL": ("https://pillow.readthedocs.io/en/stable/", None),
+    "sharedmem": ("http://rainwoodman.github.io/sharedmem/", None),
+    "pyproj": ("http://pyproj4.github.io/pyproj/stable/", None),
 }
 
 autosummary_generate = True

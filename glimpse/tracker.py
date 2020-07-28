@@ -93,7 +93,7 @@ class Tracker(object):
 
         Arguments:
             mean (iterable): Weighted particle mean. If `None`, it is computed
-                by `self.particle_mean`.
+                by :attr:`particle_mean`.
         """
         if mean is None:
             mean = self.particle_mean
@@ -154,7 +154,7 @@ class Tracker(object):
         Prune unlikely particles and reproduce likely ones.
 
         Arguments:
-            method (str): Optional override of `self.resample_method`
+            method (str): Optional override of :attr:`resample_method`.
         """
         n = len(self.particles)
         # Systematic resample (vectorized)
@@ -228,12 +228,12 @@ class Tracker(object):
                 particles to track
             datetimes (iterable): Monotonic sequence of datetimes at which to
                 track particles. If `None`, defaults to all unique datetimes in
-                `self.observers`.
+                :attr:`observers`.
             maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
             tile_size (iterable): Size of reference tiles in pixels (width, height)
             observer_mask (array): Boolean mask of Observers
                 to use for each `motion_models`
-                (len(motion_models), len(self.observers)). If `None`,
+                (len(:attr:`motion_models`), len(:attr:`observers`)). If `None`,
                 all Observers are used.
             return_covariances (bool): Whether to return particle covariance
                 matrices or just particle standard deviations
@@ -241,10 +241,10 @@ class Tracker(object):
                 at each timestep
             parallel: Number of initial positions to track in parallel (int),
                 or whether to track in parallel (bool). If `True`,
-                defaults to `os.cpu_count()`.
+                defaults to :func:`os.cpu_count`.
 
         Returns:
-            `Tracks`: Tracks object
+            Tracks: :class:`Tracks` object.
         """
         # Save original function arguments (stored in result)
         # NOTE: Must be called first
@@ -460,9 +460,9 @@ class Tracker(object):
         Arguments:
             obs (int): Observer index
             img (int): Image index of Observer `obs`
-            box (iterable): Tile boundaries (see `Observer.extract_tile()`)
+            box (iterable): Tile boundaries (see :meth:`~glimpse.Observer.extract_tile`)
             histogram (iterable): Template for histogram matching
-                (see `helpers.match_histogram`)
+                (see :func:`helpers.match_histogram`)
             return_histogram (bool): Whether to return a tile histogram.
                 The histogram is computed before the low-pass filter.
 
@@ -713,11 +713,11 @@ class Tracks(object):
             tracks: Slice object or iterable of indices of tracks to include.
                 If `None`, all tracks are included.
             start: Whether to plot starting x, y (bool) or arguments to
-                `matplotlib.pyplot.plot()` (dict)
+                :func:`matplotlib.pyplot.plot` (dict)
             mean: Whether to plot mean x, y (bool) or arguments to
-                `matplotlib.pyplot.plot()` (dict)
+                :func:`matplotlib.pyplot.plot` (dict)
             sigma: Whether to plot sigma x, y (bool) or arguments to
-                `matplotlib.pyplot.plot()` (dict)
+                :func:`matplotlib.pyplot.plot` (dict)
         """
         if tracks is None:
             tracks = slice(None)
@@ -762,7 +762,7 @@ class Tracks(object):
         Arguments:
             tracks: Slice object or iterable of indices of tracks to include.
                 If `None`, all tracks are included.
-            **kwargs: Additional arguments to `matplotlib.pyplot.quiver()`
+            **kwargs: Additional arguments to :func:`matplotlib.pyplot.quiver`
         """
         if tracks is None:
             tracks = slice(None)
@@ -785,9 +785,9 @@ class Tracks(object):
             tracks: Slice object or iterable of indices of tracks to include.
                 If `None`, all tracks are included.
             mean: Whether to plot mean vx (bool) or arguments to
-                `matplotlib.pyplot.plot()` (dict)
+                :func:`matplotlib.pyplot.plot` (dict)
             sigma: Whether to plot sigma vx (bool) or arguments to
-                `matplotlib.pyplot.fill_between()` (dict)
+                :func:`matplotlib.pyplot.fill_between` (dict)
         """
         if tracks is None:
             tracks = slice(None)
@@ -834,13 +834,14 @@ class Tracks(object):
                 Any requested datetimes with missing data are skipped.
                 If `None`, all times with a result for `track`, `obs` are used.
             images (bool): Whether to plot images,
-                or `None` to plot only if `self.tracker` is set
+                or `None` to plot only if :attr:`tracker` is set
             particles (bool): Whether to plot particles,
-                or `None` to plot only if `self.particles` and `self.weights` are set
+                or `None` to plot only if :attr:`particles` and :attr:`weights` are set
             map_size (iterable): Size of map window in world units
             img_size (iterable): Size of image window in pixels
-            subplots (dict): Optional arguments to `matplotlib.pyplot.subplots()`
-            animation (dict): Optional arguments to `matplotlib.animation.FuncAnimation`
+            subplots (dict): Optional arguments to :func:`matplotlib.pyplot.subplots`
+            animation (dict): Optional arguments to
+                :func:`matplotlib.animation.FuncAnimation`
         """
         if images is None:
             images = self.tracker is not None

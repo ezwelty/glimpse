@@ -1,15 +1,17 @@
+"""Global configuration options."""
 import sharedmem
 
-_MapReduce = sharedmem.MapReduce
-_UseMatMul = True
+backend = sharedmem.MapReduce
+"""
+Backend to use for parallel processing.
 
+Either :obj:`sharedmem.MapReduce` or :obj:`sharedmem.MapReduceByThread`.
+"""
 
-def set_sharedmem_backend(backend):
-    backends = {"process": sharedmem.MapReduce, "thread": sharedmem.MapReduceByThread}
-    global _MapReduce
-    _MapReduce = backends[backend]
+matmul = True
+"""
+Whether to use matrix multiplication.
 
-
-def use_numpy_matmul(flag):
-    global _UseMatMul
-    _UseMatMul = bool(flag)
+If `False`, disables the use of :obj:`numpy.matmul`,
+which can cause problems for parallel processing.
+"""

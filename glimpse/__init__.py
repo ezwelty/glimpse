@@ -1,3 +1,4 @@
+from . import config
 from .camera import Camera
 from .exif import Exif
 from .image import Image
@@ -9,6 +10,7 @@ from . import optimize
 from . import svg
 
 __all__ = [
+    "config",
     "Camera",
     "Exif",
     "Image",

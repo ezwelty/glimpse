@@ -2412,7 +2412,7 @@ class KeypointMatcher(object):
             return keypoints
 
         # Run process in parallel
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             self.keypoints = pool.map(
                 func=process, sequence=tuple(enumerate(self.images)), star=True
             )
@@ -2556,7 +2556,7 @@ class KeypointMatcher(object):
             return matches
 
         # Run process in parallel
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             matches = pool.map(
                 func=process,
                 reduce=reduce,
@@ -2602,7 +2602,7 @@ class KeypointMatcher(object):
         def reduce(i, m):
             self.matches.data[i] = m
 
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             _ = pool.map(
                 func=process,
                 reduce=reduce,
@@ -2626,7 +2626,7 @@ class KeypointMatcher(object):
         def reduce(i, m):
             self.matches.data[i] = m
 
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             _ = pool.map(
                 func=process,
                 reduce=reduce,

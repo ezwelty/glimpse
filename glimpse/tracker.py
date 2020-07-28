@@ -349,7 +349,7 @@ class Tracker(object):
             return results
 
         # Run process in parallel
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             results = pool.map(
                 func=process,
                 reduce=reduce,

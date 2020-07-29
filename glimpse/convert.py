@@ -192,7 +192,7 @@ class MatlabCamera:
             **kwargs: Optional arguments to :func:`scipy.optimize.least_squares`.
 
         Returns:
-            Exact or best-fitting :class:`Camera`.
+            Exact or best-fitting camera object.
         """
         cam = self._to_camera_initial()
         if not optimize or not self.alpha_c:
@@ -387,8 +387,8 @@ class AgisoftCamera:
                 Otherwise:
 
                     - If `True`, optimizes :attr:`~glimpse.Camera.k` if :attr:`k4` is
-                        non-zero and :attr:`~glimpse.Camera.f`, :attr:`~glimpse.Camera.c`,
-                        and :attr:`~glimpse.Camera.k` if :attr:`b2` is non-zero.
+                      non-zero and :attr:`~glimpse.Camera.f`, :attr:`~glimpse.Camera.c`,
+                      and :attr:`~glimpse.Camera.k` if :attr:`b2` is non-zero.
                     - If `False`, no optimization is performed.
                     - Alternatively, choose the parameters to optimize using the same
                       format as :meth:`Converter.optimize_cam`.
@@ -748,9 +748,9 @@ class PhotoModelerCamera:
             raise ValueError("Camera does not have a sensor size")
         return cls(
             imgsz=(cam.imgsz[0], cam.imgsz[1]),
-            focal=(cam.fmm[0] + cam.fmm[1]) / 2,
-            xp=cam.cmm[0] + cam.sensorsz[0] / 2,
-            yp=cam.cmm[1] + cam.sensorsz[1] / 2,
+            focal=(cam.fmm[0] + cam.fmm[1]) / 2,  # type: ignore
+            xp=cam.cmm[0] + cam.sensorsz[0] / 2,  # type: ignore
+            yp=cam.cmm[1] + cam.sensorsz[1] / 2,  # type: ignore
             fw=cam.sensorsz[0],
             fh=cam.sensorsz[1],
         )
@@ -791,12 +791,14 @@ class PhotoModelerCamera:
         """
         xcam = cls._from_camera_initial(cam)
         if not optimize or (
-            cam.fmm[0] == cam.fmm[1] and np.all(cam.k == 0) and np.all(cam.p == 0)
+            cam.fmm[0] == cam.fmm[1]  # type: ignore
+            and np.all(cam.k == 0)
+            and np.all(cam.p == 0)
         ):
             return xcam
         if optimize is True:
             optimize = {}
-            if cam.fmm[0] != cam.fmm[1]:
+            if cam.fmm[0] != cam.fmm[1]:  # type: ignore
                 optimize = {
                     "focal": True,
                     "fw": True,

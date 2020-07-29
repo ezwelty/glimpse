@@ -55,10 +55,10 @@ class Camera:
         Rprime (numpy.ndarray): Derivative of :attr:`R` with respect to :attr:`viewdir`.
             Used for fast Jacobian (gradient) calculations by
             :class:`optimize.ObserverCameras`.
-        correction (Union[bool, dict]): Whether or how to apply elevation corrections for
+        correction (dict): Elevation corrections to apply for
             surface curvature and atmospheric refraction when projecting absolute world
             coordinates to image coordinates. Either `False` to skip,
-            `True` for default arguments, or a dictionary of custom arguments:
+            `True` for defaults, or a custom dictionary:
 
                 - radius (float): Radius of curvature in the same units as :attr:`xyz`.
                   Default (6.3781e6 m) is the Earth's equatorial radius in meters.
@@ -115,7 +115,7 @@ class Camera:
         self.p = p
         if correction is True:
             correction = {}
-        if correction is not False:
+        if isinstance(correction, dict):
             correction = {"radius": 6.3781e6, "refraction": 0.13, **correction}
         self.correction = correction
         self._original_vector = self._vector.copy()
@@ -1133,7 +1133,7 @@ class Camera:
             if idx is not None:
                 I[idx] = values
 
-        with config._MapReduce(np=parallel) as pool:
+        with config.backend(np=parallel) as pool:
             pool.map(func=process, reduce=reduce, sequence=tile_indices)
         bar.finish()
         return I
@@ -1459,13 +1459,13 @@ class Camera:
             dxyz = xyz
         else:
             dxyz = xyz - self.xyz
-            if self.correction:
+            if isinstance(self.correction, dict):
                 dxyz[:, 2] += helpers.elevation_corrections(
                     squared_distances=np.sum(dxyz[:, 0:2] ** 2, axis=1),
                     **self.correction,
                 )
         # Convert coordinates to ray directions
-        if config._UseMatMul:
+        if config.matmul:
             xyz_c = np.matmul(self.R, dxyz.T).T
         else:
             xyz_c = np.dot(dxyz, self.R.T)
@@ -1495,7 +1495,7 @@ class Camera:
                 scalar or a vector (n, )
         """
         # Multiply 2-d coordinates
-        if config._UseMatMul:
+        if config.matmul:
             xyz = np.matmul(self.R.T[:, 0:2], xy.T).T
         else:
             xyz = np.dot(xy, self.R[0:2, :])

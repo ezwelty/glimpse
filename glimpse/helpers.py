@@ -22,7 +22,6 @@ import scipy.ndimage
 import scipy.spatial
 import scipy.stats
 import shapely.geometry
-import sklearn.decomposition
 
 
 # ---- General ---- #
@@ -580,37 +579,6 @@ def gamma_to_linear(array, gamma=2.2):
         gamma (float): Gamma coefficient
     """
     return array ** (1 / gamma)
-
-
-GRAY_PCA = sklearn.decomposition.PCA(n_components=1, svd_solver="arpack", whiten=False)
-
-
-def rgb_to_gray(rgb, method="average", weights=None, pca=None):
-    """
-    Convert a color image to a grayscale image.
-
-    Arguments:
-        rgb (array): 3-d color image
-        method (str): Either 'average' for a weighted average of each channel,
-            or 'pca' for a principal components transform.
-        weights (array-like): Weights for each channel of `rgb`.
-            If `None`, the channels are assigned equal weight.
-        pca (sklearn.decomposition.pca.PCA): PCA object.
-            If `None`, `glimpse.helpers.GRAY_PCA` is used
-            (n_components=1, svd_solver='arpack', whiten=True).
-
-    Returns:
-        array: 2-d grayscale image
-    """
-    if method == "average":
-        return np.average(rgb, axis=2, weights=weights)
-    else:
-        if pca is None:
-            pca = GRAY_PCA
-        Q = rgb.reshape(-1, rgb.shape[2])
-        pca.fit(Q)
-        pca.components_ = np.sign(pca.components_[0]) * pca.components_
-        return pca.transform(Q).reshape(rgb.shape[0:2])
 
 
 def compute_cdf(array, return_inverse=False):

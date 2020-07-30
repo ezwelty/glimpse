@@ -23,8 +23,6 @@ class Tracker(object):
         resample_method (str): Particle resampling method
             ('systematic', 'stratified', 'residual',
             'choice': np.random.choice with replacement)
-        grayscale (dict): Grayscale conversion
-            (arguments to glimpse.helpers.rgb_to_gray)
         highpass (dict): Median high-pass filter
             (arguments to scipy.ndimage.filters.median_filter)
         interpolation (dict): Subpixel interpolation
@@ -49,14 +47,12 @@ class Tracker(object):
         observers,
         viewshed=None,
         resample_method="systematic",
-        grayscale={"method": "average"},
         highpass={"size": (5, 5)},
         interpolation={"kx": 3, "ky": 3},
     ):
         self.observers = observers
         self.viewshed = viewshed
         self.resample_method = resample_method
-        self.grayscale = grayscale
         self.highpass = highpass
         self.interpolation = interpolation
         # Placeholders
@@ -473,7 +469,7 @@ class Tracker(object):
         """
         tile = self.observers[obs].extract_tile(box=box, img=img)
         if tile.ndim > 2:
-            tile = helpers.rgb_to_gray(tile, **self.grayscale)
+            tile = tile.mean(axis=2)
         tile = helpers.normalize(tile)
         if histogram is not None:
             tile = helpers.match_histogram(tile, template=histogram)

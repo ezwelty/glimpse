@@ -2332,7 +2332,7 @@ class KeypointMatcher(object):
         Prepare image data for keypoint detection.
         """
         if I.ndim > 2:
-            I = helpers.rgb_to_gray(I, method="average", weights=None)
+            I = rgb.mean(axis=2)
         I = I.astype(np.uint8, copy=False)
         if self.clahe is not None:
             I = self.clahe.apply(I)

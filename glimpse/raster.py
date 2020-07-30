@@ -817,20 +817,23 @@ class Raster(Grid):
             **kwargs
         )
 
-    def rasterize(self, xy, values, fun=np.mean):
+    def rasterize(self, xy: np.ndarray, values: np.ndarray) -> np.ndarray:
         """
         Convert points to a raster image.
 
         Arguments:
-            xy (array): Point coordinates (n, 2)
-            values (array): Point values
-            fun (function): Aggregate function to apply to values of overlapping points
+            xy (array): Point coordinates (n, [x, y]).
+            values (array): Point values (n, ).
+        
+        Returns:
+            Image array (float) of mean values of the same dimensions as :attr:`Z`.
+            Pixels without points are `NaN`.
         """
-        is_in = self.inbounds(xy)
-        rowcol = self.xy_to_rowcol(xy[is_in, :], snap=True)
-        return helpers.rasterize_points(
-            rowcol[:, 0], rowcol[:, 1], values[is_in], self.Z.shape, fun=fun
-        )
+        mask = self.inbounds(xy)
+        rowcol = self.xy_to_rowcol(xy[mask, :], snap=True)
+        a = self.Z.copy()
+        helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=a)
+        return a
 
     def rasterize_poygons(self, polygons, holes=None):
         """

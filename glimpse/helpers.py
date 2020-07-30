@@ -7,7 +7,7 @@ import json
 import os
 import pickle
 import re
-from typing import Any, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence, Tuple, Union
 
 import cv2
 import matplotlib.path
@@ -15,7 +15,6 @@ import numpy as np
 import osgeo.gdal
 import osgeo.gdal_array
 import osgeo.osr
-import pandas
 import PIL
 import progress.bar
 import pyproj
@@ -24,6 +23,7 @@ import scipy.spatial
 import scipy.stats
 import shapely.geometry
 import sklearn.decomposition
+
 
 # ---- General ---- #
 
@@ -1729,30 +1729,86 @@ def get_scale_from_size(old: Sequence[int], new: Sequence[int]) -> Optional[floa
 # ---- Image formation ---- #
 
 
-def rasterize_points(rows, cols, values, shape, fun=np.mean):
+def rasterize_points(
+    rows: Iterable[int],
+    cols: Iterable[int],
+    values: Iterable[Union[Union[int, float, bool], Iterable[Union[int, float, bool]]]],
+    shape: Iterable[int] = None,
+    a: np.ndarray = None,
+) -> Optional[Tuple[np.ndarray, np.ndarray]]:
     """
     Rasterize points by array indices.
 
-    Points are aggregated by equal row and column indices and the specified function,
-    then inserted into an empty array.
+    Points are aggregated by equal row and column indices by their mean.
 
     Arguments:
-        rows (array): Point row indices
-        cols (array): Point column indices
-        values (array): Point value
-        shape (tuple): Output array row and column size
-        fun (function): Aggregate function to apply to values of overlapping points
+        rows: Point row indices (n, ).
+        cols: Point column indices (n, ).
+        values: Point values (n, ) or (n, d).
+        shape: Output array row and column size. Ignored if `a` is provided.
+        a: Array to modify in-place with point mean values.
+            Must be a 2-d array or 3-d array of depth 1 if `values` is (n, ) or (n, 1)
+            and a 3-d array of depth d if `values` is (n, d).
 
     Returns:
-        array: Float array of shape `shape` with aggregated point values
-            where available and `NaN` elsewhere
+        If `a` is `None`,
+        unique (and sorted) flat point indices and mean point values (m, ) or (m, d).
+
+    Examples:
+        Standard usage is to pass point indices, values, and a target 2-d array shape,
+        and in return receive unique flat indices and mean values.
+
+        >>> rows = (0, 0, 1)
+        >>> cols = (0, 0, 1)
+        >>> values = (1, 2, 3)
+        >>> shape = (4, 3)
+        >>> rasterize_points(rows, cols, values, shape=shape)
+        (array([0, 4]), array([1.5, 3. ]))
+
+        Alternatively, an existing array can be passed instead of an array shape,
+        to be modified in-place.
+
+        >>> a = np.full(shape, np.nan)
+        >>> rasterize_points(rows, cols, values, a=a)
+        >>> a
+        array([[1.5, nan, nan],
+               [nan, 3. , nan],
+               [nan, nan, nan],
+               [nan, nan, nan]])
+
+        Multi-dimensional point values are also supported.
+
+        >>> values = [[1, 10], [2, 20], [3, 30]]
+        >>> a = np.full((shape[0], shape[1], 2), np.nan)
+        >>> rasterize_points(rows, cols, values, a=a)
+        >>> a[..., 1]
+        array([[15., nan, nan],
+               [nan, 30., nan],
+               [nan, nan, nan],
+               [nan, nan, nan]])
     """
-    df = pandas.DataFrame({"row": rows, "col": cols, "value": values})
-    groups = df.groupby(["row", "col"], sort=False, as_index=False).aggregate(fun)
-    idx = np.ravel_multi_index((groups["row"].values, groups["col"].values), shape)
-    grid = np.full(shape, np.nan, dtype=float)
-    grid.flat[idx] = groups["value"].values
-    return grid
+    values = np.asarray(values)
+    if shape is None:
+        shape = a.shape
+    idx = np.ravel_multi_index((rows, cols), shape[0:2])
+    uidx, labels = np.unique(idx, return_inverse=True)
+    counts = np.bincount(labels)
+    if values.ndim == 1 or (a is not None and values.shape[1] == 1):
+        sums = np.bincount(labels, weights=values.flat)
+    else:
+        sums = np.column_stack(
+            [np.bincount(labels, weights=values[:, i]) for i in range(values.shape[1])]
+        )
+        counts = counts.reshape(-1, 1)
+    means = sums * (1 / counts)
+    if a is None:
+        return uidx, sums * (1 / counts)
+    if means.ndim == 1:
+        a.flat[uidx] = means
+    else:
+        ij = np.unravel_index(uidx, shape[0:2])
+        a[ij] = means
+    return None
 
 
 def polygons_to_mask(polygons, size, holes=None):

@@ -4,7 +4,6 @@ from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
 import matplotlib.pyplot
 import numpy as np
-import pandas
 import scipy.interpolate
 import scipy.ndimage
 import scipy.optimize
@@ -846,41 +845,32 @@ class Camera:
         xyz = self.uv_to_xyz(uv, directions=False, depth=depth)
         return np.row_stack([self.xyz, xyz, self.xyz])
 
-    def rasterize(
-        self,
-        uv: np.ndarray,
-        values: np.ndarray,
-        fun: Callable[[np.ndarray], np.ndarray] = np.mean,
-    ) -> np.ndarray:
+    def rasterize(self, uv: np.ndarray, values: np.ndarray) -> np.ndarray:
         """
         Convert points to a raster image.
 
         Arguments:
             uv: Image point coordinates (n, [u, v]).
-            values: Point values (n, ).
-            fun: Aggregate function to apply to the values of the points in each pixel.
+            values: Point values (n, ) or (n, d).
 
         Returns:
-            Image of aggregated values of the same dimensions as :attr:`imgsz` (ny, nx).
-            Pixels without points are NaN.
+            Image array (float) of mean values of the same dimensions as :attr:`imgsz`.
+            Pixels without points are `NaN`.
 
         Example:
             >>> cam = Camera(imgsz=(3, 2), f=1)
             >>> uv = np.array([(0.5, 0.5), (2.5, 1.5), (2.5, 1.5)])
             >>> values = np.array([1, 2, 4])
-            >>> cam.rasterize(uv=uv, values=values, fun=np.mean)
+            >>> cam.rasterize(uv=uv, values=values)
             array([[ 1., nan, nan],
                    [nan, nan,  3.]])
         """
-        inframe = self.inframe(uv)
-        return helpers.rasterize_points(
-            # astype(int) equivalent to floor()
-            uv[inframe, 1].astype(int),
-            uv[inframe, 0].astype(int),
-            values[inframe],
-            shape=(self.imgsz[1], self.imgsz[0]),
-            fun=fun,
+        mask = self.inframe(uv)
+        a = np.full((self.imgsz[1], self.imgsz[0]), np.nan)
+        helpers.rasterize_points(
+            uv[mask, 1].astype(int), uv[mask, 0].astype(int), values[mask], a=a,
         )
+        return a
 
     def spherical_to_xyz(self, angles: np.ndarray) -> np.ndarray:
         """
@@ -973,7 +963,6 @@ class Camera:
         tile_overlap: Sequence[int] = (1, 1),
         scale: Number = 1,
         scale_limits: Sequence[Number] = (1, 1),
-        aggregate: Callable[[np.ndarray], np.ndarray] = np.mean,
         parallel: Union[bool, int] = False,
         return_depth: bool = False,
     ) -> np.ndarray:
@@ -997,10 +986,6 @@ class Camera:
             scale: Target `dem` cells per image pixel.
                 Each tile is rescaled based on the average distance from the camera.
             scale_limits: Min and max values of `scale`.
-            aggregate: Passed as `func` to :meth:`pandas.DataFrame.aggregate`
-                to aggregate values projected onto the same image pixel.
-                Each layer of `values`, and depth if `return_depth` is True,
-                are named by their integer position in the stack (e.g. 0, 1, ...).
             parallel: Number of parallel processes (int),
                 or whether to work in parallel (bool). If `True`,
                 defaults to :func:`os.cpu_count`.
@@ -1052,14 +1037,9 @@ class Camera:
         tile_indices = dem.tile_indices(size=tile_size, overlap=tile_overlap)
         ntiles = len(tile_indices)
         # Initialize array
-        # HACK: Use dummy DataFrame to predict output size of aggregate
-        nbands_in = (values.shape[2] if has_values else 0) + return_depth
-        df = pandas.DataFrame(
-            data=np.zeros((2, nbands_in + 2)),
-            columns=["row", "col"] + [str(x) for x in range(nbands_in)],
-        )
-        nbands_out = df.groupby(["row", "col"]).aggregate(aggregate).shape[1]
-        I = np.full((self.imgsz[1], self.imgsz[0], nbands_out), np.nan)
+        nbands = (values.shape[2] if has_values else 0) + return_depth
+        # TODO: Use something faster that full
+        I = np.full((self.imgsz[1], self.imgsz[0], nbands), np.nan)
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)
 
@@ -1115,15 +1095,11 @@ class Camera:
                 else:
                     tile_values = depth[is_in, None]
             # Build DataFrame for fast groupby operation
-            df = pandas.DataFrame({"row": rc[:, 0], "col": rc[:, 1]})
-            for i in range(tile_values.shape[1]):
-                df.insert(df.shape[1], i, tile_values[:, i])
-            # Aggregate values
-            groups = df.groupby(["row", "col"], sort=False, as_index=False).aggregate(
-                aggregate
+            shape = (self.imgsz[1], self.imgsz[0])
+            fidx, means = helpers.rasterize_points(
+                rc[:, 0], rc[:, 1], tile_values, shape=shape
             )
-            idx = (groups["row"].values.astype(int), groups["col"].values.astype(int))
-            return idx, groups.iloc[:, 2:].values
+            return np.unravel_index(fidx, shape), means
 
         def reduce(
             idx: Tuple[Sequence[int], Sequence[int]] = None,

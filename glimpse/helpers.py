@@ -14,8 +14,8 @@ import matplotlib.path
 import numpy as np
 import osgeo.gdal
 import osgeo.gdal_array
+import osgeo.ogr
 import osgeo.osr
-import PIL
 import progress.bar
 import pyproj
 import scipy.ndimage
@@ -1779,30 +1779,72 @@ def rasterize_points(
     return None
 
 
-def polygons_to_mask(polygons, size, holes=None):
+def polygons_to_mask(
+    polygons: Iterable[Iterable[Iterable[Union[int, float]]]],
+    size: Iterable[int],
+    holes: Iterable[Iterable[Iterable[Union[int, float]]]] = None,
+) -> np.ndarray:
     """
     Returns a boolean array of cells inside polygons.
 
     The upper-left corner of the upper-left cell of the array is (0, 0).
 
     Arguments:
-        polygons (iterable): Polygons
-        size (iterable): Array size (nx, ny)
-        holes (iterable): Polygons representing holes in `polygons`
+        polygons: Polygons [ [ (x, y), ...], ... ].
+        size: Array size (nx, ny).
+        holes: Polygons representing holes in `polygons`.
+
+    Examples:
+        >>> polygons = [
+        ...     [(1, 1), (4, 1), (4, 4), (1, 4)],
+        ...     [(0, 0), (0.6, 0), (0.6, 0.6), (0, 0.6)]
+        ... ]
+        >>> holes = [[(2, 2), (3, 2), (3, 3), (2, 3)]]
+        >>> polygons_to_mask(polygons, (5, 5), holes)
+        array([[ True, False, False, False, False],
+               [False,  True,  True,  True, False],
+               [False,  True, False,  True, False],
+               [False,  True,  True,  True, False],
+               [False, False, False, False, False]])
     """
-    im_mask = PIL.Image.new(mode="1", size=(int(size[0]), int(size[1])))
-    draw = PIL.ImageDraw.ImageDraw(im_mask)
-    for polygon in polygons:
-        if isinstance(polygon, np.ndarray):
-            polygon = [tuple(row) for row in polygon]
-        draw.polygon(polygon, fill=1)
-    if holes is None:
-        holes = []
-    for hole in holes:
-        if isinstance(hole, np.ndarray):
-            hole = [tuple(row) for row in hole]
-        draw.polygon(hole, fill=0)
-    return np.array(im_mask)
+
+    def _gdal_polygon(
+        polygon: Iterable[Iterable[Union[int, float]]]
+    ) -> osgeo.ogr.Geometry:
+        ring = osgeo.ogr.Geometry(osgeo.ogr.wkbLinearRing)
+        for x, y in polygon:
+            ring.AddPoint(x, y)
+        polygon = osgeo.ogr.Geometry(osgeo.ogr.wkbPolygon)
+        polygon.AddGeometry(ring)
+        return polygon
+
+    def _gdal_polygon_datasource(
+        polygons: Iterable[Iterable[Iterable[Union[int, float]]]]
+    ) -> osgeo.ogr.DataSource:
+        driver = osgeo.ogr.GetDriverByName("Memory")
+        ds = driver.CreateDataSource("out")
+        layer = ds.CreateLayer(
+            "polygons", srs=osgeo.osr.SpatialReference(), geom_type=osgeo.ogr.wkbPolygon
+        )
+        defn = layer.GetLayerDefn()
+        for polygon in polygons:
+            feature = osgeo.ogr.Feature(defn)
+            feature.SetGeometry(_gdal_polygon(polygon))
+            layer.CreateFeature(feature)
+            feature = None
+        return ds
+
+    driver = osgeo.gdal.GetDriverByName("MEM")
+    raster = driver.Create("", size[0], size[1], 1, osgeo.gdal.GDT_Byte)
+    raster.SetGeoTransform((0, 1, 0, 0, 0, 1))
+    ds = _gdal_polygon_datasource(polygons)
+    layer = ds.GetLayer(0)
+    osgeo.gdal.RasterizeLayer(raster, [1], layer, burn_values=[1])
+    if holes:
+        ds = _gdal_polygon_datasource(holes)
+        layer = ds.GetLayer(0)
+        osgeo.gdal.RasterizeLayer(raster, [1], layer, burn_values=[0])
+    return raster.ReadAsArray().astype(bool)
 
 
 def elevation_corrections(

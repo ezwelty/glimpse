@@ -1339,7 +1339,7 @@ class Cameras(object):
                     if hasattr(control, "xyz"):
                         xyz.append(control.xyz)
                     elif hasattr(control, "xyzs"):
-                        xyz.append(control.xyz)
+                        xyz.extend(control.xyzs)
             if xyz:
                 # NOTE: Upper bound (assumes motion perpendicular to feature direction)
                 dpixels[0:3] = (

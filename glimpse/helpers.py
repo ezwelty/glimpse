@@ -7,7 +7,7 @@ import json
 import os
 import pickle
 import re
-from typing import Any, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 import cv2
 import matplotlib.path
@@ -27,18 +27,43 @@ import shapely.geometry
 # ---- General ---- #
 
 
-def format_list(x, length=None, default=None, dtype=None):
+def format_list(
+    x: Iterable, length: int = None, default: Any = None, dtype: Callable = None
+) -> Optional[list]:
     """
     Return object as a formatted list.
 
     Arguments:
         x: Object to format
-        length (int): Output object length.
-            If `None`, length of `x` is unchanged
-        default (scalar): Default element value.
+        length: Output object length.
+            If `None`, ouput length is equal to input length.
+            If shorter than the input, a subset of the input is returned.
+            If longer than the input and `default` is `None`,
+            must be a multiple of the input length (`x` is repeated).
+            If `default` is not `None`, the output is padded with `default` elements.
+        default: Default element value.
             If `None`, `x` is repeated to achieve length `length`.
-        dtype (callable): Data type to coerce list elements to.
+        dtype: Data type to coerce list elements to.
             If `None`, data is left as-is.
+
+    Raise:
+        ValueError: Output length is not multiple of input length.
+
+    Examples:
+        >>> format_list([0, 1], length=1)
+        [0]
+        >>> format_list([0, 1], length=3)
+        Traceback (most recent call last):
+          ...
+        ValueError: Output length is not multiple of input length
+        >>> format_list([0, 1], length=3, default=2)
+        [0, 1, 2]
+        >>> format_list([0, 1], length=4)
+        [0, 1, 0, 1]
+        >>> format_list([0, 1], dtype=float)
+        [0.0, 1.0]
+        >>> format_list(None) is None
+        True
     """
     if x is None:
         return x
@@ -55,7 +80,8 @@ def format_list(x, length=None, default=None, dtype=None):
                 x += [default] * (length - nx)
             elif nx > 0:
                 # Repeat list
-                assert length % nx == 0
+                if length % nx != 0:
+                    raise ValueError("Output length is not multiple of input length")
                 x *= length // nx
     if dtype:
         x = [dtype(i) for i in x]

@@ -1,6 +1,6 @@
 """Convert between world and image coordinates using a distorted camera model."""
 import copy
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 
 import matplotlib.pyplot
 import numpy as np
@@ -12,7 +12,7 @@ from . import config, helpers
 from .raster import Raster
 
 Number = Union[int, float]
-Array = Union[Sequence[Number], np.ndarray]
+Array = Union[Iterable[Number], np.ndarray]
 Vector = Union[Number, Array]
 
 
@@ -75,7 +75,7 @@ class Camera:
 
     def __init__(
         self,
-        imgsz: Union[int, Union[Sequence[int], np.ndarray]],
+        imgsz: Union[int, Union[Iterable[int], np.ndarray]],
         f: Vector = None,
         c: Vector = None,
         sensorsz: Vector = None,
@@ -427,7 +427,7 @@ class Camera:
 
     def to_dict(
         self,
-        attributes: Sequence[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+        attributes: Iterable[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
     ) -> Dict[str, tuple]:
         """
         Return this camera as a dictionary.
@@ -450,7 +450,7 @@ class Camera:
     def to_json(
         self,
         path: str = None,
-        attributes: Sequence[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+        attributes: Iterable[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
         **kwargs: Any,
     ) -> Optional[str]:
         """
@@ -696,7 +696,7 @@ class Camera:
             return np.all((uv >= 0) & (uv <= self.imgsz), axis=1)
 
     def grid(
-        self, step: Vector = 1, snap: Sequence[float] = (0.5, 0.5), mode: str = "points"
+        self, step: Vector = 1, snap: Iterable[float] = (0.5, 0.5), mode: str = "points"
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Return grid of image coordinates.
@@ -959,10 +959,10 @@ class Camera:
         dem: Raster,
         values: np.ndarray = None,
         mask: np.ndarray = None,
-        tile_size: Sequence[int] = (256, 256),
-        tile_overlap: Sequence[int] = (1, 1),
+        tile_size: Iterable[int] = (256, 256),
+        tile_overlap: Iterable[int] = (1, 1),
         scale: Number = 1,
-        scale_limits: Sequence[Number] = (1, 1),
+        scale_limits: Iterable[Number] = (1, 1),
         parallel: Union[bool, int] = False,
         return_depth: bool = False,
     ) -> np.ndarray:
@@ -1045,7 +1045,7 @@ class Camera:
 
         def process(
             ij: Tuple[slice, slice]
-        ) -> Optional[Tuple[Tuple[Sequence[int], Sequence[int]], Sequence[Number]]]:
+        ) -> Optional[Tuple[Tuple[Iterable[int], Iterable[int]], Iterable[Number]]]:
             tile_mask = mask[ij]  # type: ignore
             if not np.count_nonzero(tile_mask):
                 # No cells selected
@@ -1102,8 +1102,8 @@ class Camera:
             return np.unravel_index(fidx, shape), means
 
         def reduce(
-            idx: Tuple[Sequence[int], Sequence[int]] = None,
-            values: Sequence[Number] = None,
+            idx: Tuple[Iterable[int], Iterable[int]] = None,
+            values: Iterable[Number] = None,
         ) -> None:
             bar.next()
             if idx is not None:

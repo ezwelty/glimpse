@@ -1,6 +1,6 @@
 """Convert between external camera models and the glimpse camera model."""
 import re
-from typing import Any, cast, Dict, Sequence, Tuple, Union
+from typing import Any, cast, Dict, Iterable, List, Tuple, Union
 import warnings
 import xml.etree.ElementTree
 
@@ -11,7 +11,7 @@ import scipy.optimize
 from . import optimize
 from .camera import Camera
 
-Parameters = Dict[str, Union[bool, int, Sequence[int]]]
+Parameters = Dict[str, Union[bool, int, Iterable[int]]]
 Optimize = Union[bool, Parameters]
 
 
@@ -473,7 +473,7 @@ class OpenCVCamera:
         self.s1, self.s2, self.s3, self.s4 = s1, s2, s3, s4
 
     @property
-    def cameraMatrix(self) -> Sequence[Sequence[float]]:
+    def cameraMatrix(self) -> List[Tuple[float]]:
         """
         Camera matrix.
 
@@ -482,7 +482,7 @@ class OpenCVCamera:
         return [(self.fx, 0.0, self.cx), (0.0, self.fy, self.cy), (0.0, 0.0, 1.0)]
 
     @property
-    def distCoeffs(self) -> Sequence[float]:
+    def distCoeffs(self) -> List[float]:
         """
         Distortion coefficients vector.
 
@@ -504,11 +504,11 @@ class OpenCVCamera:
         ]
 
     @staticmethod
-    def _parse_camera_matrix(x: Sequence[Sequence[float]]) -> Dict[str, float]:
+    def _parse_camera_matrix(x: Iterable[Iterable[float]]) -> Dict[str, float]:
         return {"fx": x[0][0], "fy": x[1][1], "cx": x[0][2], "cy": x[1][2]}
 
     @staticmethod
-    def _parse_distortion_coefficients(x: Sequence[float]) -> Dict[str, float]:
+    def _parse_distortion_coefficients(x: Iterable[float]) -> Dict[str, float]:
         keys = ("k1", "k2", "p1", "p2", "k3", "k4", "k5", "k6", "s1", "s2", "s3", "s4")
         if len(x) > len(keys):
             warnings.warn(
@@ -520,8 +520,8 @@ class OpenCVCamera:
     @classmethod
     def from_arrays(
         cls,
-        cameraMatrix: Sequence[Sequence[float]],
-        distCoeffs: Sequence[float],
+        cameraMatrix: Iterable[Iterable[float]],
+        distCoeffs: Iterable[float],
         imgsz: Tuple[int, int],
     ) -> "OpenCVCamera":
         """

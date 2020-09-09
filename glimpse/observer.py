@@ -1,6 +1,6 @@
 """Represent a sequence of images taken from the same camera position."""
 import datetime
-from typing import Any, cast, List, Sequence, Tuple, Union
+from typing import Any, cast, Iterable, List, Tuple, Union
 
 import matplotlib.animation
 import matplotlib.patches
@@ -37,7 +37,7 @@ class Observer:
     """
 
     def __init__(
-        self, images: Sequence[Image], sigma: float = 0.3, cache: bool = True,
+        self, images: Iterable[Image], sigma: float = 0.3, cache: bool = True,
     ) -> None:
         if len(images) < 2:
             raise ValueError("Images are not two or greater")
@@ -111,7 +111,7 @@ class Observer:
         """
         return self.images[img].cam.xyz_to_uv(xyz, directions=directions)
 
-    def tile_box(self, uv: Sequence[float], size: Sequence[int] = (1, 1)) -> np.ndarray:
+    def tile_box(self, uv: Iterable[float], size: Iterable[int] = (1, 1)) -> np.ndarray:
         """
         Compute a grid-aligned box centered around a point.
 
@@ -124,7 +124,7 @@ class Observer:
         """
         return self._grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
-    def extract_tile(self, box: Sequence[int], img: int) -> np.ndarray:
+    def extract_tile(self, box: Iterable[int], img: int) -> np.ndarray:
         """
         Extract rectangular image region.
 
@@ -139,7 +139,7 @@ class Observer:
         return self.images[img].read(box=box, cache=self.cache)
 
     def shift_tile(
-        self, tile: np.ndarray, duv: Sequence[float], **kwargs: Any
+        self, tile: np.ndarray, duv: Iterable[float], **kwargs: Any
     ) -> np.ndarray:
         """
         Shift tile by a subpixel offset.
@@ -174,7 +174,7 @@ class Observer:
         self,
         uv: Union[np.ndarray, Tuple[np.ndarray, np.ndarray]],
         tile: np.ndarray,
-        box: Sequence[float],
+        box: Iterable[float],
         grid: bool = False,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -211,7 +211,7 @@ class Observer:
     def plot_tile(
         self,
         tile: np.ndarray,
-        box: Sequence[float] = None,
+        box: Iterable[float] = None,
         axes: matplotlib.axes.Axes = None,
         **kwargs: Any,
     ) -> matplotlib.image.AxesImage:
@@ -234,7 +234,7 @@ class Observer:
         return axes.imshow(tile, origin="upper", extent=extent, **kwargs)
 
     def plot_box(
-        self, box: Sequence[float], axes: matplotlib.axes.Axes = None, **kwargs: Any
+        self, box: Iterable[float], axes: matplotlib.axes.Axes = None, **kwargs: Any
     ) -> matplotlib.patches.Rectangle:
         """
         Plot bounding box.
@@ -252,7 +252,7 @@ class Observer:
             )
         )
 
-    def set_plot_limits(self, box: Sequence[float] = None) -> None:
+    def set_plot_limits(self, box: Iterable[float] = None) -> None:
         """
         Set limits of current plot axes.
 
@@ -265,7 +265,7 @@ class Observer:
         matplotlib.pyplot.xlim(box[0::2])
         matplotlib.pyplot.ylim(box[1::2])
 
-    def cache_images(self, index: Union[Sequence[int], slice] = slice(None)) -> None:
+    def cache_images(self, index: Union[Iterable[int], slice] = slice(None)) -> None:
         """
         Cache image data.
 
@@ -275,7 +275,7 @@ class Observer:
         for img in np.asarray(self.images)[index]:
             img.read(cache=True)
 
-    def clear_images(self, index: Union[Sequence[int], slice] = slice(None)) -> None:
+    def clear_images(self, index: Union[Iterable[int], slice] = slice(None)) -> None:
         """
         Clear cached image data.
 
@@ -287,9 +287,9 @@ class Observer:
 
     def animate(
         self,
-        uv: Sequence[float] = None,
-        frames: Sequence[int] = None,
-        size: Sequence[int] = (100, 100),
+        uv: Iterable[float] = None,
+        frames: Iterable[int] = None,
+        size: Iterable[int] = (100, 100),
         interval: float = 200,
         subplots: dict = {},
         animation: dict = {},
@@ -374,9 +374,9 @@ class Observer:
 
     def track(
         self,
-        xyz: Sequence[float],
-        frames: Sequence[int] = None,
-        size: Sequence[int] = (100, 100),
+        xyz: Iterable[float],
+        frames: Iterable[int] = None,
+        size: Iterable[int] = (100, 100),
         interval: float = 200,
         subplots: dict = {},
         animation: dict = {},
@@ -471,7 +471,7 @@ class Observer:
         return self.__class__(images, sigma=self.sigma, cache=self.cache)
 
     def split(
-        self, n: Union[int, Sequence[datetime.datetime]], overlap: int = 1
+        self, n: Union[int, Iterable[datetime.datetime]], overlap: int = 1
     ) -> List["Observer"]:
         """
         Split into multiple Observers.

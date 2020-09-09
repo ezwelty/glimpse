@@ -1,6 +1,6 @@
 """Read, write, and manipulate photographic images."""
 import datetime
-from typing import Any, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, Optional, Tuple, Union
 
 import matplotlib.pyplot
 import numpy as np
@@ -122,7 +122,7 @@ class Image:
             return self.I.shape[1], self.I.shape[0]
         return None
 
-    def read(self, box: Sequence[int] = None, cache: bool = True) -> np.ndarray:
+    def read(self, box: Iterable[int] = None, cache: bool = True) -> np.ndarray:
         """
         Read image data from file.
 

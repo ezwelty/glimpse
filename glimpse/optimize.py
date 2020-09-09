@@ -2,7 +2,7 @@
 import datetime
 import os
 import sys
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 import warnings
 
 import cv2
@@ -15,7 +15,7 @@ import scipy.sparse
 from . import config, helpers
 from .camera import Camera
 
-Index = Union[slice, Sequence[int]]
+Index = Union[slice, Iterable[int]]
 CamIndex = Union[int, Camera]
 Color = Union[str, Tuple[float, float, float], Tuple[float, float, float, float]]
 ColorArgs = Optional[Union[dict, Color]]
@@ -185,7 +185,7 @@ class Points:
             self.uv = self.uv * scale
 
     def resize(
-        self, size: Union[float, Sequence[int]] = None, force: bool = False
+        self, size: Union[float, Iterable[int]] = None, force: bool = False
     ) -> None:
         """
         Resize to new image size.
@@ -288,8 +288,8 @@ class Lines(Points):
     def __init__(
         self,
         cam: Camera,
-        uvs: Sequence[np.ndarray],
-        xyzs: Sequence[np.ndarray],
+        uvs: Iterable[np.ndarray],
+        xyzs: Iterable[np.ndarray],
         directions: bool = False,
         density: float = 1,
     ) -> None:
@@ -505,8 +505,8 @@ class Matches:
 
     def __init__(
         self,
-        cams: Sequence[Camera],
-        uvs: Sequence[np.ndarray],
+        cams: Iterable[Camera],
+        uvs: Iterable[np.ndarray],
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
@@ -634,7 +634,7 @@ class Matches:
         return mtype(cams=self.cams, uvs=self.uvs, weights=self.weights)
 
     def resize(
-        self, size: Union[float, Sequence[int]] = None, force: bool = False
+        self, size: Union[float, Iterable[int]] = None, force: bool = False
     ) -> None:
         """
         Resize to new image size.
@@ -745,9 +745,9 @@ class RotationMatches(Matches):
 
     def __init__(
         self,
-        cams: Sequence[Camera],
-        uvs: Sequence[np.ndarray] = None,
-        xys: Sequence[np.ndarray] = None,
+        cams: Iterable[Camera],
+        uvs: Iterable[np.ndarray] = None,
+        xys: Iterable[np.ndarray] = None,
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
@@ -760,7 +760,7 @@ class RotationMatches(Matches):
         self._internals = [cam.to_array()[6:] for cam in self.cams]
 
     def _initialize_uvs_xys(
-        self, uvs: Sequence[np.ndarray] = None, xys: Sequence[np.ndarray] = None
+        self, uvs: Iterable[np.ndarray] = None, xys: Iterable[np.ndarray] = None
     ) -> Tuple[np.ndarray, np.ndarray]:
         if uvs is None and xys is None:
             raise ValueError("Both uvs and xys are missing")
@@ -842,9 +842,9 @@ class RotationMatchesXY(RotationMatches):
 
     def __init__(
         self,
-        cams: Sequence[Camera],
-        uvs: Sequence[np.ndarray] = None,
-        xys: Sequence[np.ndarray] = None,
+        cams: Iterable[Camera],
+        uvs: Iterable[np.ndarray] = None,
+        xys: Iterable[np.ndarray] = None,
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
@@ -937,9 +937,9 @@ class RotationMatchesXYZ(RotationMatchesXY):
 
     def __init__(
         self,
-        cams: Sequence[Camera],
-        uvs: Sequence[np.ndarray] = None,
-        xys: Sequence[np.ndarray] = None,
+        cams: Iterable[Camera],
+        uvs: Iterable[np.ndarray] = None,
+        xys: Iterable[np.ndarray] = None,
         weights: np.ndarray = None,
     ) -> None:
         super().__init__(cams=cams, uvs=uvs, xys=xys, weights=weights)
@@ -1126,8 +1126,8 @@ class Polynomial:
 
 
 Control = Union[Points, Lines, Matches, RotationMatches]
-Params = Dict[str, Union[bool, int, Sequence[int]]]
-FitParams = Union[Sequence[float], lmfit.parameter.Parameters]
+Params = Dict[str, Union[bool, int, Iterable[int]]]
+FitParams = Union[Iterable[float], lmfit.parameter.Parameters]
 
 
 class Cameras(object):
@@ -1170,11 +1170,11 @@ class Cameras(object):
 
     def __init__(
         self,
-        cams: Sequence[Camera],
-        controls: Sequence[Control],
-        cam_params: Sequence[Params] = None,
-        group_indices: Sequence[int] = None,
-        group_params: Sequence[Params] = None,
+        cams: Iterable[Camera],
+        controls: Iterable[Control],
+        cam_params: Iterable[Params] = None,
+        group_indices: Iterable[int] = None,
+        group_params: Iterable[Params] = None,
         weights: np.ndarray = None,
         scales: bool = True,
         sparsity: bool = True,
@@ -1784,10 +1784,10 @@ class Cameras(object):
 
         Arguments:
             index: Indices of residuals to include.
-            cam_params: Sequence of `cam_params` to fit iteratively
-                before the final run. Must be `None` or same length as `group_params`.
-            group_params: Sequence of `group_params` to fit iteratively
-                before the final run. Must be `None` or same length as `cam_params`.
+            cam_params: `cam_params` to fit iteratively before the final run.
+                Must be `None` or same length as `group_params`.
+            group_params: `group_params` to fit iteratively before the final run.
+                Must be `None` or same length as `cam_params`.
             full: Whether to return the full result of `lmfit.Minimize()`.
             **kwargs: Additional arguments to `lmfit.minimize()`.
                 `self.scales` and `self.jac_sparsity` (if computed) are applied

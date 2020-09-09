@@ -7,7 +7,7 @@ import json
 import os
 import pickle
 import re
-from typing import Any, Iterable, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, Optional, Tuple, Union
 
 import cv2
 import matplotlib.path
@@ -1653,7 +1653,7 @@ def polyline_to_cartesian(points, line):
     )
 
 
-def get_scale_from_size(old: Sequence[int], new: Sequence[int]) -> Optional[float]:
+def get_scale_from_size(old: Iterable[int], new: Iterable[int]) -> Optional[float]:
     """
     Return the scale factor that achieves a target integer grid size.
 

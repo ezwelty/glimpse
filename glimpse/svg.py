@@ -3,7 +3,7 @@ from collections import defaultdict
 import copy
 import inspect
 import re
-from typing import Any, Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, TextIO, Tuple, Union
 import warnings
 import xml.etree.ElementTree as ET
 
@@ -173,14 +173,14 @@ def read(
     return next(iter(points.values()))
 
 
-def _chunks(x: Sequence, n: int) -> Iterable:
+def _chunks(x: Iterable, n: int) -> Iterator:
     """
     Generate a zip that returns sequential chunks.
 
     Incomplete trailing chunks (of length < n) are ignored.
 
     Arguments:
-        x: Sequence from which to build chunks
+        x: Iterable from which to build chunks
         n: Number of items in each chunk
 
     Returns:

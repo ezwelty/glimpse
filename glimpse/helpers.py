@@ -3,6 +3,7 @@ import copy
 import copyreg
 import datetime
 import gzip
+import pathlib
 import json
 import os
 import pickle
@@ -86,26 +87,6 @@ def format_list(
     if dtype:
         x = [dtype(i) for i in x]
     return x
-
-
-def make_path_directories(path, is_file=True):
-    """
-    Make directories as needed to build a path.
-
-    Arguments:
-        path (str): Directory or file path
-        is_file (bool): Whether `path` is a file, in which case
-            `path` is reduced to `os.path.dirname(path)`
-    """
-    # https://stackoverflow.com/a/14364249
-    if is_file:
-        path = os.path.dirname(path)
-    if path and not os.path.isdir(path):
-        try:
-            os.makedirs(path)
-        except OSError:
-            if not os.path.isdir(path):
-                raise
 
 
 def numpy_dtype(x: Union[np.ndarray, np.dtype, type, str]) -> np.dtype:
@@ -321,7 +302,7 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTO
         binary (bool): Whether to write a binary pickle
         protocol (int): Protocol to use
     """
-    make_path_directories(path, is_file=True)
+    pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
     mode = "wb" if binary else "w"
     if gz:
         fp = gzip.open(path, mode=mode)
@@ -400,9 +381,9 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
 
         txt = re.sub(r"(\[\s*)+[^\]\{]*(\s*\])+", flatten, txt)
     if path:
-        make_path_directories(path, is_file=True)
-        with open(path, mode="w") as fp:
-            fp.write(txt)
+        path = pathlib.Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(txt)
         return None
     return txt
 

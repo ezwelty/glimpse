@@ -188,31 +188,6 @@ def first_not(*args, value=None, default=None):
     return next((xi for xi in args if xi is not value), default)
 
 
-def diag_indices(a, k=0):
-    """
-    Return the indices of diagonals in an array.
-
-    Arguments:
-        a (array): Array
-        k: kth diagonal (int) or diagonals (iterable)
-    """
-    # https://stackoverflow.com/a/18081653
-    assert all(np.array(a.shape) == a.shape[0])
-    rows, cols = np.diag_indices_from(a)
-    if not np.iterable(k):
-        k = (k,)
-
-    def diag(ki):
-        if ki < 0:
-            return rows[-ki:], cols[:ki]
-        if ki > 0:
-            return rows[:-ki], cols[ki:]
-        return rows, cols
-
-    rowcols = [diag(ki) for ki in k]
-    return np.hstack([rc[0] for rc in rowcols]), np.hstack([rc[1] for rc in rowcols])
-
-
 def sorted_neighbors(x, y):
     """
     Return indices of neighbors.

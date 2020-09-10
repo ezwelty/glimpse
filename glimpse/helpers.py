@@ -108,17 +108,16 @@ def make_path_directories(path, is_file=True):
                 raise
 
 
-def numpy_dtype(obj):
+def numpy_dtype(x: Union[np.ndarray, np.dtype, type, str]) -> np.dtype:
     """
     Return numpy data type.
 
     Arguments:
-        obj: Either `numpy.ndarray`, `numpy.dtype`, `type`, or `str`
+        x: Either an array or input to :class:`np.dtype`.
     """
-    if isinstance(obj, np.ndarray):
-        return obj.dtype
-    else:
-        return np.dtype(obj)
+    if isinstance(x, np.ndarray):
+        return x.dtype
+    return np.dtype(x)
 
 
 def numpy_dtype_minmax(dtype):

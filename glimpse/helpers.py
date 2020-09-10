@@ -134,13 +134,12 @@ def numpy_dtype_minmax(dtype):
     if issubclass(dtype.type, np.floating):
         info = np.finfo(dtype)
         return info.min, info.max
-    elif issubclass(dtype.type, np.integer):
+    if issubclass(dtype.type, np.integer):
         info = np.iinfo(dtype)
         return info.min, info.max
-    elif dtype.type in (np.bool_, np.bool):
+    if dtype.type in (np.bool_, np.bool):
         return False, True
-    else:
-        raise ValueError("Cannot determine min, max for " + str(dtype))
+    raise ValueError("Cannot determine min, max for " + str(dtype))
 
 
 def numpy_to_native(x: Any) -> Any:
@@ -174,8 +173,7 @@ def strip_path(path, extensions=True):
         if extensions is True:
             extensions = -1
         return basename[::-1].split(".", maxsplit=extensions)[-1][::-1]
-    else:
-        return basename
+    return basename
 
 
 def first_not(*args, value=None, default=None):
@@ -207,10 +205,9 @@ def diag_indices(a, k=0):
     def diag(ki):
         if ki < 0:
             return rows[-ki:], cols[:ki]
-        elif ki > 0:
+        if ki > 0:
             return rows[:-ki], cols[ki:]
-        else:
-            return rows, cols
+        return rows, cols
 
     rowcols = [diag(ki) for ki in k]
     return np.hstack([rc[0] for rc in rowcols]), np.hstack([rc[1] for rc in rowcols])
@@ -432,8 +429,7 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
         with open(path, mode="w") as fp:
             fp.write(txt)
         return None
-    else:
-        return txt
+    return txt
 
 
 # ---- Arrays: General ---- #
@@ -485,16 +481,15 @@ def gaussian_filter(array, mask=None, fill=False, **kwargs):
     """
     if mask is None:
         return scipy.ndimage.filters.gaussian_filter(array, **kwargs)
-    else:
-        x = array.copy()
-        x[~mask] = 0
-        xf = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
-        x[mask] = 1
-        xf_sum = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
-        x = xf / xf_sum
-        if not fill:
-            x[~mask] = array[~mask]
-        return x
+    x = array.copy()
+    x[~mask] = 0
+    xf = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
+    x[mask] = 1
+    xf_sum = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
+    x = xf / xf_sum
+    if not fill:
+        x[~mask] = array[~mask]
+    return x
 
 
 def maximum_filter(array, mask=None, fill=False, **kwargs):
@@ -513,16 +508,15 @@ def maximum_filter(array, mask=None, fill=False, **kwargs):
     """
     if mask is None:
         return scipy.ndimage.filters.maximum_filter(array, **kwargs)
-    else:
-        dtype_min = numpy_dtype_minmax(array)[0]
-        x = array.copy()
-        mask = ~mask
-        x[mask] = dtype_min
-        x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
-        if fill:
-            mask = x == dtype_min
-        x[mask] = array[mask]
-        return x
+    dtype_min = numpy_dtype_minmax(array)[0]
+    x = array.copy()
+    mask = ~mask
+    x[mask] = dtype_min
+    x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
+    if fill:
+        mask = x == dtype_min
+    x[mask] = array[mask]
+    return x
 
 
 def median_filter(array, mask=None, fill=False, **kwargs):
@@ -544,14 +538,13 @@ def median_filter(array, mask=None, fill=False, **kwargs):
     """
     if mask is None:
         return scipy.ndimage.filters.median_filter(array, **kwargs)
-    else:
-        x = array.copy()
-        mask = ~mask
-        x[mask] = np.nan
-        x = scipy.ndimage.filters.generic_filter(x, function=np.nanmedian, **kwargs)
-        if not fill:
-            x[mask] = array[mask]
-        return x
+    x = array.copy()
+    mask = ~mask
+    x[mask] = np.nan
+    x = scipy.ndimage.filters.generic_filter(x, function=np.nanmedian, **kwargs)
+    if not fill:
+        x[mask] = array[mask]
+    return x
 
 
 # ---- Arrays: Images ---- #
@@ -608,8 +601,7 @@ def compute_cdf(array, return_inverse=False):
     quantiles = np.cumsum(results[-1]) * (1.0 / array.size)
     if return_inverse:
         return results[0], quantiles, results[1]
-    else:
-        return results[0], quantiles
+    return results[0], quantiles
 
 
 def match_histogram(source, template):
@@ -674,12 +666,11 @@ def sp_transform(points, current, target):
     def build_proj(obj):
         if isinstance(obj, pyproj.Proj):
             return obj
-        elif isinstance(obj, int):
+        if isinstance(obj, int):
             return pyproj.Proj(init="EPSG:" + str(obj))
-        elif isinstance(obj, dict):
+        if isinstance(obj, dict):
             return pyproj.Proj(**obj)
-        else:
-            raise ValueError("Cannot coerce input to pyproj.Proj")
+        raise ValueError("Cannot coerce input to pyproj.Proj")
 
     current = build_proj(current)
     target = build_proj(target)
@@ -764,8 +755,7 @@ def geojson_iterfeatures(obj):
 def _get_geojson_coords(feature):
     if "geometry" in feature:
         return feature["geometry"]["coordinates"]
-    else:
-        return feature["coordinates"]
+    return feature["coordinates"]
 
 
 def _set_geojson_coords(feature, coords):
@@ -827,8 +817,7 @@ def elevate_geojson(obj, elevation):
     def set_from_elevation(coords, elevation):
         if isinstance(elevation, (int, float)):
             return set_z(coords, elevation)
-        else:
-            return set_z(coords, elevation.sample(coords[:, 0:2]))
+        return set_z(coords, elevation.sample(coords[:, 0:2]))
 
     if isinstance(elevation, (bytes, str)):
         for feature in geojson_iterfeatures(obj):
@@ -869,15 +858,13 @@ def ordered_geojson(
                     key for key in index if key not in properties
                 ]
                 return collections.OrderedDict((k, d[k]) for k in ordered_keys)
-            elif keys and name != "properties":
+            if keys and name != "properties":
                 ordered_keys = [key for key in keys if key in index] + [
                     key for key in index if key not in keys
                 ]
                 return collections.OrderedDict((k, d[k]) for k in ordered_keys)
-            else:
-                return d
-        else:
             return d
+        return d
 
     obj = copy.deepcopy(obj)
     return order_item(obj)
@@ -965,14 +952,13 @@ def boolean_split(x, mask, axis=0, circular=False, include="all"):
         splits.pop(-1)
     if include == "all":
         return splits
-    elif include == "true":
+    if include == "true":
         index = slice(0, None, 2) if mask[0] else slice(1, None, 2)
         return splits[index]
-    elif include == "false":
+    if include == "false":
         index = slice(1, None, 2) if mask[0] else slice(0, None, 2)
         return splits[index]
-    else:
-        return []
+    return []
 
 
 def project_points_plane(points, plane):
@@ -1080,8 +1066,7 @@ def intersect_edge_box(origin, distance, box):
     t = np.nanmin(intersect_rays_box(origin, distance_2d, box, t=True))
     if t > 0 and t < 1:
         return t
-    else:
-        return None
+    return None
 
 
 def intersect_rays_box(origin, directions, box, t=False):
@@ -1147,8 +1132,7 @@ def intersect_rays_box(origin, directions, box, t=False):
     tmax[tmax < 0] = np.nan
     if t:
         return tmin[:, None], tmax[:, None]
-    else:
-        return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
+    return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
 
 
 # TODO: Implement faster run-slice
@@ -1323,8 +1307,7 @@ def intersect_ranges(ranges):
     rmax = np.nanmin(ranges[:, 1])
     if rmax - rmin <= 0:
         raise ValueError("Ranges do not intersect")
-    else:
-        return np.hstack((rmin, rmax))
+    return np.hstack((rmin, rmax))
 
 
 def cut_ranges(ranges, cuts):
@@ -1362,8 +1345,7 @@ def intersect_boxes(boxes):
     boxmax = np.nanmin(boxes[:, ndim:], axis=0)
     if any(boxmax - boxmin <= 0):
         raise ValueError("Boxes do not intersect")
-    else:
-        return np.hstack((boxmin, boxmax))
+    return np.hstack((boxmin, boxmax))
 
 
 def union_boxes(boxes):
@@ -1442,8 +1424,7 @@ def interpolate_line(
     if fill == "endpoints":
         if error is False:
             return result
-        else:
-            fill = (vertices[0], vertices[-1])
+        fill = (vertices[0], vertices[-1])
     if not np.iterable(fill):
         fill = (fill, fill)
     left = np.less(xi, x[0])
@@ -1452,10 +1433,9 @@ def interpolate_line(
         right, left = left, right
     if error and (left.any() or right.any()):
         raise ValueError("Requested distance outside range")
-    else:
-        result[left, :] = fill[0]
-        result[right, :] = fill[1]
-        return result
+    result[left, :] = fill[0]
+    result[right, :] = fill[1]
+    return result
 
 
 def unravel_box(box):
@@ -1525,8 +1505,7 @@ def box_to_grid(box, step, snap=None, mode="grids"):
     )
     if mode == "vectors":
         return tuple(arrays)
-    else:
-        return np.meshgrid(*arrays)
+    return np.meshgrid(*arrays)
 
 
 def grid_to_points(grid):

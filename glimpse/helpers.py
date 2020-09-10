@@ -190,26 +190,6 @@ def first_not(*args, value=None, default=None):
     return next((xi for xi in args if xi is not value), default)
 
 
-def as_array(a, dtype=None):
-    """
-    Return object as array.
-
-    Equivalent to :func:`numpy.asarray` but faster if already an array or already
-    `dtype`.
-
-    Arguments:
-        a (array-like): Input data
-        dtype (data-type): If `None`, inferred from `a`
-    """
-    if isinstance(a, np.ndarray):
-        if dtype is None or numpy_dtype(dtype) is a.dtype.type:
-            return a
-        else:
-            return a.astype(dtype)
-    else:
-        return np.asarray(a, dtype=dtype)
-
-
 def diag_indices(a, k=0):
     """
     Return the indices of diagonals in an array.
@@ -1096,7 +1076,7 @@ def intersect_edge_box(origin, distance, box):
         distance (iterable): Distance to end point (ndim, )
         box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
     """
-    distance_2d = as_array(distance).reshape(1, -1)
+    distance_2d = np.asarray(distance).reshape(1, -1)
     t = np.nanmin(intersect_rays_box(origin, distance_2d, box, t=True))
     if t > 0 and t < 1:
         return t
@@ -1375,7 +1355,7 @@ def intersect_boxes(boxes):
     Arguments:
         boxes (iterable): Boxes, each in the format (minx, ..., maxx, ...)
     """
-    boxes = as_array(boxes)
+    boxes = np.asarray(boxes)
     assert boxes.shape[1] % 2 == 0
     ndim = boxes.shape[1] // 2
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
@@ -1404,8 +1384,8 @@ def pairwise_distance(x, y, metric="sqeuclidean", **params):
     Returns:
         array: Pairwise distances, where [i, j] = distance(x[i], y[j])
     """
-    x = as_array(x)
-    y = as_array(y)
+    x = np.asarray(x)
+    y = np.asarray(y)
     return scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
@@ -1488,7 +1468,7 @@ def unravel_box(box):
     Returns:
         array: [[minx, ...], [maxx, ...]]
     """
-    box = as_array(box)
+    box = np.asarray(box)
     assert box.size % 2 == 0
     ndim = box.size // 2
     return box.reshape(-1, ndim)
@@ -1501,7 +1481,7 @@ def bounding_box(points):
     Arguments:
         points (iterable): Points, each in the format (x, ...)
     """
-    points = as_array(points)
+    points = np.asarray(points)
     return np.hstack((np.min(points, axis=0), np.max(points, axis=0)))
 
 
@@ -1985,7 +1965,7 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
         maxdt (timedelta): Maximum distance from nearest `snap` to
             select `datetimes`. If `None`, defaults to half of `snap`.
     """
-    datetimes = as_array(datetimes)
+    datetimes = np.asarray(datetimes)
     selected = np.ones(datetimes.shape, dtype=bool)
     if start:
         selected &= datetimes >= start

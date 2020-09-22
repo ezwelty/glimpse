@@ -189,36 +189,6 @@ def sorted_nearest(x, y):
     return neighbors[range(len(y)), nearest]
 
 
-def tile_axis(a, shape, axis=None):
-    """
-    Construct an array by repeating an input array.
-
-    Arguments:
-        a (array-like): Input array
-        shape (iterable): Output array shape
-        axis: Axis (int) or axes (iterable) of output array along which to
-            repeat `a`
-    """
-    a = np.atleast_1d(a)
-    shape = np.asarray(shape)
-    if axis is None:
-        assert a.size == 1
-    elif isinstance(axis, int):
-        axis = np.atleast_1d(axis)
-    else:
-        axis = np.sort(np.asarray(axis))
-    if axis is None:
-        reps = shape
-    else:
-        reps = np.ones(len(shape), dtype=int)
-        reps[axis] = shape[axis]
-        for ax in axis:
-            a = np.expand_dims(a, axis=ax)
-    result = np.tile(a, reps=reps)
-    assert np.all(result.shape == shape)
-    return result
-
-
 # ---- Pickles ---- #
 
 

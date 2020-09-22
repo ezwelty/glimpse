@@ -83,29 +83,16 @@ def format_list(
     return x
 
 
-def numpy_dtype(x: Union[np.ndarray, np.dtype, type, str]) -> np.dtype:
-    """
-    Return numpy data type.
-
-    Arguments:
-        x: Either an array or input to :class:`np.dtype`.
-    """
-    if isinstance(x, np.ndarray):
-        return x.dtype
-    return np.dtype(x)
-
-
 def numpy_dtype_minmax(dtype):
     """
     Return min, max allowable values for a numpy datatype.
 
     Arguments:
-        dtype: Either `numpy.ndarray`, `numpy.dtype`, `type`, or `str`
+        dtype: Numpy datatype.
 
     Returns:
         tuple: Minimum and maximum values
     """
-    dtype = numpy_dtype(dtype)
     if issubclass(dtype.type, np.floating):
         info = np.finfo(dtype)
         return info.min, info.max

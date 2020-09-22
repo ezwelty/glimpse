@@ -1,4 +1,5 @@
 """Optimize camera models to fit observations taken from images and the world."""
+import copyreg
 import datetime
 import os
 import sys
@@ -19,6 +20,16 @@ Index = Union[slice, Iterable[int]]
 CamIndex = Union[int, Camera]
 Color = Union[str, Tuple[float, float, float], Tuple[float, float, float, float]]
 ColorArgs = Optional[Union[dict, Color]]
+
+# Register pickling method for cv2.KeyPoint
+# https://stackoverflow.com/a/48832618
+copyreg.pickle(
+    cv2.KeyPoint,
+    lambda k: (
+        cv2.KeyPoint,
+        (*k.pt, k.size, k.angle, k.response, k.octave, k.class_id),
+    ),
+)
 
 # ---- Controls ----
 

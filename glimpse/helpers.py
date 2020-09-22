@@ -1,4 +1,3 @@
-import copyreg
 import datetime
 import gzip
 import pathlib
@@ -219,17 +218,6 @@ def read_pickle(path, gz=False, binary=True, **kwargs):
     fp.close()
     return obj
 
-
-# Register Pickle method for cv2.KeyPoint
-# https://stackoverflow.com/questions/10045363/pickling-cv2-keypoint-causes-picklingerror
-def _pickle_cv2_keypoints(k):
-    return (
-        cv2.KeyPoint,
-        (k.pt[0], k.pt[1], k.size, k.angle, k.response, k.octave, k.class_id),
-    )
-
-
-copyreg.pickle(cv2.KeyPoint().__class__, _pickle_cv2_keypoints)
 
 # ---- JSON ---- #
 

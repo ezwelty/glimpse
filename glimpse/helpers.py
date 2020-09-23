@@ -114,13 +114,6 @@ def numpy_to_native(x: Any) -> Any:
     return getattr(x, "tolist", lambda: x)()
 
 
-def split_extension(path):
-    parts = path.split(".")
-    if len(parts) == 1:
-        return path, ""
-    return ".".join(parts[:-1]), parts[-1]
-
-
 def strip_path(path, extensions=True):
     """
     Return the final component of a path with file extensions removed.
@@ -406,7 +399,7 @@ def crs_to_wkt(crs):
 
 
 def gdal_driver_from_path(path, raster=True, vector=True):
-    ext = split_extension(path)[1].lower()
+    ext = os.path.splitext(path)[1][1:].lower()
     for i in range(osgeo.gdal.GetDriverCount()):
         driver = osgeo.gdal.GetDriver(i)
         meta = driver.GetMetadata()

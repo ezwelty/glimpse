@@ -28,6 +28,7 @@ matplotlib = "^3.2.1"
 GDAL = "2.4.4"
 opencv-contrib-python-nonfree = "^4.1.1"
 typing_extensions = "^3.7.4"
+scipy = "^1.4.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.4.3"

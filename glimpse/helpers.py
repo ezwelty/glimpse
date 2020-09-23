@@ -1249,7 +1249,7 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
         temp = np.zeros(datetimes.shape, dtype=bool)
         temp[nearest] = True
         selected &= temp
-    return np.nonzero(selected)[0]
+    return selected
 
 
 # ---- Internal ----

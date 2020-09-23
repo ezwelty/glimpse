@@ -464,10 +464,10 @@ class Observer:
         Return a new Observer with a subset of the original images.
 
         Arguments:
-            **kwargs: Arguments to :func:`helpers.select_datetimes`.
+            **kwargs: Optional arguments to :func:`helpers.select_datetimes`.
         """
-        index = helpers.select_datetimes(self.datetimes, **kwargs)
-        images = np.asarray(self.images)[index]
+        mask = helpers.select_datetimes(self.datetimes, **kwargs)
+        images = np.asarray(self.images)[mask]
         return self.__class__(images, sigma=self.sigma, cache=self.cache)
 
     def split(

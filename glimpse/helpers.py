@@ -7,7 +7,6 @@ import pickle
 import re
 from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
-import cv2
 import numpy as np
 import osgeo.gdal
 import osgeo.gdal_array

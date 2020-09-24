@@ -704,11 +704,7 @@ class Camera:
         Arguments:
             step: Grid spacing for all (float) or each (iterable) dimension.
             snap: Point (x, y) to align grid to.
-            mode: Return format:
-
-                - 'vectors' (tuple of np.ndarray): x (nx, ) and y (ny, ) coordinates
-                - 'grids' (tuple of np.ndarray): x (ny, nx) and y (ny, nx) coordinates
-                - 'points' (np.ndarray): x, y coordinates (ny * nx, [x, y])
+            mode: Return format (see :func:`helpers.box_to_grid`).
 
         Raises:
             ValueError: Unsupported mode.
@@ -740,15 +736,7 @@ class Camera:
             ValueError: Unsupported mode: unknown
         """
         box = (0, 0, self.imgsz[0], self.imgsz[1])
-        vectors = helpers.box_to_grid(box, step=step, snap=snap, mode="vectors")
-        if mode == "vectors":
-            return vectors
-        grid = np.meshgrid(*vectors)
-        if mode == "grids":
-            return tuple(grid)
-        if mode == "points":
-            return helpers.grid_to_points(grid)
-        raise ValueError(f"Unsupported mode: {mode}")
+        return helpers.box_to_grid(box, step=step, snap=snap, mode=mode)
 
     def edges(self, step: Vector = 1) -> np.ndarray:
         """

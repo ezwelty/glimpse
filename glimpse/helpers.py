@@ -1222,7 +1222,7 @@ def box_to_grid(
     step: Union[float, Iterable[float]],
     snap: Iterable = None,
     mode: str = "grids",
-) -> Iterable[np.ndarray]:
+) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Return grid of points inside box.
 
@@ -1231,20 +1231,37 @@ def box_to_grid(
         step: Grid spacing for all (float) or each (iterable) dimension.
         snap: Point to align grid to (need not be inside box).
             If `None`, the `box` minimum is used
-        mode: Return format ('vectors' or 'grids').
+        mode: Return format.
+
+            - 'vectors': x (nx, ) and y (ny, ) coordinates.
+            - 'grids': x (ny, nx) and y (ny, nx) coordinates.
+            - 'points': x, y coordinates (ny * nx, [x, y]).
 
     Returns:
-        Either vectors or grids for each dimension.
+        Either vectors or grids for each dimension, or point coordinates.
+
+    Raises:
+        ValueError: Unsupported mode.
 
     Examples:
         >>> box = 0, 0, 10, 10
         >>> box_to_grid(box, step=4)
-        [array([[0., 4., 8.],
+        (array([[0., 4., 8.],
                 [0., 4., 8.],
                 [0., 4., 8.]]),
          array([[0., 0., 0.],
                 [4., 4., 4.],
-                [8., 8., 8.]])]
+                [8., 8., 8.]]))
+        >>> box_to_grid(box, step=4, mode='points')
+        array([[0., 0.],
+               [4., 0.],
+               [8., 0.],
+               [0., 4.],
+               [4., 4.],
+               [8., 4.],
+               [0., 8.],
+               [4., 8.],
+               [8., 8.]])
         >>> box_to_grid(box, step=4, mode='vectors')
         (array([0., 4., 8.]), array([0., 4., 8.]))
         >>> box_to_grid(box, step=4, snap=(1, 2), mode='vectors')
@@ -1265,7 +1282,12 @@ def box_to_grid(
     )
     if mode == "vectors":
         return tuple(arrays)
-    return np.meshgrid(*arrays)
+    grid = tuple(np.meshgrid(*arrays))
+    if mode == "grids":
+        return grid
+    if mode == "points":
+        return grid_to_points(grid)
+    raise ValueError(f"Unsupported mode: {mode}")
 
 
 def grid_to_points(grid: Iterable[np.ndarray]) -> np.ndarray:

@@ -446,7 +446,7 @@ def compute_cdf(
     return results[0], quantiles
 
 
-def match_histogram(
+def match_cdf(
     a: np.ndarray, cdf: Union[Tuple[Iterable, Iterable], np.ndarray]
 ) -> np.ndarray:
     """
@@ -463,9 +463,9 @@ def match_histogram(
     Examples:
         >>> a = np.array([3, 2, 1, 2])
         >>> b = np.array([4, 2, 1, 2, 4, 2, 1, 2])
-        >>> match_histogram(a, b)
+        >>> match_cdf(a, b)
         array([4., 2., 1., 2.])
-        >>> match_histogram(a, compute_cdf(b))
+        >>> match_cdf(a, compute_cdf(b))
         array([4., 2., 1., 2.])
     """
     _, quantiles, inverse = compute_cdf(a, return_inverse=True)

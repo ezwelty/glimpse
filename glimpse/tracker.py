@@ -458,7 +458,7 @@ class Tracker(object):
             img (int): Image index of Observer `obs`
             box (iterable): Tile boundaries (see :meth:`~glimpse.Observer.extract_tile`)
             histogram (iterable): Template for histogram matching
-                (see :func:`helpers.match_histogram`)
+                (see :func:`helpers.compute_cdf`).
             return_histogram (bool): Whether to return a tile histogram.
                 The histogram is computed before the low-pass filter.
 
@@ -472,7 +472,7 @@ class Tracker(object):
             tile = tile.mean(axis=2)
         tile = helpers.normalize(tile)
         if histogram is not None:
-            tile = helpers.match_histogram(tile, template=histogram)
+            tile = helpers.match_cdf(tile, histogram)
         if return_histogram:
             returned_histogram = helpers.compute_cdf(tile, return_inverse=False)
         tile_low = scipy.ndimage.filters.median_filter(tile, **self.highpass)

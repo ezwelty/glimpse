@@ -5,7 +5,7 @@ import json
 import os
 import pickle
 import re
-from typing import Any, Callable, Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import osgeo.gdal
@@ -39,7 +39,7 @@ def format_list(
         dtype: Data type to coerce list elements to.
             If `None`, data is left as-is.
 
-    Raise:
+    Raises:
         ValueError: Output length is not multiple of input length.
 
     Examples:
@@ -81,7 +81,9 @@ def format_list(
     return x
 
 
-def numpy_dtype_minmax(dtype):
+def numpy_dtype_minmax(
+    dtype: np.dtype,
+) -> Union[Tuple[int, int], Tuple[float, float], Tuple[bool, bool]]:
     """
     Return min, max allowable values for a numpy datatype.
 
@@ -89,7 +91,18 @@ def numpy_dtype_minmax(dtype):
         dtype: Numpy datatype.
 
     Returns:
-        tuple: Minimum and maximum values
+        Minimum and maximum values.
+
+    Raises:
+        ValueError: Cannot determine min, max for datatype.
+
+    Examples:
+        >>> numpy_dtype_minmax(np.dtype(int))
+        (-9223372036854775808, 9223372036854775807)
+        >>> numpy_dtype_minmax(np.dtype(float))
+        (-1.7976931348623157e+308, 1.7976931348623157e+308)
+        >>> numpy_dtype_minmax(np.dtype(bool))
+        (False, True)
     """
     if issubclass(dtype.type, np.floating):
         info = np.finfo(dtype)
@@ -106,20 +119,35 @@ def numpy_to_native(x: Any) -> Any:
     """
     Convert numpy or native type to native type.
 
-    Converts numpy types to native type,
-    while leaving other objects (without :meth:`numpy.ndarray.tolist` method) unchanged.
+    Leaves objects without a `tolist()` method unchanged.
+
+    Examples:
+        >>> numpy_to_native(np.array([1, 2]))
+        [1, 2]
+        >>> numpy_to_native([1, 2])
+        [1, 2]
     """
     # https://stackoverflow.com/a/42923092
     return getattr(x, "tolist", lambda: x)()
 
 
-def strip_path(path, extensions=True):
+def strip_path(path: str, extensions: bool = True) -> str:
     """
     Return the final component of a path with file extensions removed.
 
     Arguments:
-        path (str): Path to file
-        extensions: Maximum number of extensions to remove or `True` for all
+        path: Path.
+        extensions: Maximum number of extensions to remove, or `True` for all.
+
+    Examples:
+        >>> strip_path('foo/bar')
+        'bar'
+        >>> strip_path('foo/bar.ext')
+        'bar'
+        >>> strip_path('foo/bar.ext.ext2')
+        'bar'
+        >>> strip_path('foo/bar.ext.ext2', extensions=1)
+        'bar.ext'
     """
     basename = os.path.basename(path)
     if extensions:
@@ -129,40 +157,43 @@ def strip_path(path, extensions=True):
     return basename
 
 
-def sorted_neighbors(x, y):
+def _sorted_neighbors(x: Iterable, y: Iterable) -> np.ndarray:
     """
     Return indices of neighbors.
 
     Arguments:
-        x (iterable): Values sorted in ascending order
-        y (iterable): Values to find neighbors for
+        x: Values sorted in ascending order.
+        y: Values to find neighbors for in `x` (n, ).
 
     Returns:
-        array: Index (in `x`) of left and right neighbors for each value in `y` (n, 2)
+        Index (in `x`) of left and right neighbors for each value in `y` (n, 2).
     """
-    x, y = np.asarray(x), np.asarray(y)
     index = np.searchsorted(x, y)
     # index = 0 snap to 0
-    # 0 < index < len(x) snap to index -1
+    # 0 < index < len(x) snap to index - 1
     index[(index > 0) & (index < len(x))] -= 1
     # index = len(x) snap to index - 2
     index[index == len(x)] -= 2
     return np.column_stack((index, index + 1))
 
 
-def sorted_nearest(x, y):
+def sorted_nearest(x: Iterable, y: Iterable) -> np.ndarray:
     """
     Return indices of nearest neighbors.
 
     Arguments:
-        x (iterable): Values sorted in ascending order
-        y (iterable): Values to find neighbors for
+        x: Values sorted in ascending order.
+        y: Values to find neighbors for in `x` (n, ).
 
     Returns:
-        array: Index (in `x`) of nearest neighbor for each value in `y` (n, )
+        Index (in `x`) of nearest neighbor for each value in `y` (n, ).
+
+    Examples:
+        >>> sorted_nearest([0, 1, 2], [-1, 0, 3, 1.1])
+        array([0, 0, 2, 1])
     """
     x, y = np.asarray(x), np.asarray(y)
-    neighbors = sorted_neighbors(x, y)
+    neighbors = _sorted_neighbors(x, y)
     nearest = np.argmin(np.abs(y.reshape(-1, 1) - x[neighbors]), axis=1)
     return neighbors[range(len(y)), nearest]
 
@@ -170,16 +201,18 @@ def sorted_nearest(x, y):
 # ---- Pickles ---- #
 
 
-def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTOCOL):
+def write_pickle(
+    obj: Any, path: str, gz: bool = False, binary: bool = True, **kwargs: Any
+) -> None:
     """
     Write object to pickle file.
 
     Arguments:
-        obj: Object to write
-        path (str): Path to file
-        gz (bool): Whether to use gzip compression
-        binary (bool): Whether to write a binary pickle
-        protocol (int): Protocol to use
+        obj: Object to write.
+        path: Path to file.
+        gz: Whether to use gzip compression.
+        binary: Whether to write a binary pickle.
+        **kwargs: Optional arguments to :func:`pickle.dump`.
     """
     pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
     mode = "wb" if binary else "w"
@@ -191,15 +224,15 @@ def write_pickle(obj, path, gz=False, binary=True, protocol=pickle.HIGHEST_PROTO
     fp.close()
 
 
-def read_pickle(path, gz=False, binary=True, **kwargs):
+def read_pickle(path: str, gz: bool = False, binary: bool = True, **kwargs: Any) -> Any:
     """
     Read object from pickle file.
 
     Arguments:
-        path (str): Path to file
-        gz (bool): Whether pickle is gzip compressed
-        binary (bool): Whether pickle is binary
-        **kwargs: Arguments to :func:`pickle.load`.
+        path: Path to file.
+        gz: Whether pickle is gzip compressed.
+        binary: Whether pickle is binary.
+        **kwargs: Optional arguments to :func:`pickle.load`.
     """
     mode = "rb" if binary else "r"
     if gz:
@@ -214,29 +247,42 @@ def read_pickle(path, gz=False, binary=True, **kwargs):
 # ---- JSON ---- #
 
 
-def read_json(path, **kwargs):
+def read_json(path: str, **kwargs: Any) -> Union[dict, list]:
     """
     Read JSON from file.
 
     Arguments:
-        path (str): Path to file
-        **kwargs: Additional arguments passed to :func:`json.load`.
+        path: Path to file.
+        **kwargs: Optional arguments to :func:`json.load`.
     """
     with open(path, mode="r") as fp:
         return json.load(fp, **kwargs)
 
 
-def write_json(obj, path=None, flat_arrays=False, **kwargs):
+def write_json(
+    obj: Union[dict, list], path: str = None, flat_arrays: bool = False, **kwargs: Any
+) -> Optional[str]:
     """
     Write object to JSON.
 
     Arguments:
-        obj: Object to write as JSON
-        path (str): Path to file. If `None`, result is returned as a string.
-        flat_arrays (bool): Whether to flatten json arrays to a single line.
-            By default, `json.dumps` puts each array element on a new line if
+        obj: Object to write as JSON.
+        path: Path to file.
+        flat_arrays: Whether to flatten JSON arrays to a single line.
+            By default, :func:`json.dumps` puts each array element on a new line if
             `indent` is `0` or greater.
-        **kwargs: Additional arguments passed to :func:`json.dumps`.
+        **kwargs: Optional arguments to :func:`json.dumps`.
+
+    Returns:
+        JSON string (if `path` is `None`). 
+
+    Examples:
+        >>> write_json({'x': [0, 1]})
+        '{"x": [0, 1]}'
+        >>> write_json({'x': [0, 1]}, indent=2)
+        '{\\n  "x": [\\n    0,\\n    1\\n  ]\\n}'
+        >>> write_json({'x': [0, 1]}, indent=2, flat_arrays=True)
+        '{\\n  "x": [0, 1]\\n}'
     """
     txt = json.dumps(obj, **kwargs)
     if flat_arrays and kwargs.get("indent") >= 0:
@@ -256,144 +302,214 @@ def write_json(obj, path=None, flat_arrays=False, **kwargs):
     return txt
 
 
-# ---- Arrays: General ---- #
+# ---- Arrays ---- #
 
 
-def normalize(array):
+def normalize(a: np.ndarray) -> np.ndarray:
     """
-    Normalize a numeric array to mean 0, variance 1.
+    Normalize an array to mean 0, variance 1.
 
     Arguments:
-        array (array): Input array
+        a: Array to normalize.
+
+    Returns:
+        Normalized floating-point array of the same shape as `a`.
+
+    Examples:
+        >>> a = np.array([0, 1, 2, 3])
+        >>> x = normalize(a)
+        >>> x.shape == a.shape
+        True
+        >>> x.mean()
+        0.0
+        >>> x.std()
+        1.0
     """
-    return (array - array.mean()) * (1 / array.std())
+    return (a - a.mean()) * (1 / a.std())
 
 
-def gaussian_filter(array, mask=None, fill=False, **kwargs):
+def gaussian_filter(
+    a: np.ndarray, mask: np.ndarray = None, fill: bool = False, **kwargs: Any
+) -> np.ndarray:
     """
-    Return a gaussian-filtered array.
+    Apply gaussian filter to array.
 
     Excludes cells by the method described in https://stackoverflow.com/a/36307291.
 
     Arguments:
-        array (array): Array to filter
-        mask (array): Boolean mask of cells to include (True) or exclude (False).
+        a: Array to filter.
+        mask: Boolean mask of cells to include (True) or exclude (False).
             If `None`, all cells are included.
-        fill (bool): Whether to fill cells excluded by `mask` with interpolated values
-        **kwargs (dict): Additional arguments to
-            :func:`scipy.ndimage.filters.gaussian_filter`.
+        fill: Whether to fill cells excluded by `mask` with interpolated values.
+        **kwargs: Optional arguments to :func:`scipy.ndimage.filters.gaussian_filter`.
+
+    Returns:
+        Gaussian-filtered array of the same shape as `a`.
+
+    Examples:
+        >>> a = np.array([[np.nan, 1], [2, np.nan]])
+        >>> gaussian_filter(a, sigma=1, truncate=1)
+        array([[nan, nan],
+               [nan, nan]])
+        >>> gaussian_filter(a, sigma=1, mask=~np.isnan(a))
+        array([[       nan, 1.23154033],
+               [1.76845967,        nan]])
+        >>> gaussian_filter(a, sigma=1, mask=~np.isnan(a), fill=True)
+        array([[1.5       , 1.23154033],
+               [1.76845967, 1.5       ]])
     """
     if mask is None:
-        return scipy.ndimage.filters.gaussian_filter(array, **kwargs)
-    x = array.copy()
+        return scipy.ndimage.filters.gaussian_filter(a, **kwargs)
+    x = a.copy()
     x[~mask] = 0
     xf = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
     x[mask] = 1
     xf_sum = scipy.ndimage.filters.gaussian_filter(x, **kwargs)
     x = xf / xf_sum
     if not fill:
-        x[~mask] = array[~mask]
+        x[~mask] = a[~mask]
     return x
 
 
-def maximum_filter(array, mask=None, fill=False, **kwargs):
+def maximum_filter(
+    a: np.ndarray, mask: np.ndarray = None, fill: bool = False, **kwargs: Any
+) -> np.ndarray:
     """
-    Return a maximum-filtered array.
+    Apply maximum filter to array.
 
     Excludes cells by setting them to the minimum value allowable by the datatype.
 
     Arguments:
-        array (array): Array to filter
-        mask (array): Boolean mask of cells to include (True) or exclude (False).
+        a: Array to filter.
+        mask: Boolean mask of cells to include (True) or exclude (False).
             If `None`, all cells are included.
-        fill (bool): Whether to fill cells excluded by `mask` with interpolated values
-        **kwargs (dict): Additional arguments to
-            :func:`scipy.ndimage.filters.maximum_filter`.
+        fill: Whether to fill cells excluded by `mask` with interpolated values.
+        **kwargs: Optional arguments to :func:`scipy.ndimage.filters.maximum_filter`.
+
+    Returns:
+        Maximum-filtered array of the same shape as `a`.
+
+    Examples:
+        >>> a = np.array([[np.nan, 1], [2, np.nan]])
+        >>> maximum_filter(a, size=3)
+        array([[nan, nan],
+               [nan, nan]])
+        >>> maximum_filter(a, size=3, mask=~np.isnan(a))
+        array([[nan,  2.],
+               [ 2., nan]])
+        >>> maximum_filter(a, size=3, mask=~np.isnan(a), fill=True)
+        array([[2., 2.],
+               [2., 2.]])
     """
     if mask is None:
-        return scipy.ndimage.filters.maximum_filter(array, **kwargs)
-    dtype_min = numpy_dtype_minmax(array)[0]
-    x = array.copy()
+        return scipy.ndimage.filters.maximum_filter(a, **kwargs)
+    dtype_min = numpy_dtype_minmax(a.dtype)[0]
+    x = a.copy()
     mask = ~mask
     x[mask] = dtype_min
     x = scipy.ndimage.filters.maximum_filter(x, **kwargs)
     if fill:
         mask = x == dtype_min
-    x[mask] = array[mask]
+    x[mask] = a[mask]
     return x
 
 
-# ---- Arrays: Images ---- #
-
-
-def compute_cdf(array, return_inverse=False):
+def compute_cdf(
+    a: np.ndarray, return_inverse: bool = False
+) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """
-    Compute the cumulative distribution function of an array.
+    Return the cumulative distribution function (CDF) of an array.
 
     Arguments:
-        array (array): Input array
-        return_inverse (bool): Whether to return the indices of the returned
-            `values` that reconstruct `array`
+        a: Array.
+        return_inverse: Whether to return the indices of the unique values
+            that reconstruct `a`.
 
     Returns:
-        tuple:
+        Tuple of sorted unique values (n, ),
+            the probability of being less than or equal to each value (n, ),
+            and, if `return_inverse` is `True`,
+            the indices which reconstruct `a` from the unique values.
 
-            - array: Sorted unique values
-            - array: Quantile of each value in `values`
-            - array (optional): Indices of `values` which reconstruct `array`.
-              Only returned if `return_inverse=True`.
+    Examples:
+        >>> a = np.array([3, 2, 1, 2])
+        >>> compute_cdf(a)
+        (array([1, 2, 3]), array([0.25, 0.75, 1.  ]))
+        >>> compute_cdf(a, return_inverse=True)
+        (array([1, 2, 3]), array([0.25, 0.75, 1.  ]), array([2, 1, 0, 1]))
     """
-    results = np.unique(array, return_inverse=return_inverse, return_counts=True)
-    # Normalize cumulative sum of counts by the number of pixels
-    quantiles = np.cumsum(results[-1]) * (1.0 / array.size)
+    results = np.unique(a, return_inverse=return_inverse, return_counts=True)
+    # Normalize cumulative sum of counts by the number of cells
+    quantiles = np.cumsum(results[-1]) / a.size
     if return_inverse:
         return results[0], quantiles, results[1]
     return results[0], quantiles
 
 
-def match_histogram(source, template):
+def match_histogram(
+    a: np.ndarray, cdf: Union[Tuple[Iterable, Iterable], np.ndarray]
+) -> np.ndarray:
     """
-    Adjust the values of an array such that its histogram matches that of a target
-    array.
+    Transform array to match a cumulative distribution function (CDF).
 
     Arguments:
-        source (array): Array to transform.
-        template: Histogram template as either an array (of any shape)
-            or an iterable (unique values, unique value quantiles).
+        a: Array to transform.
+        cdf: Cumulative distribution function (sorted unique values, probabilities)
+            or an array from which to compute a CDF.
 
     Returns:
-        array: Transformed `source` array
+        Values of `a` transformed to match `cdf`.
+
+    Examples:
+        >>> a = np.array([3, 2, 1, 2])
+        >>> b = np.array([4, 2, 1, 2, 4, 2, 1, 2])
+        >>> match_histogram(a, b)
+        array([4., 2., 1., 2.])
+        >>> match_histogram(a, compute_cdf(b))
+        array([4., 2., 1., 2.])
     """
-    _, s_quantiles, inverse_index = compute_cdf(source, return_inverse=True)
-    if isinstance(template, np.ndarray):
-        template = compute_cdf(template, return_inverse=False)
-    # Interpolate new values based on source and template quantiles
-    new_values = np.interp(s_quantiles, template[1], template[0])
-    return new_values[inverse_index].reshape(source.shape)
+    _, quantiles, inverse = compute_cdf(a, return_inverse=True)
+    if isinstance(cdf, np.ndarray):
+        cdf = compute_cdf(cdf, return_inverse=False)
+    values = np.interp(quantiles, cdf[1], cdf[0])
+    return values[inverse].reshape(a.shape)
 
 
 # ---- GIS ---- #
 
 
-def crs_to_wkt(crs):
+def crs_to_wkt(crs: Union[int, str]) -> str:
     """
     Convert coordinate reference system (CRS) to well-known text (WKT).
 
     Arguments:
-        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
+
+    Returns:
+        Coordinate reference system as well-known text (WKT).
+
+    Raises:
+        ValueError: String CRS format not Proj4 or WKT.
+        ValueError: Unsupported CRS format.
+
+    Examples:
+        >>> crs_to_wkt(4326)
+        'GEOGCS["WGS 84",DATUM["WGS_1984",...]'
+        >>> crs_to_wkt('+init=epsg:4326')
+        'GEOGCS["WGS 84",DATUM["WGS_1984",...]'
     """
     obj = osgeo.osr.SpatialReference()
     if isinstance(crs, int):
         obj.ImportFromEPSG(crs)
     elif isinstance(crs, str):
         if re.findall(r"\[", crs):
-            return crs
-        elif re.findall(r":", crs):
-            obj.ImportFromProj4(crs.lower())
+            obj.ImportFromWkt(crs)
+        elif re.findall(r"\+", crs):
+            obj.ImportFromProj4(crs)
         else:
-            raise ValueError("crs string format not Proj4 or WKT")
+            raise ValueError(f"String CRS format not Proj4 or WKT: {crs}")
     else:
-        raise ValueError("crs must be int (EPSG) or str (Proj4 or WKT)")
+        raise ValueError(f"Unsupported CRS format: {crs}")
     return obj.ExportToWkt()
 
 
@@ -411,7 +527,33 @@ def gdal_driver_from_path(path, raster=True, vector=True):
     return None
 
 
-def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
+def write_raster(
+    a: np.ndarray,
+    path: str,
+    driver: str = None,
+    nan: Union[float, int] = None,
+    crs: Union[int, str] = None,
+    transform: Iterable[Union[int, float]] = None,
+) -> None:
+    """
+    Write array to raster dataset.
+
+    Arguments:
+        a: Array to write as raster.
+        path: Path to file.
+        driver: GDAL driver name (see https://gdal.org/drivers/raster).
+            If `None`, guessed from `path`.
+        nan: Value to use in raster to represent NaN in array.
+        crs: Coordinate reference system as either EPSG code or Proj4 or WKT string.
+        transform: Affine transform mapping pixel positions to map positions
+            (see https://gdal.org/user/raster_data_model.html?#affine-geotransform).
+
+    Raises:
+        ValueError: Unsupported array data type.
+        ValueError: Unrecognized GDAL driver.
+        ValueError: Could not guess GDAL driver from path.
+        ValueError: GDAL driver cannot write files.
+    """
     a = np.atleast_3d(a)
     dtype = osgeo.gdal_array.NumericTypeCodeToGDALTypeCode(a.dtype)
     if not dtype:
@@ -432,7 +574,7 @@ def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
     can_create = meta.get(osgeo.gdal.DCAP_CREATE)
     can_copy = meta.get(osgeo.gdal.DCAP_CREATECOPY)
     if not can_create and not can_copy:
-        raise ValueError(f"Driver {driver.ShortName} cannot create files")
+        raise ValueError(f"GDAL driver {driver.ShortName} cannot write files")
     create_driver = driver if can_create else osgeo.gdal.GetDriverByName("mem")
     output = create_driver.Create(
         utf8_path=path if can_create else "",
@@ -458,22 +600,45 @@ def write_raster(a, path, driver=None, nan=None, crs=None, transform=None):
 # ---- Geometry ---- #
 
 
-def boolean_split(x, mask, axis=0, circular=False, include="all"):
+def boolean_split(
+    a: np.ndarray,
+    mask: np.ndarray,
+    axis: int = 0,
+    circular: bool = False,
+    include: str = "all",
+) -> List[np.ndarray]:
     """
-    Split array by boolean mask.
-
-    Select True groups with [0::2] if mask[0] is True, else [1::2].
+    Split array by a boolean mask.
 
     Arguments:
-        x (array): Array to split
-        mask (array): Boolean array with same length as `x` along `axis`
-        axis (int): Axis along which to split
-        circular (bool): Whether to treat `x` as closed (x[-1] -> x[0])
-        include (str): Whether to return 'all', 'true', or 'false' groups
+        a: Array to split.
+        mask: Boolean array with same length as `a` along `axis`.
+        axis: Axis along which to split.
+        circular: Whether to treat `a` as a closed loop (a[-1] -> a[0]).
+        include: Whether to return 'all' groups or only 'true' or 'false' groups.
+
+    Returns:
+        List of subsets of `a` with contiguous `True` or `False` values in `mask`.
+
+    Examples:
+        >>> a = np.array([0, 1, 2, 3, 4])
+        >>> mask = np.array([True, True, False, False, True])
+        >>> boolean_split(a, mask)
+        [array([0, 1]), array([2, 3]), array([4])]
+        >>> boolean_split(a, mask, circular=True)
+        [array([4, 0, 1]), array([2, 3])]
+        >>> boolean_split(a, mask, circular=True, include="true")
+        [array([4, 0, 1])]
+        >>> boolean_split(a.reshape(-1, 1), mask)
+        [array([[0],
+                [1]]),
+         array([[2],
+                [3]]),
+         array([[4]])]
     """
     # See https://stackoverflow.com/a/36518315/8161503
     cuts = np.nonzero(mask[1:] != mask[:-1])[0] + 1
-    splits = np.split(x, cuts, axis=axis)
+    splits = np.split(a, cuts, axis=axis)
     if circular and len(splits) > 1 and mask[0] is mask[-1]:
         splits[0] = np.concatenate((splits[-1], splits[0]), axis=axis)
         splits.pop(-1)
@@ -488,38 +653,52 @@ def boolean_split(x, mask, axis=0, circular=False, include="all"):
     return []
 
 
-def in_box(points, box):
+def in_box(points: np.ndarray, box: Iterable) -> np.ndarray:
     """
-    Tests whether each point is in (or on) the box.
-
-    Works in any dimension.
+    Tests whether points are in (or on) a box.
 
     Arguments:
-        points (array): Point coordinates (npts, ndim)
-        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        points: Point coordinates (npts, ndim).
+        box: Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, ).
+
+    Returns:
+        Boolean mask of points in or on the box (npts, ).
+
+    Examples:
+        >>> points = np.array([(0, 0), (1, 1), (2, 2), (3, 3)])
+        >>> in_box(points, box=[1, 1, 2.5, 2.5])
+        array([False,  True,  True, False])
     """
     box = unravel_box(box)
     return np.all((points >= box[0, :]) & (points <= box[1, :]), axis=1)
 
 
-def clip_polyline_box(line, box, t=False):
+def clip_polyline_box(
+    line: np.ndarray, box: Iterable, t: bool = False
+) -> List[np.ndarray]:
     """
-    Returns segments of line within the box.
+    Return segments of a line within a box.
 
     Vertices are inserted as needed on the box boundary.
-    For speed, does not check for segments within the box
-    entirely between two adjacent line vertices.
+    For speed, does not check for segments between two consecutive line vertices.
 
     Arguments:
-        line (array): 2 or 3D point coordinates (npts, ndim)
-        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
-        t (bool): Last column of `line` are distances along line, linearly interpolated
-            at splits
+        line: Coordinates of 2 or 3-d line vertices with optional distance measures,
+            linearly interpolated at splits [[x, y(, z(, m))], ...].
+        box: Minimun and maximum bounds [xmin, ymin(, zmin), xmax, ymax(, zmax)].
+        t: Whether last column of `line` are optional distance measures.
+
+    Returns:
+
+    Examples:
+        >>> line = np.array([(0, 0), (1, 1), (3, 3)])
+        >>> box = 0.5, 0.5, 1.5, 1.5
+        >>> clip_polyline_box(line, box)
+        [array([[0.5, 0.5],
+                [1. , 1. ],
+                [1.5, 1.5]])]
     """
-    if t:
-        cols = slice(None, -1)
-    else:
-        cols = slice(None)
+    cols = slice(None, -1) if t else slice(None)
     mask = in_box(line[:, cols], box)
     segments = boolean_split(line, mask)
     trues = slice(int(~mask[0]), None, 2)
@@ -530,35 +709,48 @@ def clip_polyline_box(line, box, t=False):
             distance = segments[i][0, :] - origin
             ti = intersect_edge_box(origin[cols], distance[cols], box)
             if ti is not None:
-                segments[i] = np.insert(segments[i], 0, origin + ti * distance, axis=0)
+                segments[i] = np.row_stack((origin + ti * distance, segments[i]))
         if i < nsegments - 1:
             origin = segments[i][-1, :]
             distance = segments[i + 1][0, :] - origin
             ti = intersect_edge_box(origin[cols], distance[cols], box)
             if ti is not None:
-                segments[i] = np.insert(
-                    segments[i], len(segments[i]), origin + ti * distance, axis=0
-                )
+                segments[i] = np.row_stack((segments[i], origin + ti * distance))
     return segments[trues]
 
 
-def intersect_edge_box(origin, distance, box):
+def intersect_edge_box(
+    origin: Iterable, distance: Iterable, box: Iterable
+) -> Optional[float]:
     """
-    Returns intersection of edge with box.
+    Return intersection of edge with box.
 
     Arguments:
-        origin (iterable): Coordinates of 2 or 3D point (ndim, )
-        distance (iterable): Distance to end point (ndim, )
-        box (iterable): Minimun and maximum bounds [xmin, ..., xmax, ...] (2 * ndim, )
+        origin: Coordinates of 2 or 3-d point [x, y(, z)].
+        distance: Distance to end point [dx, dy(, dz)].
+        box: Box min and max vertices [xmin, ymin(, zmin), xmax, ymax(, zmax)].
+
+    Returns:
+        Multiple of `distance` where edge intersects box, or `None` for no intersection.
+
+    Examples:
+        >>> origin = 0, 0
+        >>> box = 1, -1, 2, 2
+        >>> intersect_edge_box(origin, (1, 1), box) is None
+        True
+        >>> intersect_edge_box(origin, (2, 2), box)
+        0.5
     """
-    distance_2d = np.asarray(distance).reshape(1, -1)
-    t = np.nanmin(intersect_rays_box(origin, distance_2d, box, t=True))
+    distance = np.asarray(distance).reshape(1, -1)
+    t = np.nanmin(intersect_rays_box(origin, distance, box, t=True))
     if t > 0 and t < 1:
         return t
     return None
 
 
-def intersect_rays_box(origin, directions, box, t=False):
+def intersect_rays_box(
+    origin: Iterable, directions: np.ndarray, box: Iterable, t: bool = False
+) -> Tuple[np.ndarray]:
     """
     Return intersections of rays with a(n axis-aligned) box.
 
@@ -567,19 +759,36 @@ def intersect_rays_box(origin, directions, box, t=False):
     https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 
     Arguments:
-        origin (iterable): Common origin of rays [x, y(, z)]
-        directions (array): Directions of rays [[dx, dy(, dz)], ...]
-        box (iterable): Box min and max vertices
-            [xmin, ymin(, zmin), xmax, ymax(, zmax)]
+        origin: Common origin of rays [x, y(, z)].
+        directions: Directions of rays [[dx, dy(, dz)], ...].
+        box: Box min and max vertices [xmin, ymin(, zmin), xmax, ymax(, zmax)].
+        t: Whether to return relative (instead of absolute) coordinates of intersection.
 
     Returns:
-        array: Entrance coordinates (`nan` if a miss or `origin` inside `box`)
-        array: Exit coordinates (`nan` if a miss)
+        Ray box entrances (`nan` if a miss or `origin` inside `box`)
+        and exits (`nan` if a miss) as either absolute coordinates, or if `t` is `True`,
+        multipliers of ray `directions`.
+
+    Examples:
+        >>> origin = 0, 0
+        >>> directions = np.array([(1, 0), (1, 1)])
+        >>> box = 1, -1, 2, 2
+        >>> intersect_rays_box(origin, directions, box, t=True)
+        (array([[1.],
+                [1.]]),
+         array([[2.],
+                [2.]]))
+        >>> intersect_rays_box(origin, directions, box)
+        (array([[1., 0.],
+                [1., 1.]]),
+         array([[2., 0.],
+                [2., 2.]]))
     """
     # Precompute constants
     bounds = np.repeat(np.atleast_2d(box), len(directions), axis=0)
     fbounds = bounds.flatten()
-    invdir = np.divide(1.0, directions)
+    with np.errstate(divide="ignore"):
+        invdir = 1 / directions
     sign = (invdir < 0).astype(int)
     nrays = directions.shape[0]
     ndims = directions.shape[1]
@@ -626,7 +835,7 @@ def intersect_rays_box(origin, directions, box, t=False):
 
 # TODO: Implement faster run-slice
 # (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
-def bresenham_line(start, end):
+def bresenham_line(start: Iterable[int], end: Iterable[int]) -> np.ndarray:
     """
     Return grid indices along a line between two grid indices.
 
@@ -635,11 +844,29 @@ def bresenham_line(start, end):
     http://www.roguebasin.com/index.php?title=Bresenham%27s_Line_Algorithm.
 
     Arguments:
-        start (iterable): Start position (xi, yi)
-        end (iterable): End position (xi, yi)
+        start: Start position (xi, yi).
+        end: End position (xi, yi).
 
     Returns:
-        array: Grid indices [[xi, yi], ...]
+        Grid indices [(xi, yi), ...].
+
+    Examples:
+        >>> bresenham_line((0, 0), (2, 0))
+        array([[0, 0],
+               [1, 0],
+               [2, 0]])
+        >>> bresenham_line((0, 0), (0, 2))
+        array([[0, 0],
+               [0, 1],
+               [0, 2]])
+        >>> bresenham_line((0, 0), (2, 2))
+        array([[0, 0],
+               [1, 1],
+               [2, 2]])
+        >>> bresenham_line((0, 0), (2, 1))
+        array([[0, 0],
+               [1, 0],
+               [2, 1]])
     """
     x1, y1 = start
     x2, y2 = end
@@ -660,7 +887,7 @@ def bresenham_line(start, end):
     dx = x2 - x1
     abs_dy = abs(y2 - y1)
     # Calculate error
-    error = int(dx / 2.0)
+    error = int(dx / 2)
     ystep = 1 if y1 < y2 else -1
     # Iterate over bounding box generating points between start and end
     y = y1
@@ -685,7 +912,7 @@ def bresenham_line(start, end):
     return np.array(points)
 
 
-def bresenham_circle(center, radius):
+def bresenham_circle(center: Iterable, radius: float) -> np.ndarray:
     """
     Return grid indices along a circular path.
 
@@ -693,11 +920,23 @@ def bresenham_circle(center, radius):
     Code modified from https://en.wikipedia.org/wiki/Midpoint_circle_algorithm.
 
     Arguments:
-        center (iterable): Circle center (x, y)
-        radius (float): Circle radius in pixels
+        center: Circle center (x, y).
+        radius: Circle radius in pixels.
 
     Returns:
-        array: Grid indices [[xi, yi], ...]
+        Grid indices [(xi, yi), ...].
+
+    Examples:
+        >>> bresenham_circle((0, 0), 1)
+        array([[ 0.,  1.],
+               [ 1.,  1.],
+               [ 1.,  0.],
+               [ 1., -1.],
+               [ 0., -1.],
+               [-1., -1.],
+               [-1.,  0.],
+               [-1.,  1.],
+               [ 0.,  1.]])
     """
     x0, y0 = center
     # Compute number of points
@@ -749,18 +988,33 @@ def bresenham_circle(center, radius):
         xy[2 * octant_size + i - 1, :] = [x0 + y, y0 - x]
         # 8th octant
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
-    return xy
+    # Remove duplicate points
+    unique = [True] + (np.diff(xy, axis=0).sum(axis=1) != 0).tolist()
+    return xy[unique]
 
 
-def intersect_boxes(boxes):
+def intersect_boxes(boxes: Iterable[Iterable]) -> np.ndarray:
     """
     Return intersection of boxes.
 
     Arguments:
-        boxes (iterable): Boxes, each in the format (minx, ..., maxx, ...)
+        boxes: Boxes, each in the format (xmin, ..., xmax, ...).
+
+    Returns:
+        Box of the intersection of all boxes (xmin, ..., xmax, ...).
+
+    Raises:
+        ValueError: Box lengths are not divisible by 2.
+        ValueError: Boxes do not intersect.
+
+    Examples:
+        >>> boxes = (0, 0, 10, 10), (5, 5, 15, 15)
+        >>> intersect_boxes(boxes)
+        array([ 5,  5, 10, 10])
     """
     boxes = np.asarray(boxes)
-    assert boxes.shape[1] % 2 == 0
+    if boxes.shape[1] % 2 != 0:
+        raise ValueError("Box lengths are not divisible by 2")
     ndim = boxes.shape[1] // 2
     boxmin = np.nanmax(boxes[:, 0:ndim], axis=0)
     boxmax = np.nanmin(boxes[:, ndim:], axis=0)
@@ -769,50 +1023,89 @@ def intersect_boxes(boxes):
     return np.hstack((boxmin, boxmax))
 
 
-def pairwise_distance(x, y, metric="sqeuclidean", **params):
+def pairwise_distance(
+    x: Iterable, y: Iterable, metric: str = "sqeuclidean", **kwargs: Any
+) -> np.ndarray:
     """
     Return the pairwise distance between two sets of points.
 
     Arguments:
-        x (iterable): First set of n-d points
-        y (iterable): Second set of n-d points
-        metric (str): Distance metric. See :func:`scipy.spatial.distance.cdist`.
-        **params (dict): Additional arguments to :func:`scipy.spatial.distance.cdist`.
+        x: First set of n-d points.
+        y: Second set of n-d points.
+        metric: Distance metric. See :func:`scipy.spatial.distance.cdist`.
+        **kwargs (dict): Optional arguments to :func:`scipy.spatial.distance.cdist`.
 
     Returns:
-        array: Pairwise distances, where [i, j] = distance(x[i], y[j])
+        array: Pairwise distances, where [i, j] = distance(x[i], y[j]).
+
+    Examples:
+        >>> x = [(0, 0), (1, 1), (2, 2)]
+        >>> y = [(0, 1), (1, 2)]
+        >>> pairwise_distance(x, y, metric='sqeuclidean')
+        array([[1., 5.],
+               [1., 1.],
+               [5., 1.]])
     """
-    x = np.asarray(x)
-    y = np.asarray(y)
+    x, y = np.asarray(x), np.asarray(y)
     return scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
         metric=metric,
-        **params,
+        **kwargs,
     )
 
 
 def interpolate_line(
-    vertices, x=None, xi=None, n=None, dx=None, error=True, fill="endpoints"
-):
+    vertices: np.ndarray,
+    x: Iterable = None,
+    xi: Iterable = None,
+    n: int = None,
+    dx: float = None,
+    error: bool = True,
+    fill: Any = "endpoints",
+) -> np.ndarray:
     """
     Return points at the specified distances along a line.
 
     Arguments:
-        vertices (array): Coordinates of vertices (n, d)
-        x (iterable): Distance measure at each vertex (n, ). If `None`,
-            the cumulative Euclidean distance is used.
+        vertices: Coordinates of line vertices [(x, ...), ...].
+        x: Distance measure at each vertex (n, ).
+            If `None`, the cumulative Euclidean distance is used.
             Undefined behavior results if not strictly monotonic.
-        xi (iterable): Distance of interpolated points along line
-        n (int): Number of evenly-spaced points to return
-            (ignored if `xi` is not `None`)
-        dx (float): Nominal distance between evenly-spaced points
-            (ignored if `xi` or `n` is not `None`)
-        error (bool): Whether to raise ValueError if any `xi` are outside range of `x`
+        xi: Distance of interpolated points along line.
+            Takes precedence over `n` and `dx`.
+        n: Number of evenly-spaced points to return.
+            Takes precedence over `dx`.
+        dx: Nominal distance between evenly-spaced points.
+        error: Whether to raise an error if any `xi` are outside the range of `x`.
         fill: Value(s) to use for `xi` beyond `x[0]` and `xi` beyond `x[-1]`.
             If 'endpoints', uses (`vertices[0]`, `vertices[-1]`).
+
+    Returns:
+        Coordinates of interpolated points [(x, ...), ...].
+
+    Raises:
+        ValueError: One of xi, n, or dx is required.
+        ValueError: Requested distance outside range (if `error` is `True`).
+
+    Examples:
+        >>> line = np.array([(0, 0), (1, 0), (1, 1)])
+        >>> interpolate_line(line, xi=(1.5, 2))
+        array([[1. , 0.5],
+               [1. , 1. ]])
+        >>> interpolate_line(line, n=2)
+        array([[0., 0.],
+               [1., 1.]])
+        >>> interpolate_line(line, dx=1)
+        array([[0., 0.],
+               [1., 0.],
+               [1., 1.]])
+        >>> interpolate_line(line, xi=(-1, 3), error=False)
+        array([[0., 0.],
+               [1., 1.]])
     """
-    assert not all((xi is None, n is None, dx is None))
+    if all((xi is None, n is None, dx is None)):
+        raise ValueError("One of xi, n, or dx is required")
     if x is None:
         # Compute total distance at each vertex
         x = np.cumsum(np.sqrt(np.sum(np.diff(vertices, axis=0) ** 2, axis=1)))
@@ -854,57 +1147,105 @@ def interpolate_line(
     return result
 
 
-def unravel_box(box):
+def unravel_box(box: Iterable) -> np.ndarray:
     """
     Return a box in unravelled format.
 
     Arguments:
-        box (iterable): Box (minx, ..., maxx, ...)
+        box: Box (xmin, ..., xmax, ...).
 
     Returns:
-        array: [[minx, ...], [maxx, ...]]
+        Box as 2-row array [(xmin, ...), (xmax, ...)].
+
+    Raises:
+        ValueError: Box length is not divisible by 2.
+
+    Examples:
+        >>> box = 1, 2, 10, 20
+        >>> unravel_box(box)
+        array([[ 1,  2],
+               [10, 20]])
     """
     box = np.asarray(box)
-    assert box.size % 2 == 0
-    ndim = box.size // 2
-    return box.reshape(-1, ndim)
+    if box.size % 2 != 0:
+        raise ValueError("Box length is not divisible by 2")
+    return box.reshape(-1, box.size // 2)
 
 
-def bounding_box(points):
+def bounding_box(points: Iterable[Iterable]) -> np.ndarray:
     """
     Return bounding box of points.
 
     Arguments:
-        points (iterable): Points, each in the format (x, ...)
+        points: Point coordinates [(x, ...), ...].
+
+    Returns:
+        Bounding box [xmin, ..., xmax, ...].
+
+    Examples:
+        >>> points = [(0, 0), (0, 1), (1, 10)]
+        >>> bounding_box(points)
+        array([ 0,  0,  1, 10])
     """
     points = np.asarray(points)
     return np.hstack((np.min(points, axis=0), np.max(points, axis=0)))
 
 
-def box_to_polygon(box):
+def box_to_polygon(box: Iterable) -> np.ndarray:
     """
     Return box as polygon.
 
     Arguments:
-        box (iterable): Box (minx, ..., maxx, ...)
+        box: 2-dimensional box (xmin, ymin, xmax, ymax).
+
+    Returns:
+        Polygon vertices (5, 2).
+
+    Examples:
+        >>> box = 0, 0, 1, 1
+        >>> box_to_polygon(box)
+        array([[0, 0],
+               [0, 1],
+               [1, 1],
+               [1, 0],
+               [0, 0]])
     """
     box = unravel_box(box)
     return np.column_stack((box[(0, 0, 1, 1, 0), 0], box[(0, 1, 1, 0, 0), 1]))
 
 
-def box_to_grid(box, step, snap=None, mode="grids"):
+def box_to_grid(
+    box: Iterable,
+    step: Union[float, Iterable[float]],
+    snap: Iterable = None,
+    mode: str = "grids",
+) -> Iterable[np.ndarray]:
     """
     Return grid of points inside box.
 
     Arguments:
-        box (iterable): Box (minx, ..., maxx, ...)
-        step: Grid spacing for all (float) or each (iterable) dimension
-        snap (iterable): Point to align grid to (need not be inside box).
+        box: Box (xmin, ..., xmax, ...).
+        step: Grid spacing for all (float) or each (iterable) dimension.
+        snap: Point to align grid to (need not be inside box).
             If `None`, the `box` minimum is used
-        mode (str): Return format ('vectors' or 'grids')
+        mode: Return format ('vectors' or 'grids').
 
     Returns:
-        tuple: Either vectors or grids for each dimension
+        Either vectors or grids for each dimension.
+
+    Examples:
+        >>> box = 0, 0, 10, 10
+        >>> box_to_grid(box, step=4)
+        [array([[0., 4., 8.],
+                [0., 4., 8.],
+                [0., 4., 8.]]),
+         array([[0., 0., 0.],
+                [4., 4., 4.],
+                [8., 8., 8.]])]
+        >>> box_to_grid(box, step=4, mode='vectors')
+        (array([0., 4., 8.]), array([0., 4., 8.]))
+        >>> box_to_grid(box, step=4, snap=(1, 2), mode='vectors')
+        (array([1., 5., 9.]), array([ 2.,  6., 10.]))
     """
     box = unravel_box(box)
     ndim = box.shape[1]
@@ -924,15 +1265,21 @@ def box_to_grid(box, step, snap=None, mode="grids"):
     return np.meshgrid(*arrays)
 
 
-def grid_to_points(grid):
+def grid_to_points(grid: Iterable[np.ndarray]) -> np.ndarray:
     """
     Return grid as points.
 
     Arguments:
-        grid (iterable): Array of grid coordinates for each dimension (X, ...)
+        grid: Array of grid coordinates for each dimension (X, ...).
 
     Returns:
-        array: Point coordinates [[x, ...], ...]
+        Point coordinates [(Xi, ...), ...].
+
+    Examples:
+        >>> grid = np.array([(1, 2)]), np.array([(10, 20)])
+        >>> grid_to_points(grid)
+        array([[ 1, 10],
+               [ 2, 20]])
     """
     return np.reshape(grid, (len(grid), -1)).T
 
@@ -1132,20 +1479,27 @@ def polygons_to_mask(
 
 
 def elevation_corrections(
-    origin=None, xyz=None, squared_distances=None, radius=6.3781e6, refraction=0.13,
-):
+    origin: Iterable = None,
+    xyz: np.ndarray = None,
+    squared_distances: Iterable = None,
+    radius: float = 6.3781e6,
+    refraction: float = 0.13,
+) -> np.ndarray:
     """
     Return elevation corrections for surface curvature and atmospheric refraction.
 
     Arguments:
-        origin (iterable): World coordinates of origin (x, y, (z))
-        xyz (array): World coordinates of target points (n, 2+)
-        squared_distances (iterable): Squared Euclidean distances
-            between `origin` and `xyz`. Takes precedence if not `None`.
-        radius (float): Radius of curvature in the same units as `xyz`.
+        origin: World coordinates of origin (x, y, (z)).
+        xyz: World coordinates of target points (n, 2+).
+        squared_distances: Squared Euclidean distances between `origin` and `xyz`.
+            Takes precedence over `origin` and `xyz`.
+        radius: Radius of curvature in the same units as `xyz`.
             Default is the Earth's equatorial radius in meters.
-        refraction (float): Coefficient of refraction of light.
+        refraction: Coefficient of refraction of light.
             Default is an average for standard Earth atmospheric conditions.
+
+    Returns:
+        Elevation correction for each point (n, ).
     """
     # http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
     # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
@@ -1158,67 +1512,96 @@ def elevation_corrections(
 # ---- Time ----
 
 
-def datetimes_to_float(datetimes):
-    """
-    Return datetimes as float.
-
-    Converts datetimes to POSIX timestamps - the number of seconds since
-    1970-01-01 00:00:00 UTC.
-
-    Arguments:
-        datetimes (iterable): Datetime objects
-    """
-    try:
-        return [xi.timestamp() for xi in datetimes]
-    except AttributeError:
-        # Python 2
-        epoch = datetime.datetime.fromtimestamp(0)
-        return [(xi - epoch).total_seconds() for xi in datetimes]
-
-
-def pairwise_distance_datetimes(x, y):
+def pairwise_distance_datetimes(
+    x: Iterable[datetime.datetime], y: Iterable[datetime.datetime]
+) -> np.ndarray:
     """
     Return the pairwise distances between two sets of datetimes.
 
-    Datetime wrapper for :func:`pairwise_distance`.
-
     Arguments:
-        x (iterable): Datetime objects
-        y (iterable): Datetime objects
+        x: Datetimes (n, ).
+        y: Datetimes (m, ).
 
     Returns:
-        array: Pairwise distances in seconds, where [i, j] = distance(x[i], y[j])
+        Pairwise distances in seconds (n, m), where [i, j] = distance(x[i], y[j]).
+
+    Examples:
+        >>> t = [datetime.datetime(2020, 1, 1, 0, 0, sec) for sec in range(5)]
+        >>> pairwise_distance_datetimes(t[0:3], t[3:5])
+        array([[3., 4.],
+               [2., 3.],
+               [1., 2.]])
     """
-    return pairwise_distance(
-        datetimes_to_float(x), datetimes_to_float(y), metric="minkowski", p=1
-    )
+    # Convert datetimes to POSIX timestamps (seconds since 1970-01-01 00:00:00 UTC)
+    x = [xi.timestamp() for xi in x]
+    y = [yi.timestamp() for yi in y]
+    return pairwise_distance(x, y, metric="minkowski", p=1)
 
 
-def datetime_range(start, stop, step):
+def datetime_range(
+    start: datetime.datetime, stop: datetime.datetime, step: datetime.timedelta
+) -> List[datetime.datetime]:
     """
-    Return a sequence of datetime.
+    Return evenly spaced datetimes within a given interval.
 
     Arguments:
-        start (datetime): Start datetime
-        stop (datetime): End datetime (inclusive)
-        step (timedelta): Time step
+        start: Start datetime.
+        stop: End datetime (inclusive).
+        step: Time step.
+
+    Returns:
+        Array of evenly spaced datetimes.
+
+    Examples:
+        >>> base = 2020, 1, 1, 0, 0
+        >>> dt = datetime.timedelta(seconds=1)
+        >>> datetime_range(datetime.datetime(*base, 0), datetime.datetime(*base, 2), dt)
+        [datetime.datetime(2020, 1, 1, 0, 0),
+         datetime.datetime(2020, 1, 1, 0, 0, 1),
+         datetime.datetime(2020, 1, 1, 0, 0, 2)]
     """
     max_steps = (stop - start) // step
     return [start + n * step for n in range(max_steps + 1)]
 
 
-def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
+def select_datetimes(
+    datetimes: Iterable[datetime.datetime],
+    start: datetime.datetime = None,
+    end: datetime.datetime = None,
+    snap: datetime.timedelta = None,
+    maxdt: datetime.timedelta = None,
+) -> np.ndarray:
     """
-    Return indices of datetimes matching the specified criteria.
+    Select datetimes matching the specified criteria.
 
     Arguments:
-        datetimes (iterable): Datetime objects in ascending order
-        start (datetime): Start datetime, or `min(datetimes)` if `None`
-        end (datetime): End datetime, or `max(datetimes)` if `None`
-        snap (timedelta): Interval (relative to 1970-01-01 00:00:00)
-            on which to select nearest `datetimes`, or all if `None`
-        maxdt (timedelta): Maximum distance from nearest `snap` to
-            select `datetimes`. If `None`, defaults to half of `snap`.
+        datetimes: Datetimes in ascending order.
+        start: Minimum datetime (inclusive).
+        end: Maximum datetime (inclusive).
+        snap: Interval (relative to 1970-01-01 00:00:00)
+            on which to select nearest `datetimes`, or all if `None`.
+        maxdt: Maximum distance from nearest `snap` to select `datetimes`.
+            If `None`, defaults to half of `snap`.
+
+    Returns:
+        Boolean mask of selected `datetimes`.
+
+    Raises:
+        ValueError: Start datetime is after end datetime.
+
+    Examples:
+        >>> t = [datetime.datetime(2020, 1, 1, 0, 0, x) for x in (0, 1, 2, 4, 5)]
+        >>> select_datetimes(t)
+        array([ True,  True,  True,  True,  True])
+        >>> select_datetimes(t, start=t[1])
+        array([False,  True,  True,  True,  True])
+        >>> select_datetimes(t, start=t[1], end=t[1])
+        array([False,  True, False, False, False])
+        >>> snap = datetime.timedelta(seconds=2)
+        >>> select_datetimes(t, snap=snap)
+        array([ True, False,  True,  True,  True])
+        >>> select_datetimes(t, snap=snap, maxdt=0 * snap)
+        array([ True, False,  True,  True,  False])
     """
     datetimes = np.asarray(datetimes)
     selected = np.ones(datetimes.shape, dtype=bool)
@@ -1234,12 +1617,13 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
         end = datetimes[-1]
         if snap:
             end += snap
-    assert end >= start
+    if start > end:
+        raise ValueError("Start datetime is after end datetime")
     if snap:
         origin = datetime.datetime(1970, 1, 1, 0, 0, 0)
         shift = (origin - start) % snap
         start = start + shift
-        targets = datetime_range(start=start, stop=end, step=snap)
+        targets = datetime_range(start, end, step=snap)
         nearest = sorted_nearest(datetimes, targets)
         if maxdt is None:
             maxdt = snap * 0.5
@@ -1254,7 +1638,7 @@ def select_datetimes(datetimes, start=None, end=None, snap=None, maxdt=None):
 # ---- Internal ----
 
 
-def _progress_bar(max):
+def _progress_bar(max: int) -> progress.bar.Bar:
     return progress.bar.Bar(
         "",
         fill="#",
@@ -1264,7 +1648,7 @@ def _progress_bar(max):
     )
 
 
-def _parse_parallel(parallel):
+def _parse_parallel(parallel: Union[int, bool]) -> int:
     if parallel is True:
         n = os.cpu_count()
         if n is None:

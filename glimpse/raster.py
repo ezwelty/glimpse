@@ -1004,7 +1004,7 @@ class Raster(Grid):
         if correction is True:
             correction = {}
         if isinstance(correction, dict):
-            dz += helpers.elevation_corrections(squared_distances=dxy, **correction)
+            dz += helpers.elevation_corrections(dxy, **correction)
         dxy = np.sqrt(dxy)
         dxy_cell = (dxy * (1 / abs(self.d[0])) + 0.5).astype(int)
         # Compute heading (-pi to pi CW from -y axis)
@@ -1122,9 +1122,7 @@ class Raster(Grid):
             xy = self.rowcol_to_xy(rowcol)
             dxy = np.sum((xy - origin[0:2]) ** 2, axis=1)  # wait to take square root
             if isinstance(correction, dict):
-                delta = helpers.elevation_corrections(
-                    squared_distances=dxy, **correction
-                )
+                delta = helpers.elevation_corrections(dxy, **correction)
                 maxi = np.nanargmax((dz + delta) / np.sqrt(dxy))
             else:
                 maxi = np.nanargmax(dz / np.sqrt(dxy))

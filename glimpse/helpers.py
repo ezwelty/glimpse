@@ -1475,33 +1475,24 @@ def polygons_to_mask(
 
 
 def elevation_corrections(
-    origin: Iterable = None,
-    xyz: np.ndarray = None,
-    squared_distances: Iterable = None,
-    radius: float = 6.3781e6,
-    refraction: float = 0.13,
+    squared_distances: Iterable, radius: float = 6.3781e6, refraction: float = 0.13
 ) -> np.ndarray:
     """
     Return elevation corrections for surface curvature and atmospheric refraction.
 
     Arguments:
-        origin: World coordinates of origin (x, y, (z)).
-        xyz: World coordinates of target points (n, 2+).
-        squared_distances: Squared Euclidean distances between `origin` and `xyz`.
-            Takes precedence over `origin` and `xyz`.
-        radius: Radius of curvature in the same units as `xyz`.
+        squared_distances: Squared horizontal distances (n, ).
+        radius: Radius of curvature in the same units as `squared_distances`.
             Default is the Earth's equatorial radius in meters.
         refraction: Coefficient of refraction of light.
             Default is an average for standard Earth atmospheric conditions.
 
     Returns:
-        Elevation correction for each point (n, ).
+        Elevation correction for each distance (n, ).
     """
     # http://webhelp.esri.com/arcgisdesktop/9.2/index.cfm?topicname=how_viewshed_works
     # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
     # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
-    if squared_distances is None:
-        squared_distances = np.sum((xyz[:, 0:2] - origin[0:2]) ** 2, axis=1)
     return (refraction - 1) * squared_distances / (2 * radius)
 
 

@@ -1437,8 +1437,7 @@ class Camera:
             dxyz = xyz - self.xyz
             if isinstance(self.correction, dict):
                 dxyz[:, 2] += helpers.elevation_corrections(
-                    squared_distances=np.sum(dxyz[:, 0:2] ** 2, axis=1),
-                    **self.correction,
+                    np.sum(dxyz[:, 0:2] ** 2, axis=1), **self.correction
                 )
         # Convert coordinates to ray directions
         if config.matmul:

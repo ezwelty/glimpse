@@ -1023,16 +1023,13 @@ def intersect_boxes(boxes: Iterable[Iterable]) -> np.ndarray:
     return np.hstack((boxmin, boxmax))
 
 
-def pairwise_distance(
-    x: Iterable, y: Iterable, metric: str = "sqeuclidean", **kwargs: Any
-) -> np.ndarray:
+def pairwise_distance(x: Iterable, y: Iterable, **kwargs: Any) -> np.ndarray:
     """
     Return the pairwise distance between two sets of points.
 
     Arguments:
         x: First set of n-d points.
         y: Second set of n-d points.
-        metric: Distance metric. See :func:`scipy.spatial.distance.cdist`.
         **kwargs (dict): Optional arguments to :func:`scipy.spatial.distance.cdist`.
 
     Returns:
@@ -1050,7 +1047,6 @@ def pairwise_distance(
     return scipy.spatial.distance.cdist(
         x if x.ndim > 1 else x.reshape(-1, 1),
         y if y.ndim > 1 else y.reshape(-1, 1),
-        metric=metric,
         **kwargs,
     )
 

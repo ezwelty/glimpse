@@ -365,7 +365,9 @@ class Lines(Points):
         """
         self._test_position()
         puv = np.row_stack(self._xyzs_to_uvs())
-        distances = helpers.pairwise_distance(self.observed(index=index), puv)
+        distances = helpers.pairwise_distance(
+            self.observed(index=index), puv, metric="sqeuclidean"
+        )
         min_index = np.argmin(distances, axis=1)
         return puv[min_index, :]
 

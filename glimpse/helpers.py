@@ -680,7 +680,7 @@ def clip_polyline_box(
     Return segments of a line within a box.
 
     Vertices are inserted as needed on the box boundary.
-    For speed, does not check for segments between two consecutive line vertices.
+    For speed, intersections between two consecutive line vertices are not checked.
 
     Arguments:
         line: Coordinates of 2 or 3-d line vertices with optional distance measures,
@@ -697,6 +697,13 @@ def clip_polyline_box(
         [array([[0.5, 0.5],
                 [1. , 1. ],
                 [1.5, 1.5]])]
+
+        For speed, intersections between two consecutive line vertices are not checked.
+
+        >>> line = np.array([(0, 0), (10, 10)])
+        >>> box = 4, 4, 6, 6
+        >>> clip_polyline_box(line, box)
+        []
     """
     cols = slice(None, -1) if t else slice(None)
     mask = in_box(line[:, cols], box)

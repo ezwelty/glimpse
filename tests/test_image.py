@@ -8,8 +8,8 @@ import numpy as np
 path = os.path.join("tests", "AK10b_20141013_020336.JPG")
 
 
-def test_image_init_defaults() -> None:
-    """Initializes with default values loaded from file."""
+def test_initializes_with_attributes_from_file() -> None:
+    """Initializes with default attributes loaded from file."""
     img = glimpse.Image(path)
     assert img.path == path
     assert img.datetime == img.exif.datetime
@@ -19,8 +19,8 @@ def test_image_init_defaults() -> None:
     )
 
 
-def test_image_init_custom() -> None:
-    """Initializes with custom values overriding the file."""
+def test_initializes_with_custom_attributes() -> None:
+    """Initializes with custom attributes."""
     args = {
         "cam": {"imgsz": (100, 100), "sensorsz": (10, 10)},
         "datetime": datetime.datetime(2010, 1, 1),
@@ -34,7 +34,7 @@ def test_image_init_custom() -> None:
     )
 
 
-def test_image_read() -> None:
+def test_reads_data_from_file() -> None:
     """Reads raster data from file."""
     # Default size
     img = glimpse.Image(path)
@@ -56,7 +56,7 @@ def test_image_read() -> None:
     np.testing.assert_equal(A.shape[0:2][::-1], img.cam.imgsz)
 
 
-def test_image_project() -> None:
+def test_projects_into_camera() -> None:
     """Projects itself into a camera."""
     img = glimpse.Image(path)
     img.cam.resize(0.1)

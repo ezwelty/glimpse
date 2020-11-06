@@ -396,9 +396,9 @@ def write(
         ... )
         >>> e = svg(*children)
         >>> print(write(e, indent=4))
-        <svg height="8" width="12" xmlns=".../svg" xmlns:xlink=".../xlink">
+        <svg xmlns=".../svg" xmlns:xlink=".../xlink" width="12" height="8">
             <path d="M 0,0 L 1,1" id="horizon" />
-            <image height="8" width="12" xlink:href="photo.jpeg" />
+            <image width="12" height="8" xlink:href="photo.jpeg" />
         </svg>
     """
     txt = _etree_to_string(e, indent=indent)

@@ -1375,23 +1375,36 @@ class RasterInterpolant:
 
     Attributes:
         means (iterable): Mean values as Rasters, paths to raster files,
-            or numbers (interpreted as infinite rasters)
+            or numbers (interpreted as infinite rasters).
         sigmas (iterable): Standard deviations as Rasters, paths to raster files,
             or numbers (interpreted as infinite rasters).
             If `None`, defaults to zero.
-        x (array): 1-dimensional coordinates of the observations,
-            as either numbers or `datetime.datetime`.
+        x (numpy.ndarray): 1-dimensional coordinates of the observations,
+            as either numbers or :class:`datetime.datetime`.
             If `None`, tries to read datetimes from `means`.
     """
 
-    def __init__(self, means, x=None, sigmas=None):
+    def __init__(
+        self,
+        means: Iterable[Union[Raster, str, Number]],
+        sigmas: Iterable[Union[Raster, str, Number]] = None,
+        x: Iterable[Union[Number, datetime.datetime]] = None,
+    ) -> None:
         self.means = means
         if x is None:
             x = [raster.datetime for raster in means]
         self.x = np.asarray(x)
         self.sigmas = sigmas
 
-    def _parse_as_raster(self, obj, xi=None, d=None, xlim=None, ylim=None):
+    def _parse_as_raster(
+        self,
+        obj: Union[Raster, str, Number],
+        xi: Union[Number, datetime.datetime] = None,
+        d: Number = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+    ) -> Raster:
+        """Parse object as a Raster."""
         t = xi if isinstance(xi, datetime.datetime) else None
         if isinstance(obj, numbers.Number):
             # Scalar
@@ -1401,7 +1414,7 @@ class RasterInterpolant:
             if ylim is None:
                 ylim = (-np.inf, np.inf)
             return Raster(obj, x=xlim, y=ylim, datetime=t)
-        elif isinstance(obj, Raster):
+        if isinstance(obj, Raster):
             # Raster
             # Copy and reshape to specified bounds
             # NOTE: Adjust to match grid when read from file
@@ -1416,16 +1429,23 @@ class RasterInterpolant:
                 scale = d / np.abs(obj.d).mean()
                 obj.resize(scale)
             return obj
-        elif isinstance(obj, str):
+        if isinstance(obj, str):
             # Path to raster
             # Read from file
             return Raster.read(obj, d=d, xlim=xlim, ylim=ylim, datetime=t)
-        else:
-            raise ValueError("Cannot cast as Raster: " + str(type(obj)))
+        raise ValueError("Cannot cast as Raster: " + str(type(obj)))
 
     def _read_mean(
-        self, index, d=None, xlim=None, ylim=None, zlim=None, fun=None, **kwargs
-    ):
+        self,
+        index: int,
+        d: Number = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+        zlim: Iterable[Number] = None,
+        fun: Callable = None,
+        **kwargs: Any
+    ) -> Raster:
+        """Parse mean raster."""
         xi = self.x[index]
         obj = self.means[index]
         raster = self._parse_as_raster(obj, xi, d=d, xlim=xlim, ylim=ylim)
@@ -1437,7 +1457,14 @@ class RasterInterpolant:
             fun(raster, **kwargs)
         return raster
 
-    def _read_sigma(self, index, d=None, xlim=None, ylim=None):
+    def _read_sigma(
+        self,
+        index: int,
+        d: Number = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+    ) -> Raster:
+        """Parse sigma raster."""
         xi = self.x[index]
         if self.sigmas is None:
             obj = 0
@@ -1445,25 +1472,30 @@ class RasterInterpolant:
             obj = self.sigmas[index]
         return self._parse_as_raster(obj, xi, d=d, xlim=xlim, ylim=ylim)
 
-    def _read_mean_grid(self, index):
+    def _read_mean_grid(self, index: int) -> Grid:
+        """Parse mean raster grid."""
         obj = self.means[index]
         if isinstance(obj, Raster):
             return obj.grid
-        elif isinstance(obj, str):
+        if isinstance(obj, str):
             return Grid.read(obj)
-        elif isinstance(obj, numbers.Number):
+        if isinstance(obj, numbers.Number):
             return Grid(n=(1, 1), x=(-np.inf, np.inf), y=(-np.inf, np.inf))
-        else:
-            raise ValueError("Cannot cast as Grid: " + str(type(obj)))
+        raise ValueError("Cannot cast as Grid: " + str(type(obj)))
 
-    def nearest(self, xi, extrapolate=False):
+    def nearest(
+        self, xi: Union[Number, datetime.datetime], extrapolate: bool = False
+    ) -> Tuple[int, int]:
         """
         Return the indices of the two nearest Rasters.
 
         Arguments:
-            xi: 1-dimensional coordinate
-            extrapolate (bool): Whether to return the two nearest Rasters (True)
-                or only if the Rasters are on either side of `xi` (False)
+            xi: 1-dimensional coordinate.
+            extrapolate: Whether to return the two nearest Rasters (True)
+                or only if the Rasters are on either side of `xi` (False).
+
+        Raises:
+            ValueError: Not bounded on both sides by a Raster (`extrapolate=False`).
         """
         dx = self.x - xi
         zero = type(dx[0])(0)
@@ -1480,9 +1512,16 @@ class RasterInterpolant:
             j = after[np.argmin(dx[after])]
         ij = [i, j]
         ij.sort(key=lambda index: self.x[index])
-        return ij
+        return tuple(ij)
 
-    def _interpolate(self, means, x, xi, sigmas=None):
+    def _interpolate(
+        self,
+        means: Iterable[Raster],
+        x: Iterable[Union[Number, datetime.datetime]],
+        xi: Union[Number, datetime.datetime],
+        sigmas: Iterable[Raster] = None,
+    ) -> Union[Raster, Tuple[Raster, Raster]]:
+        """Interpolate between two rasters."""
         dz = means[1].Z - means[0].Z
         dx = x[1] - x[0]
         scale = (xi - x[0]) / dx
@@ -1502,41 +1541,44 @@ class RasterInterpolant:
                 np.sqrt(z_var + zi_var), x=means[0].xlim, y=means[0].ylim, datetime=t
             )
             return raster, sigma
-        else:
-            return raster
+        return raster
 
     def __call__(
         self,
-        xi,
-        d=None,
-        xlim=None,
-        ylim=None,
-        zlim=None,
-        return_sigma=False,
-        extrapolate=False,
-        fun=None,
-        **kwargs
-    ):
+        xi: Union[Number, datetime.datetime],
+        d: Number = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+        zlim: Iterable[Number] = None,
+        return_sigma: bool = False,
+        extrapolate: bool = False,
+        fun: Callable = None,
+        **kwargs: Any
+    ) -> Union[Raster, Tuple[Raster, Raster]]:
         """
         Return the interpolated Raster.
 
         Arguments:
-            xi: 1-dimensional coordinate of the interpolated Raster
-            d (float): Target grid cell size.
+            xi: 1-dimensional coordinate of the interpolated Raster.
+            d: Target grid cell size.
                 If `None`, the largest Raster cell size is used.
-            xlim (iterable): Crop bounds in x.
+            xlim: Crop bounds in x.
                 If `None`, the intersection of the Rasters is used.
-            ylim (iterable): Crop bounds in y.
+            ylim: Crop bounds in y.
                 If `None`, the intersection of the Rasters is used.
-            zlim (iterable): (means only) Crop bounds in z.
+            zlim: Crop bounds in z (means only).
                 Values outside range are set to `np.nan`.
-            return_sigma (bool): Whether
-            extrapolate (bool): Whether to use the two nearest Rasters (True)
+            return_sigma: Whether to return sigmas.
+            extrapolate: Whether to use the two nearest Rasters (True)
                 or only if the Rasters are on either side of `xi` (False)
-            fun (callable): (means only) Function to apply to each Raster before
+            fun: Function to apply to each Raster (means only) before
                 interpolation, with signature `fun(raster, **kwargs)`.
                 Must modify Raster in place.
-            **kwargs (dict): Additional arguments passed to `fun`
+            **kwargs: Additional arguments passed to `fun`.
+
+        Returns:
+            Interpolated mean raster and
+            (if `return_sigma=True`) standard deviation raster.
         """
         ij = self.nearest(xi, extrapolate=extrapolate)
         # Determine common grid (lowest resolution, smallest extent)
@@ -1570,4 +1612,4 @@ class RasterInterpolant:
         else:
             sigmas = None
         # Interpolate
-        return self._interpolate(means=means, sigmas=sigmas, x=self.x[ij], xi=xi)
+        return self._interpolate(means=means, sigmas=sigmas, x=self.x[list(ij)], xi=xi)

@@ -1,6 +1,8 @@
+"""Read, write, and manipulate orthorectified images."""
 import copy
 import datetime
 import numbers
+from typing import Iterable, Tuple, Union
 import warnings
 
 import matplotlib.colors
@@ -9,39 +11,52 @@ import numpy as np
 import osgeo.gdal
 import scipy.interpolate
 import scipy.ndimage
+from typing_extensions import Literal
 
 from . import helpers
 
 
-class Grid(object):
+Number = Union[int, float]
+
+
+class Grid:
     """
-    A `Grid` describes a regular rectangular grid in both array coordinates
-        and any arbitrary 2-dimensional cartesian coordinate system.
+    Regular rectangular 2-dimensional grid.
 
     Arguments:
-        x (array-like): Either `xlim`, `x`, or `X`
-        y (array-like): Either `ylim`, `y`, or `Y`
+        n: Grid dimensions (nx, ny).
+        x: X coordinates as either :attr:`xlim`, :attr:`x`, or :attr:`X`.
+        y: Y coordinates as either :attr:`ylim`, :attr:`y`, or :attr:`Y`.
 
     Attributes:
-        xlim, ylim (array): Outer bounds of the grid (left, right), (top, bottom)
-        n (array): Grid dimensions (nx|cols, ny|rows)
-        d (array): Grid cell size (dx, dy)
-        x, y (array): Cell center coordinates as row vectors
-            (left to right), (top to bottom)
-        X, Y (array): Cell center coordinates as matrices with dimensions `n`
-        min (array): Minimum bounding box coordinates (x, y)
-        max (array): Maximum bounding box coordinates (x, y)
-        box2d (array): 2-dimensional bounding box (minx, miny, maxx, maxy)
-        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
+        xlim (numpy.ndarray): Outer x limits of the grid (left, right).
+        ylim (numpy.ndarray): Outer y limits of the grid (top, bottom).
+        n (numpy.ndarray): Grid dimensions (nx, ny).
+        d (numpy.ndarray): Grid cell size (dx, dy).
+        x (numpy.ndarray): Cell center x coordinates from left to right (nx,).
+        y (numpy.ndarray): Cell center y coordinates from top to bottom (ny,).
+        X (numpy.ndarray): Cell center x coordinates for each cell (ny, nx).
+        Y (numpy.ndarray): Cell center y coordinates for each cell (ny, nx).
+        min (numpy.ndarray): Minimum bounding box coordinates (xmin, ymin).
+        max (numpy.ndarray): Maximum bounding box coordinates (xmax, ymax).
+        box2d (numpy.ndarray): Bounding box (xmin, ymin, xmax, ymax).
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
     """
 
-    def __init__(self, n, x=None, y=None, crs=None):
+    def __init__(
+        self,
+        n: Tuple[int, int],
+        x: Iterable[Union[Number, Iterable[Number]]] = None,
+        y: Iterable[Union[Number, Iterable[Number]]] = None,
+        crs: Union[int, str] = None,
+    ) -> None:
         self.n = n
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.crs = crs
 
-    def __eq__(self, other):
+    def __eq__(self, other: "Grid") -> bool:
+        """Consider Grids equal if their coordinate system is equal."""
         return (
             (self.shape == other.shape)
             and (self.xlim == other.xlim).all()
@@ -51,16 +66,17 @@ class Grid(object):
     # ---- Properties ---- #
 
     @property
-    def n(self):
+    def n(self) -> np.ndarray:
+        """Grid dimensions (nx, ny)."""
         return self._n
 
     @n.setter
-    def n(self, value):
+    def n(self, value: Iterable[int]) -> None:
         value = np.atleast_1d(value)
         if value.shape == (1,):
             value = np.concatenate((value, value))
         if value.shape != (2,):
-            raise ValueError("Grid dimensions must be scalar or (2, )")
+            raise ValueError("Grid dimensions must be scalar or (2,)")
         if not np.issubdtype(value.dtype, np.integer):
             raise ValueError("Grid dimensions must be integer")
         if (value <= 0).any():
@@ -68,22 +84,24 @@ class Grid(object):
         self._n = value
 
     @property
-    def xlim(self):
+    def xlim(self) -> np.ndarray:
+        """Outer x limits of the grid (left, right)."""
         return self._xlim
 
     @xlim.setter
-    def xlim(self, value):
+    def xlim(self, value: Iterable[Number]) -> None:
         value = self._parse_limits(value)
         if not hasattr(self, "xlim") or not np.array_equal(self.xlim, value):
             self._xlim = value
             self._clear_cache(["x", "X"])
 
     @property
-    def ylim(self):
+    def ylim(self) -> np.ndarray:
+        """Outer y limits of the grid (top, bottom)."""
         return self._ylim
 
     @ylim.setter
-    def ylim(self, value):
+    def ylim(self, value: Iterable[Number]) -> None:
         value = self._parse_limits(value)
         if not hasattr(self, "ylim") or not np.array_equal(self.ylim, value):
             self._ylim = value
@@ -92,27 +110,33 @@ class Grid(object):
     # ---- Properties (dependent) ---- #
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, int]:
+        """Array shape (ny, nx)."""  # noqa: D402
         return self.n[1], self.n[0]
 
     @property
-    def d(self):
+    def d(self) -> np.ndarray:
+        """Grid cell size (dx, dy)."""
         return np.hstack((np.diff(self.xlim), np.diff(self.ylim))) / self.n
 
     @property
-    def min(self):
+    def min(self) -> np.ndarray:
+        """Minimum bounding box coordinates (xmin, ymin)."""
         return np.array((min(self.xlim), min(self.ylim)))
 
     @property
-    def max(self):
+    def max(self) -> np.ndarray:
+        """Maximum bounding box coordinates (xmax, ymax)."""
         return np.array((max(self.xlim), max(self.ylim)))
 
     @property
-    def box2d(self):
+    def box2d(self) -> np.ndarray:
+        """Bounding box (xmin, ymin, xmax, ymax)."""
         return np.hstack((self.min, self.max))
 
     @property
-    def x(self):
+    def x(self) -> np.ndarray:
+        """Cell center x coordinates from left to right (nx,)."""
         if self._x is None:
             value = np.linspace(
                 start=self.min[0] + abs(self.d[0]) / 2,
@@ -126,13 +150,15 @@ class Grid(object):
         return self._x
 
     @property
-    def X(self):
+    def X(self) -> np.ndarray:
+        """Cell center x coordinates for each cell (ny, nx)."""
         if self._X is None:
             self._X = np.tile(self.x, (self.n[1], 1))
         return self._X
 
     @property
-    def y(self):
+    def y(self) -> np.ndarray:
+        """Cell center y coordinates from top to bottom (ny,)."""
         if self._y is None:
             value = np.linspace(
                 start=self.min[1] + abs(self.d[1]) / 2,
@@ -146,23 +172,28 @@ class Grid(object):
         return self._y
 
     @property
-    def Y(self):
+    def Y(self) -> np.ndarray:
+        """Cell center y coordinates for each cell (ny, nx)."""
         if self._Y is None:
             self._Y = np.tile(self.y, (self.n[0], 1)).T
         return self._Y
 
     @classmethod
-    def read(cls, path, d=None, xlim=None, ylim=None):
+    def read(
+        cls,
+        path: str,
+        d: Number = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+    ) -> "Grid":
         """
         Read Grid from raster file.
 
         Arguments:
-            path (str): Path to file
-            d (float): Target grid cell size
-            xlim (array-like): Crop bounds in x.
-                If `None` (default), read from file.
-            ylim (array-like): Crop bounds in y.
-                If `None` (default), read from file.
+            path: Path to file.
+            d: Target grid cell size.
+            xlim: Target outer bounds of crop in x.
+            ylim: Target outer bounds of crop in y.
         """
         raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
@@ -189,54 +220,53 @@ class Grid(object):
 
     # ---- Methods (private) ----
 
-    def _clear_cache(self, attributes=("x", "X", "y", "Y")):
+    def _clear_cache(self, attributes: Iterable[str] = ["x", "X", "y", "Y"]) -> None:
+        """Clear cached attributes."""
         attributes = tuple(attributes)
         for attr in attributes:
             setattr(self, "_" + attr, None)
 
-    def _parse_limits(self, value):
+    def _parse_limits(self, value: Iterable[Number]) -> np.ndarray:
+        """Check and parse limits."""
         value = np.atleast_1d(value)
         if value.shape != (2,):
-            raise ValueError("Grid limits must be (2, )")
+            raise ValueError("Grid limits must be (2,)")
         if not np.issubdtype(value.dtype, np.number):
             raise ValueError("Grid limits must be numeric")
         if value[0] == value[1]:
             raise ValueError("Grid limits cannot be equal")
         return value
 
-    def _parse_xy(self, obj, dim):
-        """
-        Parse object into xlim, x, and X attributes.
-
-        Arguments:
-            obj (object): Either xlim, x, or X
-            dim (int): Dimension (0: x, 1: y)
-        """
-        if obj is None:
-            obj = (0, self.n[dim])
-        if not isinstance(obj, np.ndarray):
-            obj = np.atleast_1d(obj)
-        is_X = obj.shape[0:2] == self.shape[0:2]
+    def _parse_xy(
+        self, value: Iterable[Union[Number, Iterable[Number]]], dim: Literal[0, 1]
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Parse limits, coordinate vector, and coordinate matrix."""
+        if value is None:
+            value = (0, self.n[dim])
+        if not isinstance(value, np.ndarray):
+            value = np.atleast_1d(value)
+        is_X = value.shape[0:2] == self.shape[0:2]
         if is_X:
             # TODO: Check if all columns equal
-            X = obj
-            obj = obj[:, 0] if dim else obj[0]
+            X = value
+            value = value[:, 0] if dim else value[0]
         else:
             X = None
-        is_x = any(n > 2 for n in obj.shape[0:2])
+        is_x = any(n > 2 for n in value.shape[0:2])
         if is_x:
-            x = obj
+            x = value
             # TODO: Check if equally spaced monotonic
-            dx = np.diff(obj[0:2])
-            xlim = np.append(obj[0] - dx / 2, obj[-1] + dx / 2)
+            dx = np.diff(value[0:2])
+            xlim = np.append(value[0] - dx / 2, value[-1] + dx / 2)
         else:
             x = None
-            xlim = obj
+            xlim = value
         if len(xlim) != 2:
             raise ValueError("Could not parse limits from x, y inputs")
-        return [xlim, x, X]
+        return xlim, x, X
 
-    def _shift_xy(self, dx=None, dy=None):
+    def _shift_xy(self, dx: Number = None, dy: Number = None) -> None:
+        """Shift grid position."""
         if dx is not None:
             self._xlim += dx
             if self._x is not None:
@@ -252,10 +282,11 @@ class Grid(object):
 
     # ---- Methods ---- #
 
-    def copy(self):
+    def copy(self) -> "Grid":
+        """Copy grid."""
         return Grid(n=self.n.copy(), x=self.xlim.copy(), y=self.ylim.copy())
 
-    def resize(self, scale):
+    def resize(self, scale: Number) -> None:
         """
         Resize grid.
 
@@ -263,35 +294,37 @@ class Grid(object):
         of grid dimensions.
 
         Arguments:
-            scale (float): Fraction of current size
+            scale: Fraction of current size.
         """
         self.n = np.floor(self.n * scale + 0.5).astype(int)
 
-    def shift(self, dx=None, dy=None):
+    def shift(self, dx: Number = None, dy: Number = None) -> None:
         """
         Shift grid position.
 
         Arguments:
-            dx (float): Shift in x
-            dy (float): Shift in y
+            dx: Shift in x.
+            dy: Shift in y.
         """
         self._shift_xy(dx=dx, dy=dy)
 
-    def inbounds(self, xy, grid=False):
+    def inbounds(
+        self, xy: Union[np.ndarray, Tuple[np.ndarray, np.ndarray]], grid: bool = False
+    ) -> np.ndarray:
         """
         Test whether points are in (or on) bounds.
 
         Arguments:
-            xy (array-like): Input coordinates x and y, as either:
+            xy: Input coordinates x and y.
 
-                - If `grid` is True, point coordinates (n, 2)
-                - If `grid` is False, coordinate vectors (n, ), (m, )
+                - If `grid=False`, as point coordinates (n, 2).
+                - If `grid=True`, as coordinate vectors x (n,) and y (m,).
 
-            grid (bool): Whether `xy` defines a grid or invidual points
+            grid: Whether `xy` defines a grid or invidual points.
 
         Returns:
-            Either an array whether each point is inbounds (n, 1) if `grid` is False,
-                or a tuple of whether each grid column or row is inbounds (n, ), (m, )
+            Whether each point is inbounds (n, 1) if `grid` is False,
+                or whether each grid column or row is inbounds (n,), (m,)
                 if `grid` is True.
         """
         if grid:
@@ -299,26 +332,38 @@ class Grid(object):
                 (xy[0] >= self.min[0]) & (xy[0] <= self.max[0]),
                 (xy[1] >= self.min[1]) & (xy[1] <= self.max[1]),
             )
-        else:
-            return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis=1)
+        return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis=1)
 
-    def snap_xy(self, xy, centers=False, edges=False, inbounds=True):
+    def snap_xy(
+        self,
+        xy: np.ndarray,
+        centers: bool = False,
+        edges: bool = False,
+        inbounds: bool = True,
+    ) -> np.ndarray:
         """
-        Snap x,y coordinates to nearest grid position.
+        Snap points to nearest grid positions.
 
         When snapping to cell centers, points on edges snap to higher grid indices.
-        If `inbounds=True`, points on right or bottom edges snap down to stay in bounds.
+        If `inbounds=True`, points on the right and bottom outer edges snap to interior
+        cell centers to stay in bounds.
 
         Arguments:
-            xy (array): Point coordinates (Nx2)
-            centers (bool): Whether to snap to nearest cell centers
-            edges (bool): Whether to snap to nearest cell edges
-            inbounds (bool): Whether to snap points on right and bottom edges
-                to interior cell centers
+            xy: Point coordinates (n, [x, y]).
+            centers: Whether to snap points to the nearest cell centers.
+            edges: Whether to snap points to nearest cell edges.
+            inbounds: Whether to snap points on right and bottom bounds
+                to interior cell centers (if `edges=False` and `centers=True`).
+
+        Returns:
+            Snapped point coordinates (n, [x, y]).
+
+        Raises:
+            ValueError: Arguments centers and edges cannot both be False.
         """
         # TODO: Faster version for image grid
         if not centers and not edges:
-            raise ValueError("centers and edges cannot both be false")
+            raise ValueError("Arguments centers and edges cannot both be False")
         origin = np.append(self.xlim[0], self.ylim[0])
         nxy = (xy - origin) / self.d
         if centers and not edges:
@@ -336,55 +381,70 @@ class Grid(object):
             nxy /= 2
         return nxy * self.d + origin
 
-    def snap_box(self, xy, size, centers=False, edges=True, inbounds=True):
+    def snap_box(
+        self,
+        xy: Iterable[Number],
+        size: Iterable[Number],
+        centers: bool = False,
+        edges: bool = True,
+        inbounds: bool = True,
+    ) -> np.ndarray:
         """
-        Snap x,y box boundaries to nearest grid positions.
+        Snap box to nearest grid positions.
 
         Arguments:
-            xy (array-like): Point coordinates of desired box center (x, y)
-            size (array-like): Size of desired box in `xy` units (nx, ny)
-            centers (bool): Whether to snap to nearest cell centers
-            edges (bool): Whether to snap to nearest cell edges
-            inbounds (bool): See `self.snap_xy()`
+            xy: Coordinates of box center (x, y).
+            size: Dimensions of box (nx, ny).
+            centers: Whether to snap to nearest cell centers.
+            edges: Whether to snap to nearest cell edges.
+            inbounds: Whether to snap right and bottom bounds to interior cell centers
+                (if `edges=False` and `centers=True`).
 
         Returns:
-            array: x,y box boundaries (xmin, ymin, xmax, ymax)
+            Snapped box boundaries (xmin, ymin, xmax, ymax).
+
+        Raises:
+            IndexError: Box extends beyond grid bounds.
         """
         halfsize = np.multiply(size, 0.5)
         xy_box = np.vstack((xy - halfsize, xy + halfsize))
         if any(~self.inbounds(xy_box)):
-            raise IndexError("Sample extends beyond grid bounds")
+            raise IndexError("Box extends beyond grid bounds")
         return self.snap_xy(
             xy_box, centers=centers, edges=edges, inbounds=inbounds
         ).flatten()
 
-    def rowcol_to_xy(self, rowcol):
+    def rowcol_to_xy(self, rowcol: np.ndarray) -> np.ndarray:
         """
-        Return x,y coordinates of row,col indices.
+        Convert array indices to map coordinates.
 
-        Places integer indices at the centers of each cell.
+        Places integer array indices at the centers of each cell.
         Therefore, the upper left corner is [-0.5, -0.5]
         and the center of that cell is [0, 0].
 
         Arguments:
-            rowcol (array): Array indices (Nx2)
+            Array indices (n, [row, col]).
+
+        Returns:
+            Map coordinates (n, [x, y]).
         """
         xy_origin = np.array((self.xlim[0], self.ylim[0]))
         return (rowcol + 0.5)[:, ::-1] * self.d + xy_origin
 
-    def xy_to_rowcol(self, xy, snap=False, inbounds=True):
+    def xy_to_rowcol(
+        self, xy: np.ndarray, snap: bool = False, inbounds: bool = True
+    ) -> np.ndarray:
         """
-        Return row,col indices of x,y coordinates.
+        Convert map coordinates to array indices.
 
         Arguments:
-            xy (array): Spatial coordinates (Nx2)
-            snap (bool): Whether to snap indices to nearest cell centers
-                (see `self.snap_xy()`)
-            inbounds (bool): See `self.snap_xy()`
+            xy: Map coordinates (n, [x, y]).
+            snap: Whether to snap to nearest cell centers.
+            inbounds: Whether to snap right and bottom bounds to interior cell centers
+                (see :meth:`snap_xy`).
 
         Returns:
-            array: row,col indices as either float (`snap=False`)
-                or int (`snap=True`)
+            Array indices as either float (`snap=False`) or int (`snap=True`).
         """
         # TODO: Remove snapping from function (now a seperate operation)
         if snap:
@@ -395,13 +455,46 @@ class Grid(object):
             colrow = colrow.astype(int)
         return colrow[:, ::-1]
 
-    def rowcol_to_idx(self, rowcol):
+    def rowcol_to_idx(self, rowcol: np.ndarray) -> np.ndarray:
+        """
+        Convert 2-dimensional array indices to flat array indices.
+
+        Arguments:
+            rowcol: Array indices (n, [row, col]).
+
+        Returns:
+            Flat array indices (n, ).
+        """
         return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.n[::-1])
 
-    def idx_to_rowcol(self, idx):
+    def idx_to_rowcol(self, idx: np.ndarray) -> np.ndarray:
+        """
+        Convert flat array indices to 2-dimensional array indices.
+
+        Arguments:
+            idx: Flat array indices (n, ).
+
+        Returns:
+            Array indices (n, [row, col]).
+        """
         return np.column_stack(np.unravel_index(idx, self.n[::-1]))
 
-    def crop_extent(self, xlim=None, ylim=None):
+    def crop_extent(
+        self, xlim: Iterable[Number] = None, ylim: Iterable[Number] = None
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Compute crop extent.
+
+        Arguments:
+            xlim: Target outer bounds of crop in x.
+            ylim: Target outer bounds of crop in y.
+
+        Returns:
+            Outer bounds of crop in x (left, right).
+            Outer bounds of crop in y (top, bottom).
+            Outer bounds of crop as row indices (top, bottom).
+            Outer bounds of crop as column indices (left, right).
+        """
         # Calculate x,y limits
         if xlim is None:
             xlim = self.xlim
@@ -436,21 +529,23 @@ class Grid(object):
         new_ylim = new_xy[:, 1] + np.array([-0.5, 0.5]) * self.d[1]
         return new_xlim, new_ylim, rowcol[:, 0], rowcol[:, 1]
 
-    def set_plot_limits(self):
+    def set_plot_limits(self) -> None:
+        """Set limits of current plot axis to grid limits."""
         matplotlib.pyplot.xlim(self.xlim[0], self.xlim[1])
         matplotlib.pyplot.ylim(self.ylim[1], self.ylim[0])
 
-    def tile_indices(self, size, overlap=(0, 0)):
+    def tile_indices(
+        self, size: Iterable[int], overlap: Iterable[int] = (0, 0)
+    ) -> Tuple[slice, slice]:
         """
         Return slice objects that chop the grid into tiles.
 
         Arguments:
-            size (iterable): Target tile size (nx, ny)
-            overlap (iterable): Number of overlapping pixels between tiles (nx, ny)
+            size: Target tile size (nx, ny).
+            overlap: Number of overlapping grid cells between tiles (nx, ny).
 
         Returns:
-            tuple: Pairs of slice objects (rows, cols) with which to subset
-                gridded values
+            Pairs of slice objects (rows, cols) with which to subset grid.
         """
         n = np.round(self.n / size).astype(int)
         # Ignore divide by zero
@@ -473,7 +568,7 @@ class Grid(object):
 
 class Raster(Grid):
     """
-    A `Raster` describes data on a regular 2-dimensional grid.
+    Values on a regular rectangular 2-dimensional grid.
 
     For rasters with dimension of length 2, `x` (`y`) is assumed to be `xlim` (`ylim`)
     if a vector.
@@ -1211,7 +1306,7 @@ class Raster(Grid):
         self._y = y
 
 
-class RasterInterpolant(object):
+class RasterInterpolant:
     """
     Interpolation of a raster timeseries.
 

@@ -1,3 +1,4 @@
+"""Tests of the raster module."""
 import datetime
 import itertools
 import os
@@ -8,7 +9,8 @@ import osgeo.osr
 import pytest
 
 
-def test_raster_defaults():
+def test_initializes_default_raster() -> None:
+    """Initializes Raster with default coordinate system."""
     Z = np.zeros((3, 3))
     dem = glimpse.Raster(Z)
     assert all(dem.xlim == (0, Z.shape[1]))
@@ -24,7 +26,8 @@ def test_raster_defaults():
     assert (dem.Y.T == ((dem.y, dem.y, dem.y))).all()
 
 
-def test_raster_xy():
+def test_initializes_custom_raster() -> None:
+    """Initializes Raster with custom coordinate system."""
     xlim = (0, 3)
     ylim = (3, 0)
     x = (0.5, 1.5, 2.5)
@@ -52,7 +55,8 @@ def test_raster_xy():
     assert all(dem.y == y)
 
 
-def test_raster_sample(tol=1e-13):
+def test_samples_raster(tol: float = 1e-13) -> None:
+    """Samples Raster at points."""
     Z = np.arange(16).reshape(4, 4)
     dem = glimpse.Raster(Z, (-0.5, 3.5), (-0.5, 3.5))
     # Sample cells centers along diagonal
@@ -61,7 +65,8 @@ def test_raster_sample(tol=1e-13):
     assert all(dz_points < tol)
 
 
-def test_raster_crop_ascending():
+def test_crops_raster_with_ascending_y() -> None:
+    """Crops Raster with ascending y coordinates."""
     Z = np.arange(9).reshape(3, 3)
     dem = glimpse.Raster(Z, (0, 3), (0, 3))
     # Out of bounds
@@ -105,7 +110,8 @@ def test_raster_crop_ascending():
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
 
-def test_raster_crop_descending():
+def test_crops_raster_with_descending_y() -> None:
+    """Crops Raster with descending y coordinates."""
     Z = np.arange(9).reshape(3, 3)
     dem = glimpse.Raster(Z, (3, 0), (3, 0))
     # Equal bounds
@@ -121,7 +127,8 @@ def test_raster_crop_descending():
     assert (cdem.Z == Z[1:2, 1:2]).all()
 
 
-def test_raster_resize():
+def test_resizes_raster() -> None:
+    """Resizes Raster smaller and larger."""
     Z = np.zeros((10, 10))
     dem = glimpse.Raster(Z)
     # Downsize
@@ -136,7 +143,8 @@ def test_raster_resize():
     assert all(rdem.xlim == dem.xlim)
 
 
-def test_raster_io():
+def test_writes_and_reads_raster() -> None:
+    """Writes Raster to file and reads it back from file."""
     old = glimpse.Raster(
         Z=np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
         x=np.array((1, 2, 3), dtype=float),
@@ -159,7 +167,8 @@ def test_raster_io():
     os.remove(tempfile)
 
 
-def test_raster_interpolant():
+def test_interpolates_rasters() -> None:
+    """Interpolates Rasters."""
     # Read rasters
     mean_paths = [
         os.path.join("tests", "000nan.tif"),

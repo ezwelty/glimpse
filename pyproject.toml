@@ -43,10 +43,8 @@ black = "^19.10b0"
 flake8-import-order = "^0.18.1"
 flake8-black = "^0.2.0"
 flake8-annotations = "^2.1.0"
-mypy = "^0.780"
 coverage = {extras = ["toml"], version = "^5.1"}
 pytest-cov = "^2.10.0"
-typeguard = "^2.9.1"
 flake8-docstrings = "^1.5.0"
 
 [tool.coverage.paths]

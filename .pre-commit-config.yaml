@@ -1,0 +1,26 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v3.3.0
+  hooks:
+  - id: check-yaml
+  - id: check-toml
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+- repo: local
+  hooks:
+  - id: test
+    name: pytest
+    entry: poetry run pytest --doctest-modules src tests
+    language: system
+    types: [python]
+    pass_filenames: false
+  - id: format
+    name: black
+    entry: poetry run black
+    language: system
+    types: [python]
+  - id: lint
+    name: flake8
+    entry: poetry run flake8
+    language: system
+    types: [python]

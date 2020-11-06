@@ -1,6 +1,6 @@
 """Convert between world and image coordinates using a distorted camera model."""
 import copy
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import matplotlib.pyplot
 import numpy as np
@@ -1027,7 +1027,7 @@ class Camera:
         # Initialize array
         nbands = (values.shape[2] if has_values else 0) + return_depth
         # TODO: Use something faster that full
-        I = np.full((self.imgsz[1], self.imgsz[0], nbands), np.nan)
+        array = np.full((self.imgsz[1], self.imgsz[0], nbands), np.nan)
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)
 
@@ -1095,12 +1095,12 @@ class Camera:
         ) -> None:
             bar.next()
             if idx is not None:
-                I[idx] = values
+                array[idx] = values
 
         with config.backend(np=parallel) as pool:
             pool.map(func=process, reduce=reduce, sequence=tile_indices)
         bar.finish()
-        return I
+        return array
 
     def set_plot_limits(self) -> None:
         """Set limits of current plot axes to image extent."""

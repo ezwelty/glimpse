@@ -274,7 +274,7 @@ def write_json(
         **kwargs: Optional arguments to :func:`json.dumps`.
 
     Returns:
-        JSON string (if `path` is `None`). 
+        JSON string (if `path` is `None`).
 
     Examples:
         >>> write_json({'x': [0, 1]})

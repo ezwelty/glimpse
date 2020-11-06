@@ -1033,7 +1033,7 @@ class Polynomial:
         >>> import matplotlib.pyplot as plt
         >>> model.plot(params=params, index=inliers)
         {'unselected': <matplotlib.collections.PathCollection ...>,
-        'selected': <matplotlib.collections.PathCollection ...>, 
+        'selected': <matplotlib.collections.PathCollection ...>,
         'predicted': [<matplotlib.lines.Line2D ...>]}
         >>> plt.show()  # doctest: +SKIP
         >>> plt.close()
@@ -2087,7 +2087,7 @@ def ransac(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Fit model parameters using the Random Sample Consensus (RANSAC) algorithm.
-    
+
     Samples are drawn without replacement and are guaranteed to be non-repeating.
     See Schattschneider & Green 2012 (https://doi.org/10.1145/2425836.2425878).
 

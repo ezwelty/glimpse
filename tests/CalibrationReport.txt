@@ -26,29 +26,29 @@ Information from most recent processing
          Camera1: NIKON D300 [28.00]
             Focal Length
                Value: 29.414069 mm
-               Deviation: Focal: 0.001 mm  
+               Deviation: Focal: 0.001 mm
             Xp - principal point x
                Value: 12.009446 mm
-               Deviation: Xp: 0.001 mm  
+               Deviation: Xp: 0.001 mm
             Yp - principal point y
                Value: 8.105847 mm
-               Deviation: Yp: 7.1e-004 mm  
+               Deviation: Yp: 7.1e-004 mm
             Fw - format width
                Value: 24.001371 mm
-               Deviation: Fw: 1.7e-004 mm  
+               Deviation: Fw: 1.7e-004 mm
             Fh - format height
                Value: 15.940299 mm
             K1 - radial distortion 1
                Value: 1.423e-004
-               Deviation: K1: 2.0e-007     
+               Deviation: K1: 2.0e-007
             K2 - radial distortion 2
                Value: -1.576e-007
-               Deviation: K2: 1.2e-009     
+               Deviation: K2: 1.2e-009
             K3 - radial distortion 3
                Value: 0.000e+000
             P1 - decentering distortion 1
                Value: 3.703e-006
-               Deviation: P1: 3.5e-007     
+               Deviation: P1: 3.5e-007
             P2 - decentering distortion 2
                Value: 0.000e+000
 

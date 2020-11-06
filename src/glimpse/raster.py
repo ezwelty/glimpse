@@ -290,7 +290,7 @@ class Grid(object):
             grid (bool): Whether `xy` defines a grid or invidual points
 
         Returns:
-            Either an array whether each point is inbounds (n, 1) if `grid` is False, 
+            Either an array whether each point is inbounds (n, 1) if `grid` is False,
                 or a tuple of whether each grid column or row is inbounds (n, ), (m, )
                 if `grid` is True.
         """
@@ -824,7 +824,7 @@ class Raster(Grid):
         Arguments:
             xy (array): Point coordinates (n, [x, y]).
             values (array): Point values (n, ).
-        
+
         Returns:
             Image array (float) of mean values of the same dimensions as :attr:`Z`.
             Pixels without points are `NaN`.

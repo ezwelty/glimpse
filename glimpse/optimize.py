@@ -2180,8 +2180,8 @@ def _ransac_samples(n: int, size: int, iterations: int = 100) -> List[int]:
 def detect_keypoints(
     array: np.ndarray,
     mask: np.ndarray = None,
-    method: str = "sift",
-    root: bool = True,
+    method: Type[cv2.Feature2D] = cv2.SIFT,
+    root: bool = False,
     **kwargs: Any
 ) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
     """
@@ -2190,21 +2190,15 @@ def detect_keypoints(
     Arguments:
         array: 2 or 3-dimensional image array (cast to uint8).
         mask: Pixel regions in which to detect keypoints (cast to uint8).
-        method: The keypoint detection algorithm to use.
-
-            - 'sift': Scale-invariant feature transform (SIFT) by
-                Lowe 2004 (https://doi.org/10.1023/B:VISI.0000029664.99615.94.
-                Uses :class:`cv2.xfeatures2d.SIFT`
-                (https://docs.opencv.org/4.1.1/d5/d3c/classcv_1_1xfeatures2d_1_1SIFT.html).
-            - 'surf': Speeded-up robust features (SURF) by
-                Bay et al. 2006 (https://doi.org/10.1016/j.cviu.2007.09.014).
-                Uses :class:`cv2.xfeatures2d.SURF`
-                (https://docs.opencv.org/4.1.1/d5/df7/classcv_1_1xfeatures2d_1_1SURF.html).
-
+        method: OpenCV :class:`cv2.Feature2D` class to use
+            (https://docs.opencv.org/master/d0/d13/classcv_1_1Feature2D.html).
+            Default is :class:`cv2.SIFT`
+            (https://docs.opencv.org/master/d7/d60/classcv_1_1SIFT.html),
+            which implements the scale-invariant feature transform (SIFT) by
+            Lowe 2004 (https://doi.org/10.1023/B:VISI.0000029664.99615.94).
         root: Whether to return square-root L1-normalized descriptors, as described by
              Arandjelović & Zisserman 2012 (https://doi.org/10.1109/CVPR.2012.6248018).
-        **kwargs: Additional arguments passed to
-            :class:`cv2.xfeatures2d.SIFT` or :class:`cv2.xfeatures2d.SURF`.
+        **kwargs: Arguments passed to `method`.`create()`.
 
     Returns:
         Keypoints as :class:`cv2.KeyPoint`.
@@ -2213,16 +2207,7 @@ def detect_keypoints(
     array = np.asarray(array, dtype=np.uint8)
     if mask is not None:
         mask = np.asarray(mask, dtype=np.uint8)
-    if method == "sift":
-        try:
-            detector = cv2.xfeatures2d.SIFT_create(**kwargs)
-        except AttributeError:
-            detector = cv2.SIFT(**kwargs)
-    elif method == "surf":
-        try:
-            detector = cv2.xfeatures2d.SURF_create(**kwargs)
-        except AttributeError:
-            detector = cv2.SURF(**kwargs)
+    detector = method.create(**kwargs)
     keypoints, descriptors = detector.detectAndCompute(array, mask=mask)
     # Empty result: ([], None)
     if root and descriptors is not None:
@@ -2258,9 +2243,9 @@ def match_keypoints(
         max_distance: Maximum coordinate-distance of matched keypoints.
         return_ratios: Whether to return the ratio of each match.
         matcher: Keypoint descriptor matcher to use for matching
-            (https://docs.opencv.org/4.1.1/db/d39/classcv_1_1DescriptorMatcher.html).
-            Default is to use :class:`cv2.FlannBasedMatcher`
-            (https://docs.opencv.org/4.1.1/dc/de2/classcv_1_1FlannBasedMatcher.html).
+            (https://docs.opencv.org/master/db/d39/classcv_1_1DescriptorMatcher.html).
+            Default is :class:`cv2.FlannBasedMatcher`
+            (https://docs.opencv.org/master/dc/de2/classcv_1_1FlannBasedMatcher.html).
 
     Returns:
         Coordinates of matches in first image (n, [ua, va]).

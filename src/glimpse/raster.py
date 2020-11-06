@@ -2,7 +2,7 @@
 import copy
 import datetime
 import numbers
-from typing import Iterable, Tuple, Union
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 import warnings
 
 import matplotlib.colors
@@ -27,6 +27,7 @@ class Grid:
         n: Grid dimensions (nx, ny).
         x: X coordinates as either :attr:`xlim`, :attr:`x`, or :attr:`X`.
         y: Y coordinates as either :attr:`ylim`, :attr:`y`, or :attr:`Y`.
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
 
     Attributes:
         xlim (numpy.ndarray): Outer x limits of the grid (left, right).
@@ -56,7 +57,7 @@ class Grid:
         self.crs = crs
 
     def __eq__(self, other: "Grid") -> bool:
-        """Consider Grids equal if their coordinate system is equal."""
+        """Consider equal if coordinate system is equal."""
         return (
             (self.shape == other.shape)
             and (self.xlim == other.xlim).all()
@@ -576,18 +577,27 @@ class Raster(Grid):
     since cell size cannot be determined from adjacent cell coordinates.
 
     Arguments:
-        x (array-like): Either `xlim`, `x`, or `X`
-        y (array-like): Either `ylim`, `y`, or `Y`
+        Z: Raster values.
+        x: Either `xlim`, `x`, or `X`.
+        y: Either `ylim`, `y`, or `Y`.
+        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
 
     Attributes (in addition to those inherited from `Grid`):
-        Z (array): Grid of raster values
-        zlim (array): Limits of raster values (nanmin, nanmax)
-        box3d (array): 3-dimensional bounding box (minx, miny, minz, maxx, maxy, maxz)
-        datetime (datetime): Capture date and time
-        crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT)
+        Z (numpy.ndarray): Raster values.
+        zlim (numpy.ndarray): Limits of raster values (nanmin, nanmax).
+        box3d (numpy.ndarray): Bounding box (xmin, ymin, zmin, xmax, ymax, zmax).
+        datetime (datetime.datetime): Capture date and time.
+        crs (int, str): Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
     """
 
-    def __init__(self, Z, x=None, y=None, datetime=None, crs=None):
+    def __init__(
+        self,
+        Z: Union[Number, Iterable[Union[Number, Iterable[Number]]]],
+        x: Iterable[Union[Number, Iterable[Number]]] = None,
+        y: Iterable[Union[Number, Iterable[Number]]] = None,
+        datetime: datetime.datetime = None,
+        crs: Union[int, str] = None,
+    ) -> None:
         self.Z = Z
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
@@ -596,14 +606,18 @@ class Raster(Grid):
         # Placeholders
         self._Zf = None
 
-    def __eq__(self, other):
+    def __eq__(self, other: "Raster") -> bool:
+        """Consider equal if coordinate system and values are equal."""
         return (
             np.array_equiv(self.Z, other.Z)
             and (self.xlim == other.xlim).all()
             and (self.ylim == other.ylim).all()
         )
 
-    def __getitem__(self, indices):
+    def __getitem__(
+        self, indices: Tuple[Union[int, slice], Union[int, slice]]
+    ) -> "Raster":
+        """Extract raster subset with array indices."""
         if not isinstance(indices, tuple):
             indices = (indices, slice(None))
         if not all((isinstance(idx, (int, slice)) for idx in indices)):
@@ -626,7 +640,16 @@ class Raster(Grid):
         return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
-    def read(cls, path, band=1, d=None, xlim=None, ylim=None, datetime=None, nan=None):
+    def read(
+        cls,
+        path: str,
+        band: int = 1,
+        d: float = None,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+        datetime: datetime.datetime = None,
+        nan: Any = None,
+    ) -> "Raster":
         """
         Read Raster from gdal raster file.
 
@@ -636,14 +659,14 @@ class Raster(Grid):
         Otherwise, the raster data is unchanged.
 
         Arguments:
-            path (str): Path to file
-            band (int): Raster band to read (1 = first band)
-            d (float): Target grid cell size
-            xlim (array-like): Crop bounds in x.
-                If `None` (default), read from file.
-            ylim (array-like): Crop bounds in y.
-                If `None` (default), read from file.
-            datetime (datetime): Capture date and time
+            path: Path to file.
+            band: Raster band to read (1 = first band).
+            d: Target grid cell size.
+            xlim: Crop bounds in x.
+            ylim: Crop bounds in y.
+            datetime: Capture date and time.
+            nan: Raster value to replace with `null`. If provided, raster values are
+                cast to :class:`float`.
         """
         raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
@@ -684,11 +707,14 @@ class Raster(Grid):
         return cls(Z, x=xlim, y=ylim, datetime=datetime, crs=crs if crs else None)
 
     @property
-    def Z(self):
+    def Z(self) -> np.ndarray:
+        """Raster values (ny, nx)."""
         return self._Z
 
     @Z.setter
-    def Z(self, value):
+    def Z(
+        self, value: Union[Number, Iterable[Union[Number, Iterable[Number]]]]
+    ) -> None:
         value = np.atleast_2d(value)
         if hasattr(self, "_Z"):
             self._clear_cache(["Zf"])
@@ -699,27 +725,32 @@ class Raster(Grid):
     # ---- Properties (dependent) ----
 
     @property
-    def zlim(self):
+    def zlim(self) -> np.ndarray:
+        """Raster value limits (nanmin, nanmax)."""
         value = [np.nanmin(self.Z), np.nanmax(self.Z)]
         return np.array(value)
 
     @property
-    def n(self):
+    def n(self) -> np.ndarray:
+        """Grid dimensions (nx, ny)."""
         return np.array(self.Z.shape[0:2][::-1]).astype(int)
 
     @property
-    def box3d(self):
+    def box3d(self) -> np.ndarray:
+        """Bounding box (xmin, ymin, xmax, ymax)."""
         zlim = self.zlim
         return np.hstack((self.min, zlim.min(), self.max, zlim.max()))
 
     @property
-    def grid(self):
+    def grid(self) -> "Grid":
+        """Raster grid."""
         return Grid(n=self.n, x=self.xlim, y=self.ylim)
 
     # ---- Properties (cached) ----
 
     @property
-    def Zf(self):
+    def Zf(self) -> scipy.interpolate.RegularGridInterpolator:
+        """Regular grid interpolator."""
         if self._Zf is None:
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RegularGridInterpolator(
@@ -730,7 +761,8 @@ class Raster(Grid):
 
     # ---- Methods (public) ----
 
-    def copy(self):
+    def copy(self) -> "Raster":
+        """Copy raster."""
         return self.__class__(
             self.Z.copy(),
             x=self.xlim.copy(),
@@ -738,43 +770,53 @@ class Raster(Grid):
             datetime=copy.copy(self.datetime),
         )
 
-    def sample(self, xy, grid=False, order=1, bounds_error=True, fill_value=np.nan):
+    def sample(
+        self,
+        xy: Iterable[Iterable[Number]],
+        grid: bool = False,
+        order: int = 1,
+        bounds_error: bool = True,
+        fill_value: float = np.nan,
+    ) -> np.ndarray:
         """
-        Sample `Raster` at points.
+        Sample at points.
 
-        If `grid` is False:
+        If `grid=False`:
 
-            - Uses a cached `scipy.interpolate.RegularGridInterpolator` object
-                (`self._Zf`)
-            - Supports interpolation `order` 0 and 1
-            - Faster for small sets of points
+            - Uses cached :class:`scipy.interpolate.RegularGridInterpolator`
+              (:attr:`Zf`).
+            - Supports interpolation `order` 0 and 1.
+            - Faster for small sets of points.
 
-        If `grid` is True:
+        If `grid=True`:
 
-            - Uses a `scipy.interpolate.RectBivariateSpline` object
-            - Supports interpolation `order` 1 to 5
-            - Much faster for large grids
+            - Uses :class:`scipy.interpolate.RectBivariateSpline`.
+            - Supports interpolation `order` 1 through 5.
+            - Much faster for larger grids.
 
         If any dimension has length 1, the value of the singleton dimension(s)
-        is returned directly and `scipy.interpolate.interp1d()` is used for the
+        is returned directly and :class:`scipy.interpolate.interp1d` is used for the
         remaining dimension.
 
         Arguments:
-            xy (array-like): Input coordinates x and y, as either:
+            xy: Input coordinates x and y.
 
-                - If `grid` is True, point coordinates (n, 2)
-                - If `grid` is False, coordinate vectors (n, ), (m, )
+                - If `grid=False`, point coordinates (n, 2).
+                - If `grid=True`, coordinate vectors (n,), (m,).
 
-            grid (bool): Whether `xy` defines a grid or invidual points.
-            order (int): Interpolation order
-                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic)
-            bounds_error (bool): Whether an error is thrown if `xy` are outside bounds
-            fill_value (number): Value to use for points outside bounds.
+            grid: Whether `xy` defines a grid (`True`) or invidual points (`False`).
+            order: Interpolation order
+                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic).
+            bounds_error: Whether an error is raised if `xy` are outside bounds.
+            fill_value: Value to use for points outside bounds.
                 If `None`, values outside bounds are extrapolated.
 
         Returns:
-            array: Raster value at each point,
-                either as (n, ) if `grid` is False or (m, n) if `grid` is True
+            Raster value at each point,
+            either as (n,) if `grid=False` or (m, n) if `grid=True`.
+
+        Raises:
+            ValueError: Some of the sampling coordinates are out of bounds.
         """
         error = ValueError("Some of the sampling coordinates are out of bounds")
         methods = ("nearest", "linear", "quadratic", "cubic", "quartic", "quintic")
@@ -844,7 +886,10 @@ class Raster(Grid):
                     samples = np.full(len(xy), self.Z.flat[0])
         return samples
 
-    def _sample_1d(self, x, dim, kind="linear"):
+    def _sample_1d(
+        self, x: Iterable[Number], dim: Literal[0, 1], kind: Union[str, int] = "linear"
+    ) -> np.ndarray:
+        """Sample raster values with singleton dimension."""
         xdir = np.sign(self.d[dim]).astype(int)
         xi = (self.y if dim else self.x)[::xdir]
         zi = (self.Z[:, 0] if dim else self.Z[0])[::xdir]
@@ -854,7 +899,14 @@ class Raster(Grid):
         samples = zxfun(x)
         return samples
 
-    def _sample_grid(self, xy, kx=1, ky=1, s=0):
+    def _sample_grid(
+        self,
+        xy: Tuple[Iterable[Number], Iterable[Number]],
+        kx: int = 1,
+        ky: int = 1,
+        s: Number = 0,
+    ) -> np.ndarray:
+        """Sample raster values on regular grid."""
         x, y = xy
         signs = np.sign(self.d).astype(int)
         # HACK: scipy.interpolate.RectBivariateSpline does not support NAN
@@ -877,36 +929,32 @@ class Raster(Grid):
         self.Z[is_nan] = np.nan
         return samples
 
-    def resample(self, grid, order=1, bounds_error=False, fill_value=np.nan):
+    def resample(self, grid: Grid, **kwargs: Any) -> None:
         """
-        Resample `Raster`.
+        Resample to match coordinate system of other raster.
 
         Arguments:
-            grid (`Grid`): Grid cell centers at which to sample
-            ...: Additional arguments described in `self.sample()`
+            grid: Regular grid cell centers at which to sample.
+            **kwargs: Optional arguments to :meth:`sample`.
         """
-        array = self.sample(
-            (grid.x, grid.y),
-            grid=True,
-            bounds_error=bounds_error,
-            fill_value=fill_value,
-            order=order,
-        )
+        array = self.sample((grid.x, grid.y), grid=True, **kwargs)
         self.Z = array
         self.xlim, self.ylim = grid.xlim, grid.ylim
         self._x, self._y = grid.x, grid.y
 
-    def plot(self, array=None, **kwargs):
+    def plot(
+        self, array: np.ndarray = None, **kwargs: Any
+    ) -> matplotlib.image.AxesImage:
         """
-        Plot `Raster`.
+        Plot.
 
         Arguments:
-            array (array): Values to plot. If `None`, `self.Z` is used.
-            **kwargs: Arguments passed to `matplotlib.pyplot.imshow()`
+            array: Values to plot. If `None`, :attr:`Z` is used.
+            **kwargs: Optional arguments to :func:`matplotlib.pyplot.imshow`.
         """
         if array is None:
             array = self.Z
-        matplotlib.pyplot.imshow(
+        return matplotlib.pyplot.imshow(
             array,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
             **kwargs
@@ -917,8 +965,8 @@ class Raster(Grid):
         Convert points to a raster image.
 
         Arguments:
-            xy (array): Point coordinates (n, [x, y]).
-            values (array): Point values (n, ).
+            xy: Point coordinates (n, [x, y]).
+            values: Point values (n, ).
 
         Returns:
             Image array (float) of mean values of the same dimensions as :attr:`Z`.
@@ -930,15 +978,19 @@ class Raster(Grid):
         helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=a)
         return a
 
-    def rasterize_poygons(self, polygons, holes=None):
+    def rasterize_poygons(
+        self,
+        polygons: Iterable[Iterable[Iterable[Number]]],
+        holes: Iterable[Iterable[Iterable[Number]]] = None,
+    ) -> np.ndarray:
         """
         Convert polygons to a raster image.
 
         Returns a boolean array of the grid cells inside the polygons.
 
         Arguments:
-            polygons (iterable): Polygons
-            holes (iterable): Polygons representing holes in `polygons`
+            polygons: Polygons [[(xi, yi), ...], ...].
+            holes: Polygons representing holes in `polygons` [[(xi, yi), ...], ...].
         """
         size = self.shape[0:2][::-1]
         polygons = [self.xy_to_rowcol(xy)[:, ::-1] + 0.5 for xy in polygons]
@@ -946,14 +998,19 @@ class Raster(Grid):
             holes = [self.xy_to_rowcol(xy)[:, ::-1] + 0.5 for xy in holes]
         return helpers.polygons_to_mask(polygons, size=size, holes=holes)
 
-    def crop(self, xlim=None, ylim=None, zlim=None):
+    def crop(
+        self,
+        xlim: Iterable[Number] = None,
+        ylim: Iterable[Number] = None,
+        zlim: Iterable[Number] = None,
+    ) -> None:
         """
-        Crop `Raster`.
+        Crop.
 
         Arguments:
-            xlim (array_like): Crop bounds in x
-            ylim (array_like): Crop bounds in y
-            zlim (array_like): Crop bounds in z.
+            xlim: Crop bounds in x.
+            ylim: Crop bounds in y.
+            zlim: Crop bounds in z.
                 Values outside range are set to `np.nan` (casting to float as needed).
         """
         if xlim is not None or ylim is not None:
@@ -970,25 +1027,25 @@ class Raster(Grid):
                 self.Z = self.Z.astype(float)
             self.Z[outbounds] = np.nan
 
-    def resize(self, scale, order=1):
+    def resize(self, scale: Number, order: int = 1) -> None:
         """
-        Resize `Raster`.
+        Resize.
 
         Arguments:
-            scale (float): Fraction of current size
-            order (int): Interpolation order
-                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic)
+            scale: Fraction of current size.
+            order: Interpolation order
+                (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic).
         """
         self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=order)
 
-    def shift(self, dx=None, dy=None, dz=None):
+    def shift(self, dx: Number = None, dy: Number = None, dz: Number = None) -> None:
         """
         Shift position.
 
         Arguments:
-            dx (float): Shift in x
-            dy (float): Shift in y
-            dz (float): Shift in z
+            dx: Shift in x.
+            dy: Shift in y.
+            dz: Shift in z.
         """
         self._shift_xy(dx=dx, dy=dy)
         if dz is not None:
@@ -1003,14 +1060,16 @@ class Raster(Grid):
             if dy is not None:
                 self._Zf.values += dz
 
-    def fill_circle(self, center, radius, value=np.nan):
+    def fill_circle(
+        self, center: Iterable[Number], radius: Number, value: Any = np.nan
+    ) -> None:
         """
         Fill a circle with a fixed value.
 
         Arguments:
-            center (iterable): Circle center (x, y)
-            radius (float): Circle radius
-            value (scalar): Fill value
+            center: Circle center (x, y).
+            radius: Circle radius.
+            value: Fill value.
         """
         # Circle indices
         rowcol = self.xy_to_rowcol(np.atleast_2d(center[0:2]), snap=True)
@@ -1029,35 +1088,40 @@ class Raster(Grid):
         # Apply
         self.Z.flat[ind] = value
 
-    def hillshade(self, azimuth=315, altitude=45, **kwargs):
+    def hillshade(
+        self, azimuth: Number = 315, altitude: Number = 45, **kwargs: Any
+    ) -> np.ndarray:
         """
         Return the illumination intensity of the surface.
 
         Arguments:
-            azimuth (number): Azimuth angle of the light source
-                (0-360, degrees clockwise from North)
-            altitude (number): Altitude angle of the light source
-                (0-90, degrees up from horizontal)
-            kwargs (dict): Arguments passed to
-                `matplotlib.colors.LightSource.hillshade()`
+            azimuth: Azimuth angle of the light source
+                (0-360, degrees clockwise from North).
+            altitude: Altitude angle of the light source
+                (0-90, degrees up from horizontal).
+            **kwargs: Optional arguments to
+                :meth:`matplotlib.colors.LightSource.hillshade`.
         """
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
         return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
 
     def fill_crevasses(
-        self, maximum={"size": 5}, gaussian={"sigma": 5}, mask=None, fill=False
-    ):
+        self,
+        maximum: dict = {"size": 5},
+        gaussian: dict = {"sigma": 5},
+        mask: Union[np.ndarray, Callable[[np.ndarray], np.ndarray]] = None,
+        fill: bool = False,
+    ) -> None:
         """
-        Apply a maximum filter to `Z`, then perform Gaussian smoothing.
+        Apply a maximum filter to values, then perform Gaussian smoothing.
 
         Arguments:
-            maximum (dict): Further arguments to `maximum_filter()`
-            gaussian (dict): Further arguments to `gaussian_filter()`
+            maximum: Optional arguments to :func:`helpers.maximum_filter`.
+            gaussian: Optional arguments to :func:`helpers.gaussian_filter`.
             mask: Boolean array of cells to include (True) or exclude (False),
-                or callable that generates the mask from `self.Z`.
+                or callable that generates the mask from :attr:`Z`.
                 If `None`, all cells are included.
-            fill (bool): Whether to fill cells excluded by `mask`
-                with interpolated values
+            fill: Whether to fill cells excluded by `mask` with interpolated values.
         """
         if callable(mask):
             mask = mask(self.Z)
@@ -1068,19 +1132,20 @@ class Raster(Grid):
             fill=fill
         )
 
-    def viewshed(self, origin, correction=False):
+    def viewshed(
+        self, origin: Iterable[Number], correction: Optional[Union[bool, dict]] = False
+    ) -> np.ndarray:
         """
-        Return the binary viewshed from a point within the DEM.
+        Return the binary viewshed from a point within the raster.
 
         Arguments:
-            origin (iterable): World coordinates of viewing position (x, y, z)
-            correction (dict or bool): Either arguments to
-                `helpers.elevation_corrections()`, `True` for default arguments,
-                or `None` or `False` to skip.
+            origin: World coordinates of viewing position (x, y, z).
+            correction: Either arguments to :func:`helpers.elevation_corrections`,
+                `True` for default arguments, or `None` or `False` to skip.
 
         Returns:
-            array: Boolean array of the same shape as `self.Z`
-                with visible cells tagged as `True`
+            Boolean array of the same shape as :attr:`Z`
+            with visible cells tagged as `True`.
         """
         if not all(abs(self.d[0]) == abs(self.d)):
             warnings.warn(
@@ -1165,23 +1230,28 @@ class Raster(Grid):
             previous_headings = rheading
         return vis.reshape(self.Z.shape)
 
-    def horizon(self, origin, headings=range(360), correction=False):
+    def horizon(
+        self,
+        origin: Iterable[Number],
+        headings: Iterable[Number] = range(360),
+        correction: Optional[Union[bool, dict]] = False,
+    ) -> List[np.ndarray]:
         """
         Return the horizon from an arbitrary viewing position.
 
-        Missing values (`numpy.nan`) are ignored. A cell which is the last
+        Null values (`numpy.nan`) are ignored. A cell which is the last
         non-missing cell along a sighting is not considered part of the horizon.
 
         Arguments:
-            origin (iterable): World coordinates of viewing position (x, y, z)
-            headings (iterable):
-            correction (dict or bool): Either arguments to
-                `helpers.elevation_corrections()`, `True` for default arguments,
-                or `None` or `False` to skip.
+            origin: World coordinates of viewing position (x, y, z).
+            headings: Headings at which to compute horizon,
+                in degrees clockwise from north.
+            correction: Either arguments to :func:`helpers.elevation_corrections()`,
+                `True` for default arguments, or `None` or `False` to skip.
 
         Returns:
-            list: List of world coordinate arrays (n, 3) each tracing an unbroken
-                segment of the horizon
+            List of world coordinate arrays (n, [x, y, z]) each tracing an unbroken
+            segment of the horizon.
         """
         n = len(headings)
         if correction is True:
@@ -1236,47 +1306,42 @@ class Raster(Grid):
             # Starts with not-isnan group
             return splits[0::2]
 
-    def gradient(self):
+    def gradient(self) -> Tuple[np.ndarray, np.ndarray]:
         """
         Return gradients in x and y.
 
         Returns:
-            array: Derivative of `self.Z` with respect to x
-            array: Derivative of `self.Z` with respect to y
+            array: Derivative of :attr:`Z` with respect to x.
+            array: Derivative of :attr:`Z` with respect to y.
         """
         dzdy, dzdx = np.gradient(self.Z, self.d[1], self.d[0])
         return dzdx, dzdy
 
-    def write(self, path, driver=None, nan=None, crs=None):
+    def write(self, path: str, **kwargs: Any) -> None:
         """
         Write to file.
 
         Arguments:
-            path (str): Path to file
-            nan (number): Value to interpret as missing. Any `np.nan` in `self.Z` are
-                written with this value.
-            crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
-                If `None` (default), will use `self.crs` if set.
+            path: Path to file.
+            **kwargs: Optional arguments to :func:`helpers.write_raster`.
         """
-        if not crs:
-            crs = self.crs
-        helpers.write_raster(
-            a=self.Z,
-            path=path,
-            driver=driver,
-            nan=nan,
-            crs=crs,
+        kwargs = {
             # top-left x, dx, rotation, top-left y, rotation, dy
-            transform=(self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1]),
-        )
+            "transform": (self.xlim[0], self.d[0], 0, self.ylim[0], 0, self.d[1]),
+            "crs": self.crs,
+            **kwargs,
+        }
+        helpers.write_raster(a=self.Z, path=path, **kwargs)
 
-    def data_extent(self):
+    def data_extent(self) -> Tuple[slice, slice]:
         """
         Return slices for the region bounding all non-missing values.
 
         Returns:
-            slice: Row slice
-            slice: Column slice
+            Row slice and column slice.
+
+        Raises:
+            ValueError: No non-missing values present.
         """
         data = ~np.isnan(self.Z)
         data_row = np.any(data, axis=1)
@@ -1292,10 +1357,8 @@ class Raster(Grid):
             slice(first_data_col, last_data_col),
         )
 
-    def crop_to_data(self):
-        """
-        Crop to bounds of non-missing values.
-        """
+    def crop_to_data(self) -> None:
+        """Crop to bounds of non-missing values."""
         slices = self.data_extent()
         x = self.x[slices[1]]
         y = self.y[slices[0]]

@@ -19,6 +19,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: 3D Rendering",
     "Topic :: Scientific/Engineering :: Image Recognition"
 ]
+packages = [{ include = "glimpse", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.6.1"

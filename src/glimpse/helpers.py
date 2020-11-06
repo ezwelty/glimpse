@@ -1,8 +1,9 @@
+"""Helper functions."""
 import datetime
 import gzip
-import pathlib
 import json
 import os
+import pathlib
 import pickle
 import re
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
@@ -220,7 +221,7 @@ def write_pickle(
         fp = gzip.open(path, mode=mode)
     else:
         fp = open(path, mode=mode)
-    pickle.dump(obj, file=fp, protocol=protocol)
+    pickle.dump(obj, file=fp, **kwargs)
     fp.close()
 
 
@@ -262,7 +263,7 @@ def read_json(path: str, **kwargs: Any) -> Union[dict, list]:
 def write_json(
     obj: Union[dict, list], path: str = None, flat_arrays: bool = False, **kwargs: Any
 ) -> Optional[str]:
-    """
+    r"""
     Write object to JSON.
 
     Arguments:
@@ -280,9 +281,9 @@ def write_json(
         >>> write_json({'x': [0, 1]})
         '{"x": [0, 1]}'
         >>> write_json({'x': [0, 1]}, indent=2)
-        '{\\n  "x": [\\n    0,\\n    1\\n  ]\\n}'
+        '{\n  "x": [\n    0,\n    1\n  ]\n}'
         >>> write_json({'x': [0, 1]}, indent=2, flat_arrays=True)
-        '{\\n  "x": [0, 1]\\n}'
+        '{\n  "x": [0, 1]\n}'
     """
     txt = json.dumps(obj, **kwargs)
     if flat_arrays and kwargs.get("indent") >= 0:
@@ -290,7 +291,7 @@ def write_json(
         sep = separators[0] if separators else ", "
         squished_sep = re.sub(r"\s", "", sep)
 
-        def flatten(match):
+        def flatten(match: re.Match) -> str:
             return re.sub(squished_sep, sep, re.sub(r"\s", "", match.group(0)))
 
         txt = re.sub(r"(\[\s*)+[^\]\{]*(\s*\])+", flatten, txt)
@@ -513,7 +514,20 @@ def crs_to_wkt(crs: Union[int, str]) -> str:
     return obj.ExportToWkt()
 
 
-def gdal_driver_from_path(path, raster=True, vector=True):
+def gdal_driver_from_path(
+    path: str, raster: bool = True, vector: bool = True
+) -> Optional[osgeo.gdal.Driver]:
+    """
+    Infer GDAL driver from file path.
+
+    Arguments:
+        path: Path to file.
+        raster: Whether to consider raster drivers (https://gdal.org/drivers/raster).
+        vector: Whether to consier vector drivers (https://gdal.org/drivers/vector).
+
+    Returns:
+        Inferred GDAL driver.
+    """
     ext = os.path.splitext(path)[1][1:].lower()
     for i in range(osgeo.gdal.GetDriverCount()):
         driver = osgeo.gdal.GetDriver(i)
@@ -689,6 +703,8 @@ def clip_polyline_box(
         t: Whether last column of `line` are optional distance measures.
 
     Returns:
+        Line segments within the box, each as an array of line vertices
+            [[[x, y(, z)], ...], ...].
 
     Examples:
         >>> line = np.array([(0, 0), (1, 1), (3, 3)])

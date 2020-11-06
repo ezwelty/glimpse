@@ -1,1 +1,1 @@
-"""Unit tests."""
+"""Tests of the glimpse package."""

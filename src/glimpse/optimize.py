@@ -12,14 +12,18 @@ import matplotlib.pyplot
 import numpy as np
 import scipy.optimize
 import scipy.sparse
+from typing_extensions import Literal
 
 from . import config, helpers
 from .camera import Camera
+from .image import Image
+from .observer import Observer
 
 Index = Union[slice, Iterable[int]]
 CamIndex = Union[int, Camera]
 Color = Union[str, Tuple[float, float, float], Tuple[float, float, float, float]]
 ColorArgs = Optional[Union[dict, Color]]
+Number = Union[int, float]
 
 # Register pickling method for cv2.KeyPoint
 # https://stackoverflow.com/a/48832618
@@ -869,11 +873,13 @@ class RotationMatchesXY(RotationMatches):
         self._internals = [cam.to_array()[6:] for cam in self.cams]
 
     def __dir__(self) -> list:
+        """Exclude certain inherited attributes from class attributes."""
         return sorted(
             (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
         )
 
     def __getattribute__(self, name: str) -> Any:
+        """Raise error if excluded attributes are accessed."""
         if name in self._EXCLUDED:
             raise AttributeError(name)
         return super(RotationMatches, self).__getattribute__(name)
@@ -958,11 +964,13 @@ class RotationMatchesXYZ(RotationMatchesXY):
         super().__init__(cams=cams, uvs=uvs, xys=xys, weights=weights)
 
     def __dir__(self) -> list:
+        """Exclude certain inherited attributes from class attributes."""
         return sorted(
             (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
         )
 
     def __getattribute__(self, name: str) -> Any:
+        """Raise error if excluded attributes are accessed."""
         if name in self._EXCLUDED:
             raise AttributeError(name)
         return super(RotationMatchesXY, self).__getattribute__(name)
@@ -1111,7 +1119,6 @@ class Polynomial:
         """
         if params is None:
             params = self.fit(index)
-        defaults = {}
         result = {}
         full = np.arange(self.size)
         index, unindex = full[index], np.delete(full, index)
@@ -1143,7 +1150,7 @@ Params = Dict[str, Union[bool, int, Iterable[int]]]
 FitParams = Union[Iterable[float], lmfit.parameter.Parameters]
 
 
-class Cameras(object):
+class Cameras:
     """
     Multi-camera optimization.
 
@@ -1191,7 +1198,7 @@ class Cameras(object):
         weights: np.ndarray = None,
         scales: bool = True,
         sparsity: bool = True,
-    ):
+    ) -> None:
         (
             cams,
             controls,
@@ -1233,11 +1240,12 @@ class Cameras(object):
             self._build_sparsity()
 
     @property
-    def weights(self) -> np.ndarray:
+    def weights(self) -> Optional[np.ndarray]:
+        """Weights for each control point."""
         return self._weights
 
     @weights.setter
-    def weights(self, value: np.ndarray) -> None:
+    def weights(self, value: Optional[Iterable[Number]]) -> None:
         if value is None:
             self._weights = value
         else:
@@ -1245,7 +1253,20 @@ class Cameras(object):
             self._weights = value * len(value) / sum(value)
 
     @staticmethod
-    def _as_lists(cams, controls, cam_params, group_indices, group_params):
+    def _as_lists(
+        cams: Union[Camera, Iterable[Camera]],
+        controls: Union[Control, Iterable[Control]],
+        cam_params: Union[Params, Iterable[Params]],
+        group_indices: Union[Iterable[int], Iterable[Iterable[int]]],
+        group_params: Union[Params, Iterable[Params]],
+    ) -> Tuple[
+        Iterable[Camera],
+        Iterable[Control],
+        Iterable[Params],
+        Iterable[Iterable[int]],
+        Iterable[Params],
+    ]:
+        """Cast singleton arguments to iterables."""
         if isinstance(cams, Camera):
             cams = [cams]
         if isinstance(controls, (Points, Lines, Matches)):
@@ -1261,7 +1282,10 @@ class Cameras(object):
         return cams, controls, cam_params, group_indices, group_params
 
     @staticmethod
-    def _lmfit_labels(mask, cam=None, group=None):
+    def _lmfit_labels(
+        mask: np.ndarray, cam: int = None, group: int = None
+    ) -> List[str]:
+        """Generate parameter labels for lmfit."""
         attributes = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p")
         lengths = [3, 3, 2, 2, 2, 6, 2]
         base_labels = np.array(
@@ -1279,14 +1303,15 @@ class Cameras(object):
         return labels
 
     @staticmethod
-    def _get_control_cams(control):
+    def _get_control_cams(control: Control) -> List[Camera]:
+        """Get the Cameras of a control object."""
         if isinstance(control, (Points, Lines)):
             return [control.cam]
         return control.cams
 
     @classmethod
     def prune_controls(
-        cls, controls: List[Control], cams: List[Params]
+        cls, controls: Iterable[Control], cams: Iterable[Params]
     ) -> List[Control]:
         """
         Return the controls which reference the specified cameras.
@@ -1320,7 +1345,7 @@ class Cameras(object):
 
     @staticmethod
     def camera_scales(
-        cam: Camera, controls: List[Union[Points, Lines]] = None
+        cam: Camera, controls: Iterable[Union[Points, Lines]] = None
     ) -> np.ndarray:
         """
         Return camera parameter scale factors.
@@ -1516,10 +1541,8 @@ class Cameras(object):
         bounds[missing_max, 1] = np.inf
         return mask, bounds
 
-    def _test(self):
-        """
-        Test for scenarios leading to unexpected results.
-        """
+    def _test(self) -> None:
+        """Test for scenarios leading to unexpected results."""
         # Error: No controls reference the cameras
         if not len(self.controls):
             raise ValueError("No controls reference the cameras")
@@ -1563,7 +1586,8 @@ class Cameras(object):
         if set(cams_with_params) - set(control_cams):
             raise ValueError("Not all cameras with params appear in controls")
 
-    def _build_scales(self):
+    def _build_scales(self) -> None:
+        """Build camera parameter scale factors."""
         # TODO: Weigh each camera by number of control points (sum of weights)
         scales = [self.__class__.camera_scales(cam, self.controls) for cam in self.cams]
         cam_scales = [scale[mask] for scale, mask in zip(scales, self.cam_masks)]
@@ -1573,7 +1597,8 @@ class Cameras(object):
         ]
         self.scales = np.hstack((np.hstack(group_scales), np.hstack(cam_scales)))
 
-    def _build_sparsity(self):
+    def _build_sparsity(self) -> None:
+        """Build Jacobian sparsity matrix."""
         # Number of observations
         m_control = [2 * control.size for control in self.controls]
         m = sum(m_control)
@@ -1608,9 +1633,7 @@ class Cameras(object):
         self.sparsity = S
 
     def update_params(self) -> None:
-        """
-        Update parameter bounds and initial values from current state.
-        """
+        """Update parameter bounds and initial values from current state."""
         self.params = lmfit.Parameters()
         # Camera parameters
         cam_bounds = [self.__class__.camera_bounds(cam) for cam in self.cams]
@@ -1693,24 +1716,20 @@ class Cameras(object):
             self.vectors = [cam.to_array() for cam in self.cams]
 
     def reset_cameras(self) -> None:
-        """
-        Reset camera parameters to their previously saved state.
-        """
+        """Reset camera parameters to their previously saved state."""
         for cam, vector in zip(self.cams, self.vectors):
             cam._vector = vector.copy()
 
     @property
     def size(self) -> int:
-        """
-        Return the total number of data points.
-        """
+        """Total number of data points."""
         return np.sum([control.size for control in self.controls])
 
-    def observed(self, index: Index = slice(None)):
+    def observed(self, index: Index = slice(None)) -> np.ndarray:
         """
         Return the observed image coordinates for all camera control.
 
-        See control `observed()` method for more details.
+        See control `observed` method for more details.
 
         Arguments:
             index: Indices of points to return.
@@ -1832,7 +1851,9 @@ class Cameras(object):
                     jac_index = np.dstack((2 * jac_index, 2 * jac_index + 1)).ravel()
                     kwargs["jac_sparsity"] = self.sparsity[jac_index]
 
-        def callback(params, iter, resid, *args, **kwargs):
+        def callback(
+            params: FitParams, iter: int, resid: np.ndarray, *args: Any, **kwargs: Any
+        ) -> None:
             err = np.linalg.norm(resid.reshape(-1, 2), ord=2, axis=1).mean()
             sys.stdout.write("\r" + str(err))
             sys.stdout.flush()
@@ -1954,32 +1975,42 @@ class Cameras(object):
         return results
 
     def plot_weights(
-        self, index: Index = slice(None), scale: float = 1, cmap: str = None
-    ) -> None:
+        self, index: Index = slice(None), **kwargs: Any
+    ) -> matplotlib.collections.PathCollection:
+        """
+        Plot weights as points.
+
+        Arguments:
+            index: Indices of points to plot. By default, all points are plotted.
+            **kwargs: Optional arguments to :func:`matplotlib.pyplot.scatter`.
+        """
         weights = np.ones(self.size) if self.weights is None else self.weights
         uv = self.observed(index=index)
-        matplotlib.pyplot.scatter(
-            uv[:, 0], uv[:, 1], c=weights[index], s=scale * weights[index], cmap=cmap
+        return matplotlib.pyplot.scatter(
+            uv[:, 0], uv[:, 1], c=weights[index], s=weights[index], **kwargs
         )
-        matplotlib.pyplot.colorbar()
-        matplotlib.pyplot.gca().invert_yaxis()
 
 
-class ObserverCameras(object):
+class ObserverCameras:
     """
-    `ObserverCameras` finds the optimal view directions of the cameras in an `Observer`.
+    Find the optimal view directions for the cameras in an `Observer`.
 
     Attributes:
-        observer (`glimpse.Observer`): Observer with the cameras to orient
-        anchors (iterable): Integer indices of `observer.images` to use as anchors.
-            If `None`, the first image is used.
-        matches (array): Grid of `RotationMatchesXYZ` objects.
+        observer (Observer): Observer with the cameras to orient.
+        anchors (iterable): Indices of :attr:`Observer.images` to use as anchors.
+            By default, the first image is used.
+        matches (array-like): Grid of :class:`RotationMatchesXYZ`.
         matcher (KeypointMatcher): KeypointMatcher object used by
-            `self.build_keypoints()` and `self.build_matches()`
-        viewdirs (array): Original camera view directions
+            :meth:`build_keypoints` and :meth:`build_matches`.
+        viewdirs (numpy.ndarray): Original camera view directions.
     """
 
-    def __init__(self, observer, matches=None, anchors=None):
+    def __init__(
+        self,
+        observer: Observer,
+        matches: Union[np.ndarray, scipy.sparse.spmatrix] = None,
+        anchors: Iterable[int] = None,
+    ) -> None:
         self.observer = observer
         if anchors is None:
             is_anchor = [img.anchor for img in self.observer.images]
@@ -1995,36 +2026,41 @@ class ObserverCameras(object):
             [img.cam.viewdir.copy() for img in self.observer.images]
         )
 
-    def set_cameras(self, viewdirs):
+    def set_cameras(self, viewdirs: Iterable[Iterable[Number]]) -> None:
+        """Set camera view directions."""
         for i, img in enumerate(self.observer.images):
             img.cam.viewdir = viewdirs[i]
 
-    def reset_cameras(self):
+    def reset_cameras(self) -> None:
+        """Reset camera view directions to original values."""
         self.set_cameras(viewdirs=self.viewdirs.copy())
 
-    def build_keypoints(self, *args, **kwargs):
-        self.matcher.build_keypoints(*args, **kwargs)
+    def build_keypoints(self, **kwargs: Any) -> None:
+        """Build image keypoints (:meth:`KeypointMatcher.build_keypoints`)."""
+        self.matcher.build_keypoints(**kwargs)
 
-    def build_matches(self, *args, **kwargs):
-        self.matcher.build_matches(*args, **kwargs)
+    def build_matches(self, **kwargs: Any) -> None:
+        """Match keypoints between images (:meth:`KeypointMatcher.build_matches`)."""
+        self.matcher.build_matches(**kwargs)
         self.matcher.convert_matches(RotationMatchesXYZ)
         self.matches = self.matcher.matches
 
-    def fit(self, anchor_weight=1e6, method="bfgs", **params):
+    def fit(
+        self, anchor_weight: Number = 1e6, method: str = "bfgs", **kwargs: Any
+    ) -> scipy.optimize.OptimizeResult:
         """
         Return optimal camera view directions.
 
         The Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm is used to find
         the camera view directions that minimize the sum of the absolute differences
-        (L1-norm). See `scipy.optimize.minimize(method='bfgs')`.
+        (L1-norm).
 
         Arguments:
-            anchor_weight (float): Weight on anchor image view directions being correct
-            **params: Additional arguments to `scipy.optimize.minimize()`
+            anchor_weight: Weight on anchor image view directions being correct.
+            **kwargs: Optional arguments to :func:`scipy.optimize.minimize`.
 
         Returns:
-            `scipy.optimize.OptimizeResult`: The optimization result.
-                Attributes include solution array `x`, boolean `success`, and `message`.
+            Optimization result.
         """
         # Ensure matches are in COO sparse matrix format
         if isinstance(self.matches, scipy.sparse.coo.coo_matrix):
@@ -2033,7 +2069,7 @@ class ObserverCameras(object):
             matches = scipy.sparse.coo_matrix(matches)
 
         # Define combined objective, jacobian function
-        def fun(viewdirs):
+        def fun(viewdirs: Iterable[Iterable[Number]]) -> Tuple[np.ndarray, np.ndarray]:
             viewdirs = viewdirs.reshape(-1, 3)
             self.set_cameras(viewdirs=viewdirs)
             objective = 0
@@ -2063,7 +2099,7 @@ class ObserverCameras(object):
         # Optimize camera view directions
         viewdirs_0 = [img.cam.viewdir for img in self.observer.images]
         result = scipy.optimize.minimize(
-            fun=fun, x0=viewdirs_0, jac=True, method=method, **params
+            fun=fun, x0=viewdirs_0, jac=True, method=method, **kwargs
         )
         self.reset_cameras()
         if not result.success:
@@ -2226,7 +2262,7 @@ def match_keypoints(
     max_distance: float = None,
     return_ratios: bool = False,
     matcher: cv2.DescriptorMatcher = cv2.FlannBasedMatcher(),
-):
+) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """
     Return the image coordinates of matched keypoint pairs.
 
@@ -2250,7 +2286,7 @@ def match_keypoints(
     Returns:
         Coordinates of matches in first image (n, [ua, va]).
         Coordinates of matches in second image (n, [ub, vb]).
-        (optional) Ratio of each match (n, ).
+        (optional) Ratio of each match (n,).
     """
     if mask is not None:
         mask = np.asarray(mask, dtype=np.uint8)
@@ -2283,28 +2319,31 @@ def match_keypoints(
     return uva, uvb
 
 
-class KeypointMatcher(object):
+class KeypointMatcher:
     """
-    `KeypointMatcher` detects and matches image keypoints.
+    Detect and match image keypoints.
 
     - Build (and save to file) keypoint descriptors for each image with
-        `self.build_keypoints()`.
+      :meth:`build_keypoints`.
     - Build (and save to file) keypoints matches between image pairs with
-        `self.build_matches()`.
+      :meth:`build_matches`.
 
     Arguments:
-        clahe: Arguments to `cv2.createCLAHE()` (dict: clipLimit, tileGridSize)
-            or whether to use CLAHE (bool).
+        images: Images. Must be in ascending temporal order.
+        clahe: Whether to use contrast limited adaptive histogram equalization (CLAHE)
+            or arguments to :func:`cv2.createCLAHE`
+            (https://docs.opencv.org/master/d6/dc7/group__imgproc__hist.html#gad689d2607b7b3889453804f414ab1018).
 
     Attributes:
-        images (array): Image objects in ascending temporal order
-        clahe (cv2.CLAHE): CLAHE object
-        matches (scipy.sparse.coo.coo_matrix): Sparse matrix of image-image `Matches`
-        keypoints (list): List of image keypoints
-            (see `optimize.detect_keypoints()`).
+        images (numpy.ndarray): Images in ascending temporal order.
+        clahe (cv2.CLAHE): Contrast Limited Adaptive Histogram Equalization object.
+        matches (scipy.sparse.coo.coo_matrix): Sparse matrix of image :class:`Matches`.
+        keypoints (list): List of image keypoints (see :func:`detect_keypoints`).
     """
 
-    def __init__(self, images, clahe=False):
+    def __init__(
+        self, images: Iterable[Image], clahe: Union[bool, dict] = False
+    ) -> None:
         dts = np.diff([img.datetime for img in images])
         if np.any(dts < datetime.timedelta(0)):
             raise ValueError("Images are not in ascending temporal order")
@@ -2319,33 +2358,32 @@ class KeypointMatcher(object):
         self.keypoints = None
         self.matches = None
 
-    def _prepare_image_basenames(self):
+    def _prepare_image_basenames(self) -> List[str]:
+        """Prepare image basenames."""
         basenames = [helpers.strip_path(img.path) for img in self.images]
         if len(basenames) != len(set(basenames)):
             raise ValueError("Image basenames are not unique")
         return basenames
 
-    def _prepare_image(self, I):
-        """
-        Prepare image data for keypoint detection.
-        """
-        if I.ndim > 2:
-            I = rgb.mean(axis=2)
-        I = I.astype(np.uint8, copy=False)
+    def _prepare_image(self, array: np.ndarray) -> np.ndarray:
+        """Prepare image data for keypoint detection."""
+        if array.ndim > 2:
+            array = array.mean(axis=2)
+        array = array.astype(np.uint8, copy=False)
         if self.clahe is not None:
-            I = self.clahe.apply(I)
-        return I
+            array = self.clahe.apply(array)
+        return array
 
     def build_keypoints(
         self,
-        masks=None,
-        path=None,
-        overwrite=False,
-        clear_images=True,
-        clear_keypoints=False,
-        parallel=False,
-        **params
-    ):
+        masks: Union[np.ndarray, Iterable[np.ndarray]] = None,
+        path: str = None,
+        overwrite: bool = False,
+        clear_images: bool = True,
+        clear_keypoints: bool = False,
+        parallel: Union[int, bool] = False,
+        **kwargs: Any
+    ) -> None:
         """
         Build image keypoints and their descriptors.
 
@@ -2366,7 +2404,7 @@ class KeypointMatcher(object):
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
                 defaults to `os.cpu_count()`.
-            **params: Additional arguments to `optimize.detect_keypoints()`
+            **kwargs: Optional arguments to :func:`detect_keypoints`.
         """
         if clear_keypoints and not path:
             raise ValueError("path is required when clear_keypoints is True")
@@ -2381,7 +2419,7 @@ class KeypointMatcher(object):
             self.keypoints = [None] * len(self.images)
 
         # Define parallel process
-        def process(i, img):
+        def process(i: int, img: Image) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
             print(img.path)
             if path:
                 outpath = os.path.join(path, basenames[i] + ".pkl")
@@ -2398,8 +2436,8 @@ class KeypointMatcher(object):
                 helpers.write_pickle(keypoints, path=outpath)
             elif (not read and not written) or overwrite:
                 # Detect keypoints
-                I = self._prepare_image(img.read())
-                keypoints = detect_keypoints(I, mask=masks[i], **params)
+                array = self._prepare_image(img.read())
+                keypoints = detect_keypoints(array, mask=masks[i], **kwargs)
                 if path:
                     # Write keypoints to file
                     helpers.write_pickle(keypoints, path=outpath)
@@ -2417,62 +2455,61 @@ class KeypointMatcher(object):
 
     def build_matches(
         self,
-        maxdt=None,
-        seq=None,
-        imgs=None,
-        keypoints_path=None,
-        path=None,
-        overwrite=False,
-        clear_keypoints=True,
-        clear_matches=False,
-        parallel=False,
-        weights=False,
-        as_type=None,
-        filter=None,
-        **params
-    ):
+        maxdt: datetime.timedelta = None,
+        seq: Iterable[int] = None,
+        imgs: Iterable[int] = None,
+        keypoints_path: str = None,
+        path: str = None,
+        overwrite: bool = False,
+        clear_keypoints: bool = True,
+        clear_matches: bool = False,
+        parallel: Union[bool, int] = False,
+        weights: bool = False,
+        as_type: Literal[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
+        filter: dict = None,
+        **kwargs: Any
+    ) -> None:
         """
         Build matches between each image and its nearest neighbors.
 
-        Results are stored in `self.matches` as an (n, n) upper-triangular sparse matrix
-        of `Matches`, and the result for each `Image` pair (i, j) optionally written to
-        a binary `pickle` file with name `basenames[i]-basenames[j].pkl`. If
-        `clear_matches` is `True`, missing files are written but results are not stored
-        in memory.
+        Results are stored in :attr:`matches` as an (n, n) upper-triangular sparse
+        matrix of :class:`Matches`, and the result for each :class:`Image` pair (i, j)
+        optionally written to a binary :mod:`pickle` file with name
+        `basenames[i]-basenames[j].pkl`. If `clear_matches=True`, missing files are
+        written but results are not stored in memory.
 
         Arguments:
-            maxdt (`datetime.timedelta`): Maximum time separation between
-                pairs of images to match.
-                If `None` and `seq` is `None`, all pairs are matched.
-            seq (iterable): Positive index of neighbors to match to each image
+            maxdt: Maximum time separation between pairs of images to match.
+                If `None` and `seq=None`, all pairs are matched.
+            seq: Positive index of neighbors to match to each image
                 (relative to 0) in addition to `maxdt`.
-            imgs (iterable): Index of images to require at least one of
+            imgs: Index of images to require at least one of
                 in each matched image pair. If `None`, all image pairs meeting
                 the criteria are matched.
-            keypoints_path (str): Directory with keypoint files.
-            path (str): Directory for match files. If `None`, no files are written.
-            overwrite (bool): Whether to recompute and overwrite existing match files
-            clear_keypoints (bool): Whether to clear cached keypoints
-                (`self.keypoints`)
-            clear_matches (bool): Whether to clear matches rather than return them
+            keypoints_path: Directory with keypoint files.
+            path: Directory for match files. If `None`, no files are written.
+            overwrite: Whether to recompute and overwrite existing match files
+            clear_keypoints: Whether to clear cached keypoints (:attr:`keypoints`).
+            clear_matches: Whether to clear matches rather than return them
                 (requires `path`). Useful for avoiding memory overruns when
                 processing very large image sets.
             parallel: Number of image keypoints to detect in parallel (int),
                 or whether to detect in parallel (bool). If `True`,
-                defaults to `os.cpu_count()`.
-            weights (bool): Whether to include weights in `Matches` objects,
-                computed as the inverse of the maximum descriptor-distance ratio
-            filter (dict): Arguments to `optimize.Matches.filter()`.
-                If truthy, `Matches` are filtered before being saved to `self.matches`.
-                Ignored if `clear_matches=True`.
-            **params: Additional arguments to `optimize.match_keypoints()`
+                defaults to :func:`os.cpu_count`.
+            weights: Whether to include weights in :class:`Matches`,
+                computed as the inverse of the maximum descriptor-distance ratio.
+            as_type: Subclass of :class:`Matches` to return instead.
+            filter: Arguments to :meth:`Matches.filter`.
+                If truthy, :class:`Matches` are filtered before being saved
+                to :attr:`matches`. Ignored if `clear_matches=True`.
+            **kwargs: Optional arguments to :func:`match_keypoints`.
         """
         if clear_matches and not path:
             raise ValueError("path is required when clear_keypoints is True")
         if path and os.path.isfile(path):
             raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)
-        params = {**params, **{"return_ratios": weights}}
+        kwargs = {**kwargs, **{"return_ratios": weights}}
         basenames = self._prepare_image_basenames()
         if self.keypoints is None:
             self.keypoints = [None] * len(self.images)
@@ -2500,7 +2537,7 @@ class KeypointMatcher(object):
                 matching_images[i] = m[np.isin(m, imgs)]
 
         # Define parallel process
-        def process(i, js):
+        def process(i: int, js: np.ndarray) -> Optional[List[Matches]]:
             if len(js) > 0:
                 print("Matching", i, "->", ", ".join(js.astype(str)))
             matches = []
@@ -2529,7 +2566,7 @@ class KeypointMatcher(object):
                         matches.append(match)
                 else:
                     result = match_keypoints(
-                        self.keypoints[i], self.keypoints[j], **params
+                        self.keypoints[i], self.keypoints[j], **kwargs
                     )
                     match = Matches(
                         cams=(imgA.cam, imgB.cam),
@@ -2546,7 +2583,7 @@ class KeypointMatcher(object):
                 self.keypoints[i] = None
             return None if clear_matches else matches
 
-        def reduce(matches):
+        def reduce(matches: Iterable[Matches]) -> Iterable[Matches]:
             if filter:
                 for match in matches:
                     if match:
@@ -2579,25 +2616,43 @@ class KeypointMatcher(object):
             if parallel:
                 self._assign_cameras()
 
-    def _test_matches(self):
+    def _test_matches(self) -> None:
+        """Test existence of matches."""
         if self.matches is None:
             raise ValueError("Matches have not been initialized. Run build_matches()")
 
-    def _assign_cameras(self):
+    def _assign_cameras(self) -> None:
+        """Assign cameras to matches."""
         for m, i, j in zip(self.matches.data, self.matches.row, self.matches.col):
             m.cams = self.images[i].cam, self.images[j].cam
 
-    def convert_matches(self, mtype, clear_uvs=False, parallel=False):
+    def convert_matches(
+        self,
+        mtype: Literal[Matches, RotationMatches, RotationMatchesXY, RotationMatchesXYZ],
+        clear_uvs: bool = False,
+        parallel: Union[bool, int] = False,
+    ) -> None:
+        """
+        Convert matches to different type.
+
+        Arguments:
+            mtype: :class:`Matches` or child class to convert to.
+            clear_uvs: Whether to clear image coordinates after conversion to
+                :class:`RotationMatchesXY` or :class:`RotationMatchesXYZ`.
+            parallel: Number of image keypoints to detect in parallel (int),
+                or whether to detect in parallel (bool). If `True`,
+                defaults to :func:`os.cpu_count`.
+        """
         self._test_matches()
         parallel = helpers._parse_parallel(parallel)
 
-        def process(i, m):
+        def process(i: int, m: Matches) -> Tuple[int, Matches]:
             m = m.as_type(mtype)
             if clear_uvs and mtype in (RotationMatchesXY, RotationMatchesXYZ):
                 m.uvs = None
             return i, m
 
-        def reduce(i, m):
+        def reduce(i: int, m: Matches) -> None:
             self.matches.data[i] = m
 
         with config.backend(np=parallel) as pool:
@@ -2610,18 +2665,30 @@ class KeypointMatcher(object):
         if parallel:
             self._assign_cameras()
 
-    def filter_matches(self, clear_weights=False, parallel=False, **params):
+    def filter_matches(
+        self, clear_weights: bool = False, parallel: bool = False, **kwargs: Any
+    ) -> None:
+        """
+        Filter matches.
+
+        Arguments:
+            clear_weights: Whether to clear :attr:`Matches.weights` after filtering.
+            parallel: Number of image keypoints to detect in parallel (int),
+                or whether to detect in parallel (bool). If `True`,
+                defaults to :func:`os.cpu_count`.
+            **kwargs: Arguments to :meth:`Matches.filter`.
+        """
         self._test_matches()
         parallel = helpers._parse_parallel(parallel)
 
-        def process(i, m):
-            if params:
-                m.filter(**params)
+        def process(i: int, m: Matches) -> Tuple[int, Matches]:
+            if kwargs:
+                m.filter(**kwargs)
             if clear_weights:
                 m.weights = None
             return i, m
 
-        def reduce(i, m):
+        def reduce(i: int, m: Matches) -> None:
             self.matches.data[i] = m
 
         with config.backend(np=parallel) as pool:
@@ -2634,17 +2701,19 @@ class KeypointMatcher(object):
         if parallel:
             self._assign_cameras()
 
-    def _images_mask(self, imgs):
+    def _images_mask(self, imgs: Union[int, Iterable[int]]) -> np.ndarray:
+        """Return boolean mask of matches for one or more image indices."""
         if np.iterable(imgs):
             return np.isin(self.matches.row, imgs) | np.isin(self.matches.col, imgs)
-        else:
-            return (self.matches.row == imgs) | (self.matches.col == imgs)
+        return (self.matches.row == imgs) | (self.matches.col == imgs)
 
-    def _images_matches(self, imgs):
+    def _images_matches(self, imgs: Union[int, Iterable[int]]) -> np.ndarray:
+        """Return matches for one or more image indices."""
         mask = self._images_mask(imgs)
         return self.matches.data[mask]
 
-    def matches_per_image(self):
+    def matches_per_image(self) -> np.ndarray:
+        """Return total matched points for each image."""
         self._test_matches()
         image_matches = [self._images_matches(i) for i in range(len(self.images))]
         # n_images = np.array([
@@ -2652,12 +2721,14 @@ class KeypointMatcher(object):
         # ])
         return np.array([np.sum([mi.size for mi in m]) for m in image_matches])
 
-    def images_per_image(self):
+    def images_per_image(self) -> np.ndarray:
+        """Return total number of images matched to each image."""
         self._test_matches()
         image_matches = [self._images_matches(i) for i in range(len(self.images))]
         return np.array([np.sum([mi.size > 0 for mi in m]) for m in image_matches])
 
-    def drop_images(self, imgs):
+    def drop_images(self, imgs: Union[int, Iterable[int]]) -> None:
+        """Drop images and any associated matches."""
         self._test_matches()
         mask = self._images_mask(imgs)
         self.matches.data[mask] = False
@@ -2681,7 +2752,8 @@ class KeypointMatcher(object):
         # Remove dropped images
         self.images = np.delete(self.images, drop)
 
-    def match_breaks(self, min_matches=0):
+    def match_breaks(self, min_matches: int = 0) -> np.ndarray:
+        """Return breaks in pairwise image matches."""
         self._test_matches()
         all_starts = np.arange(len(self.images) - 1)
         starts, counts = np.unique(self.matches.row, return_counts=True)

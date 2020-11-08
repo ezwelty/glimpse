@@ -1,6 +1,8 @@
+"""Track particle trajectories through time."""
 import datetime
 import sys
 import traceback
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import warnings
 
 import cv2
@@ -8,48 +10,56 @@ import matplotlib.animation
 import matplotlib.pyplot
 import numpy as np
 import scipy.ndimage
+from typing_extensions import Literal
 
 from . import config, helpers
+from .observer import Observer
 from .raster import Raster
 
+Index = Union[slice, Iterable[int]]
+Number = Union[int, float]
 
-class Tracker(object):
+
+class Tracker:
     """
-    A `Tracker` estimates the trajectory of world points through time.
+    Estimate the trajectory of world points through time.
 
     Attributes:
-        observers (list): Observer objects
-        viewshed (Raster): Binary viewshed with the same extent as `dem`
-        resample_method (str): Particle resampling method
-            ('systematic', 'stratified', 'residual',
-            'choice': np.random.choice with replacement)
+        observers (iterable): Observers.
+        viewshed (Raster): Binary viewshed.
+        resample_method (str): Particle resampling method.
+            See :meth:`resample_particles`.
         highpass (dict): Median high-pass filter
-            (arguments to scipy.ndimage.filters.median_filter)
+            (arguments to :meth:`scipy.ndimage.filters.median_filter`).
         interpolation (dict): Subpixel interpolation
-            (arguments to scipy.interpolate.RectBivariateSpline)
-        particles (array): Positions and velocities of particles (n, 6)
-            [[x, y, z, vx, vy vz], ...]
-        weights (array): Particle likelihoods (n, )
-        particle_mean (array): Weighted mean of `particles` (6, ) [x, y, z, vx, vy, vz]
-        particle_covariance (array): Weighted covariance matrix of `particles` (6, 6)
+            (arguments to :class:`scipy.interpolate.RectBivariateSpline`).
+        particles (numpy.ndarray): Positions and velocities of particles (n, 6)
+            [(x, y, z, vx, vy vz), ...].
+        weights (numpy.ndarray): Particle likelihoods (n,).
+        particle_mean (numpy.ndarray): Weighted mean of `particles` (6,)
+            [x, y, z, vx, vy, vz].
+        particle_covariance (numpy.ndarray): Weighted covariance matrix of `particles`
+            (6, 6).
         templates (list): For each Observer, a template extracted from the first image
-            matching a `datetimes` centered around the `particle_mean` at that time.
-            Templates are dictionaries that include at least
+            centered around the `particle_mean` at the time of image capture.
+            Templates are dictionaries that include at least:
 
-            - 'tile': Image tile used as a template for image cross-correlation
+            - 'tile': Image tile used as a template for image cross-correlation.
             - 'histogram': Histogram (values, quantiles) of the 'tile' used for
-                histogram matching
-            - 'duv': Subpixel offset of 'tile' (desired - sampled)
+              histogram matching.
+            - 'duv': Subpixel offset of 'tile' (desired - sampled).
     """
 
     def __init__(
         self,
-        observers,
-        viewshed=None,
-        resample_method="systematic",
-        highpass={"size": (5, 5)},
-        interpolation={"kx": 3, "ky": 3},
-    ):
+        observers: Iterable[Observer],
+        viewshed: Raster = None,
+        resample_method: Literal[
+            "systematic", "stratified", "residual", "choice"
+        ] = "systematic",
+        highpass: dict = {"size": (5, 5)},
+        interpolation: dict = {"kx": 3, "ky": 3},
+    ) -> None:
         self.observers = observers
         self.viewshed = viewshed
         self.resample_method = resample_method
@@ -61,35 +71,28 @@ class Tracker(object):
         self.templates = None
 
     @property
-    def particle_mean(self):
-        """
-        Weighted particle mean.
-        """
+    def particle_mean(self) -> np.ndarray:
+        """Weighted particle mean [x, y, z, vx, vy, vz]."""
         return np.average(self.particles, weights=self.weights, axis=0)
 
     @property
-    def particle_covariance(self):
-        """
-        Weighted (biased) particle covariance matrix.
-        """
+    def particle_covariance(self) -> np.ndarray:
+        """Weighted (biased) particle covariance matrix (6, 6)."""
         return np.cov(self.particles.T, aweights=self.weights, ddof=0)
 
     @property
-    def datetimes(self):
-        """
-        Sorted list of all unique Observer datetimes.
-        """
+    def datetimes(self) -> np.ndarray:
+        """Sorted list of unique observation datetimes."""
         return np.unique(np.concatenate([obs.datetimes for obs in self.observers]))
 
-    def compute_particle_sigma(self, mean=None):
+    def compute_particle_sigma(self, mean: Iterable[Number] = None) -> np.ndarray:
         """
         Return the weighted particle standard deviation.
 
         Works faster by using a precomputed weighted particle mean.
 
         Arguments:
-            mean (iterable): Weighted particle mean. If `None`, it is computed
-                by :attr:`particle_mean`.
+            mean: Weighted particle mean. By default, uses :attr:`particle_mean`.
         """
         if mean is None:
             mean = self.particle_mean
@@ -98,15 +101,13 @@ class Tracker(object):
         )
         return np.sqrt(variance)
 
-    def test_particles(self):
+    def test_particles(self) -> None:
         """
         Test particle validity.
 
-        The following tests are performed. An exception is raised if a test
-        fails.
-
-            - Particles are on visible viewshed cells (if specified)
-            - Particle values are not missing (NaN)
+        Raises:
+            ValueError: Some particles on non-visible viewshed cells.
+            ValueError: Some particles have missing (NaN) values.
         """
         if self.viewshed is not None:
             is_visible = self.viewshed.sample(self.particles[:, 0:2], order=0)
@@ -115,14 +116,14 @@ class Tracker(object):
         if np.isnan(self.particles).any():
             raise ValueError("Some particles have missing (NaN) values")
 
-    def initialize_weights(self):
-        """
-        Initialize particle weights.
-        """
+    def initialize_weights(self) -> None:
+        """Initialize particle weights."""
         n = len(self.particles)
         self.weights = np.full(n, 1 / n)
 
-    def update_weights(self, imgs, motion_model=None):
+    def update_weights(
+        self, imgs: Iterable[Optional[int]], motion_model: MotionModel = None
+    ) -> None:
         """
         Update particle weights.
 
@@ -130,8 +131,8 @@ class Tracker(object):
         optionally, a motion model.
 
         Arguments:
-            imgs (iterable): Image index for each Observer, or `None` to skip
-            motion_model (MotionModel): Motion model
+            imgs: For each Observer, either the Image index or `None` to skip.
+            motion_model: Motion model.
         """
         log_likelihoods = [
             self.compute_observer_log_likelihoods(obs, img)
@@ -145,32 +146,44 @@ class Tracker(object):
         self.weights = likelihoods + 1e-300
         self.weights *= 1 / self.weights.sum()
 
-    def resample_particles(self, method=None):
+    def resample_particles(
+        self, method: Literal["systematic", "stratified", "residual", "choice"] = None
+    ) -> None:
         """
         Prune unlikely particles and reproduce likely ones.
 
         Arguments:
-            method (str): Optional override of :attr:`resample_method`.
+            method: Resampling method. By default, uses :attr:`resample_method`.
+
+                - 'systematic': Systematic resampling.
+                - 'stratified': Stratified resampling.
+                - 'residual': Residual resampling
+                  (Liu & Chen 1998: https://doi.org/10.1080/01621459.1998.10473765).
+                - 'choice': Random choice with replacement
+                  (:func:`numpy.random.choice` with `replace=True`).
         """
         n = len(self.particles)
-        # Systematic resample (vectorized)
-        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
 
-        def systematic():
+        def systematic() -> np.ndarray:
+            """Systematic resampling."""
+            # Vectorized version of FilterPy
+            # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
             positions = (np.arange(n) + np.random.random()) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
             return np.searchsorted(cumulative_weight, positions)
 
-        # Stratified resample (vectorized)
-        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
-        def stratified():
+        def stratified() -> np.ndarray:
+            """Stratified resampling."""
+            # Vectorized version of FilterPy
+            # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
             positions = (np.arange(n) + np.random.random(n)) * (1 / n)
             cumulative_weight = np.cumsum(self.weights)
             return np.searchsorted(cumulative_weight, positions)
 
-        # Residual resample (vectorized)
-        # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
-        def residual():
+        def residual() -> np.ndarray:
+            """Residual resampling."""
+            # Vectorized version of FilterPy
+            # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
             repetitions = (n * self.weights).astype(int)
             initial_indexes = np.repeat(np.arange(n), repetitions)
             residuals = self.weights - repetitions
@@ -182,8 +195,8 @@ class Tracker(object):
             )
             return np.hstack((initial_indexes, additional_indexes))
 
-        # Random choice
-        def choice():
+        def choice() -> np.ndarray:
+            """Random choice with replacement."""
             return np.random.choice(
                 np.arange(n), size=(n,), replace=True, p=self.weights
             )
@@ -204,43 +217,41 @@ class Tracker(object):
 
     def track(
         self,
-        motion_models,
-        datetimes=None,
-        maxdt=datetime.timedelta(0),
-        tile_size=(15, 15),
-        observer_mask=None,
-        return_covariances=False,
-        return_particles=False,
-        parallel=False,
-    ):
+        motion_models: Iterable[MotionModel],
+        datetimes: Iterable[datetime.datetime] = None,
+        maxdt: datetime.timedelta = datetime.timedelta(0),
+        tile_size: Iterable[int] = (15, 15),
+        observer_mask: np.ndarray = None,
+        return_covariances: bool = False,
+        return_particles: bool = False,
+        parallel: Union[bool, int] = False,
+    ) -> Tracks:
         """
         Track particles through time.
 
-        If `len(motion_models) > 1`, errors and warnings are caught silently,
-        and matching images from Observers with `cache = True` are cached.
+        If more than one motion models are passed (`motion_models`),
+        errors and warnings are caught silently,
+        and any images from Observers with :attr:`cache``=True` are cached.
 
         Arguments:
-            motion_models (iterable): MotionModel objects specifying which
-                particles to track
-            datetimes (iterable): Monotonic sequence of datetimes at which to
-                track particles. If `None`, defaults to all unique datetimes in
-                :attr:`observers`.
-            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
-            tile_size (iterable): Size of reference tiles in pixels (width, height)
-            observer_mask (array): Boolean mask of Observers
-                to use for each `motion_models`
-                (len(:attr:`motion_models`), len(:attr:`observers`)). If `None`,
-                all Observers are used.
-            return_covariances (bool): Whether to return particle covariance
-                matrices or just particle standard deviations
-            return_particles (bool): Whether to return all particles and weights
-                at each timestep
-            parallel: Number of initial positions to track in parallel (int),
+            motion_models: Motion models specifying which particles to track.
+            datetimes: Monotonic sequence of datetimes at which to track particles.
+                Defaults to :attr:`datetimes`.
+            maxdt: Maximum timedelta for an image to match `datetimes`.
+            tile_size: Size of reference tiles in pixels (width, height).
+            observer_mask: Boolean mask of Observers to use for each `motion_models`
+                (n motion models, m observers).
+                By default, uses all Observers for all motion models.
+            return_covariances: Whether to return particle covariance
+                matrices or just particle standard deviations.
+            return_particles: Whether to return all particles and weights
+                at each timestep.
+            parallel: Number of motion models to track in parallel (int),
                 or whether to track in parallel (bool). If `True`,
                 defaults to :func:`os.cpu_count`.
 
         Returns:
-            Tracks: :class:`Tracks` object.
+            Motion tracks.
         """
         # Save original function arguments (stored in result)
         # NOTE: Must be called first
@@ -259,7 +270,7 @@ class Tracker(object):
             observer_mask = np.ones((ntracks, len(self.observers)), dtype=bool)
         # Compute matching images
         matching_images = self.match_datetimes(datetimes=datetimes, maxdt=maxdt)
-        template_indices = (matching_images != None).argmax(axis=0)
+        template_indices = np.not_equal(matching_images, None).argmax(axis=0)
         # Cache matching images
         if ntracks > 1:
             for i, observer in enumerate(self.observers):
@@ -271,7 +282,7 @@ class Tracker(object):
         ntimes = len(datetimes)
         dts = np.diff(datetimes)
 
-        def process(motion_model, observer_mask):
+        def process(motion_model: MotionModel, observer_mask: np.ndarray) -> list:
             means = np.full((ntimes, 6), np.nan)
             if return_covariances:
                 sigmas = np.full((ntimes, 6, 6), np.nan)
@@ -287,7 +298,9 @@ class Tracker(object):
                     # Skip datetimes before first and after last available image
                     # NOTE: Track thus starts from initial particle state at first
                     # available image
-                    observed = np.any(matching_images[:, observer_mask] != None, axis=1)
+                    observed = np.not_equal(
+                        matching_images[:, observer_mask], None
+                    ).any(axis=1)
                     first = np.argmax(observed)
                     last = len(observed) - 1 - np.argmax(observed[::-1])
                     for i in range(first, last + 1):
@@ -340,7 +353,7 @@ class Tracker(object):
                 results += [particles, weights]
             return results
 
-        def reduce(results):
+        def reduce(results: list) -> list:
             bar.next()
             return results
 
@@ -376,28 +389,30 @@ class Tracker(object):
             kwargs["sigmas"] = sigmas
         return Tracks(**kwargs)
 
-    def reset(self):
-        """
-        Reset to initial state.
-
-        Resets tracking attributes to `None`.
-        """
+    def reset(self) -> None:
+        """Reset to initial state."""
         self.particles = None
         self.weights = None
         self.templates = None
 
-    def parse_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
+    def parse_datetimes(
+        self,
+        datetimes: Iterable[datetime.datetime],
+        maxdt: datetime.timedelta = datetime.timedelta(0),
+    ) -> np.ndarray:
         """
-        Parse track datetimes.
+        Parse datetimes for tracking.
 
         Datetimes are tested to be monotonic, duplicates are dropped,
-        those matching no Observers are dropped,
-        and an error is thrown if fewer than two remain.
+        and those not matching any Observers are dropped.
 
         Arguments:
-            datetimes (iterable): Monotonically increasing sequence of
-                datetimes at which to track particles.
-            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
+            datetimes: Monotonically-increasing datetimes at which to track particles.
+            maxdt: Maximum timedelta for an image to match `datetimes`.
+
+        Raises:
+            ValueError: Datetimes must be monotonic.
+            ValueError: Fewer than two valid datetimes.
         """
         datetimes = np.asarray(datetimes)
         # Datetimes must be monotonic
@@ -421,17 +436,21 @@ class Tracker(object):
             raise ValueError("Fewer than two valid datetimes")
         return datetimes
 
-    def match_datetimes(self, datetimes, maxdt=datetime.timedelta(0)):
+    def match_datetimes(
+        self,
+        datetimes: Iterable[datetime.datetime],
+        maxdt: datetime.timedelta = datetime.timedelta(0),
+    ) -> np.ndarray:
         """
         Return matching image indices for each Observer and datetime.
 
         Arguments:
-            datetimes (iterable): Datetime objects
-            maxdt (timedelta): Maximum timedelta for an image to match `datetimes`
+            datetimes: Datetimes.
+            maxdt: Maximum timedelta for an image to match `datetimes`.
 
         Returns:
-            array: Grid of matching image indices (i, j)
-                for datetimes[i] and observers[j], or `None` for no match
+            Grid of matching image indices (i, j) for datetimes[i] and observers[j].
+            `None` represents no match.
         """
         matches = np.full((len(datetimes), len(self.observers)), None)
         for i, observer in enumerate(self.observers):
@@ -445,7 +464,14 @@ class Tracker(object):
             matches[not_selected, i] = None
         return matches
 
-    def extract_tile(self, obs, img, box, histogram=None, return_histogram=False):
+    def extract_tile(
+        self,
+        obs: int,
+        img: int,
+        box: Iterable[Number],
+        histogram: Tuple[np.ndarray, np.ndarray] = None,
+        return_histogram: bool = False,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]]:
         """
         Extract image tile.
 
@@ -454,18 +480,17 @@ class Tracker(object):
         median low-pass filer.
 
         Arguments:
-            obs (int): Observer index
-            img (int): Image index of Observer `obs`
-            box (iterable): Tile boundaries (see :meth:`~glimpse.Observer.extract_tile`)
-            histogram (iterable): Template for histogram matching
+            obs: Observer index.
+            img: Observer Image index.
+            box: Tile boundaries (see :meth:`Observer.extract_tile`).
+            histogram: Template for histogram matching
                 (see :func:`helpers.compute_cdf`).
-            return_histogram (bool): Whether to return a tile histogram.
+            return_histogram: Whether to return a tile histogram.
                 The histogram is computed before the low-pass filter.
 
         Returns:
-            Either an image tile or, if `return_histogram = True`,
-                a tuple with additionally a histogram (values, quantiles)
-                of the image tile computed before the low-pass filter.
+            An image tile and, if `return_histogram=True`,
+            a histogram (values, quantiles) computed before the low-pass filter.
         """
         tile = self.observers[obs].extract_tile(box=box, img=img)
         if tile.ndim > 2:
@@ -479,17 +504,16 @@ class Tracker(object):
         tile -= tile_low
         if return_histogram:
             return tile, returned_histogram
-        else:
-            return tile
+        return tile
 
-    def initialize_template(self, obs, img, tile_size):
+    def initialize_template(self, obs: int, img: int, tile_size: Iterable[int]) -> None:
         """
         Initialize an observer template from the current particle state.
 
         Arguments:
-            obs (int): Observer index
-            img (int): Observer image index
-            tile_size (iterable): Size of template tile in pixels (nx, ny)
+            obs: Observer index.
+            img: Observer Image index.
+            tile_size: Size of template tile in pixels (nx, ny).
         """
         if self.templates is None:
             self.templates = [None] * len(self.observers)
@@ -509,16 +533,18 @@ class Tracker(object):
         )
         self.templates[obs] = template
 
-    def compute_observer_log_likelihoods(self, obs, img):
+    def compute_observer_log_likelihoods(
+        self, obs: int, img: int
+    ) -> Optional[np.ndarray]:
         """
-        Compute the log likelihoods of each particle for an Observer.
+        Compute particle log likelihoods for one Observer.
 
         Arguments:
-            obs (int): Observer index
-            img (int): Image index for Observer `obs`
+            obs: Observer index.
+            img: Observer image index.
 
         Returns:
-            array: Particle log likelihoods, or `None`
+            Particle log likelihoods.
         """
         constant_log_likelihood = None
         if img is None:
@@ -572,12 +598,15 @@ class Tracker(object):
         return sampled_sse * (1 / (2 * self.observers[obs].sigma ** 2))
 
 
-class Tracks(object):
+class Tracks:
     """
-    A `Tracks` contains the estimated trajectories of world points.
+    Estimated trajectories of world points.
 
-    In the array dimensions below, n: number of tracks, m: number of datetimes,
-    p: number of particles.
+    In the argument and attribute descriptions:
+
+    - n: number of tracks
+    - m: number of datetimes
+    - p: number of particles
 
     Attributes:
         datetimes (array): Datetimes at which particles were estimated (m, )
@@ -602,18 +631,18 @@ class Tracks(object):
 
     def __init__(
         self,
-        datetimes,
-        means,
-        sigmas=None,
-        covariances=None,
-        particles=None,
-        weights=None,
-        tracker=None,
-        images=None,
-        params=None,
-        errors=None,
-        warnings=None,
-    ):
+        datetimes: Iterable[datetime.datetime],
+        means: Iterable[Iterable[Iterable[Number]]],
+        sigmas: Iterable[Iterable[Iterable[Number]]] = None,
+        covariances: Iterable[Iterable[Iterable[Iterable[Number]]]] = None,
+        particles: Iterable[Iterable[Iterable[Iterable[Number]]]] = None,
+        weights: Iterable[Iterable[Iterable[Number]]] = None,
+        tracker: Tracker = None,
+        images: Iterable[Iterable[Optional[int]]] = None,
+        params: dict = None,
+        errors: Iterable = None,
+        warnings: Iterable = None,
+    ) -> None:
         self.datetimes = np.asarray(datetimes)
         if np.iterable(means) and not isinstance(means, np.ndarray):
             means = np.stack(means, axis=0)
@@ -637,50 +666,49 @@ class Tracks(object):
         self.warnings = warnings if warnings is None else np.asarray(warnings)
 
     @property
-    def xyz(self):
-        """
-        array: Mean particle positions (n, m, [x, y, z])
-        """
+    def xyz(self) -> np.ndarray:
+        """Mean particle positions (n, m, [x, y, z])."""
         return self.means[:, :, 0:3]
 
     @property
-    def vxyz(self):
-        """
-        array: Mean particle velocities (n, m, [vx, vy, vz])
-        """
+    def vxyz(self) -> np.ndarray:
+        """Mean particle velocities (n, m, [vx, vy, vz])."""
         return self.means[:, :, 3:6]
 
     @property
-    def xyz_sigma(self):
-        """
-        array: Standard deviation of particle positions (n, m, [x, y, z])
-        """
+    def xyz_sigma(self) -> np.ndarray:
+        """Standard deviation of particle positions (n, m, [x, y, z])."""
         if self.sigmas is not None:
             return self.sigmas[:, :, 0:3]
-        elif self.covariances is not None:
+        if self.covariances is not None:
             return np.sqrt(self.covariances[:, :, (0, 1, 2), (0, 1, 2)])
 
     @property
-    def vxyz_sigma(self):
-        """
-        array: Standard deviation of particle velocities (n, m, [vx, vy, vz])
-        """
+    def vxyz_sigma(self) -> np.ndarray:
+        """Standard deviation of particle velocities (n, m, [vx, vy, vz])."""
         if self.sigmas is not None:
             return self.sigmas[:, :, 3:6]
-        elif self.covariances is not None:
+        if self.covariances is not None:
             return np.sqrt(self.covariances[:, :, (3, 4, 5), (3, 4, 5)])
 
     @property
-    def success(self):
-        """
-        array: Whether track completed without errors (n, )
-        """
+    def success(self) -> np.ndarray:
+        """Whether track completed without errors (n,)."""
         if self.errors is not None:
             return np.array([error is None for error in self.errors])
 
-    def endpoints(self, tracks=None):
-        if tracks is None:
-            tracks = slice(None)
+    def endpoints(
+        self, tracks: Index = slice(None)
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Return endpoints of each track.
+
+        Arguments:
+            tracks: Indices of tracks to return.
+
+        Returns:
+            For each selected track, the indices of the first and last valid datetimes.
+        """
         valid = ~np.isnan(self.means[tracks, :, 0])
         first = np.argmax(valid, axis=1)
         last = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
@@ -701,28 +729,37 @@ class Tracks(object):
     #     still_valid = valid[np.arange(len(idx)), idx]
     #     return np.nonzero(still_valid)[0], idx[idx]
 
-    def plot_xy(self, tracks=None, start=True, mean=True, sigma=False):
+    def plot_xy(
+        self,
+        tracks: Index = slice(None),
+        start: Union[bool, dict] = True,
+        mean: Union[bool, dict] = True,
+        sigma: Union[bool, dict] = False,
+    ) -> Dict[
+        Literal["mean", "start", "sigma"],
+        Union[
+            List[matplotlib.lines.Line2D], List[matplotlib.container.ErrorbarContainer]
+        ],
+    ]:
         """
         Plot tracks on the x-y plane.
 
         Arguments:
-            tracks: Slice object or iterable of indices of tracks to include.
-                If `None`, all tracks are included.
+            tracks: Indices of tracks to include.
             start: Whether to plot starting x, y (bool) or arguments to
-                :func:`matplotlib.pyplot.plot` (dict)
+                :func:`matplotlib.pyplot.plot` (dict).
             mean: Whether to plot mean x, y (bool) or arguments to
-                :func:`matplotlib.pyplot.plot` (dict)
+                :func:`matplotlib.pyplot.plot` (dict).
             sigma: Whether to plot sigma x, y (bool) or arguments to
-                :func:`matplotlib.pyplot.plot` (dict)
+                :func:`matplotlib.pyplot.errorbar` (dict).
         """
-        if tracks is None:
-            tracks = slice(None)
+        results = {}
         if mean:
             if mean is True:
                 mean = {}
             default = {"color": "black"}
             mean = {**default, **mean}
-            matplotlib.pyplot.plot(
+            results["mean"] = matplotlib.pyplot.plot(
                 self.xyz[tracks, :, 0].T, self.xyz[tracks, :, 1].T, **mean
             )
         if start:
@@ -732,7 +769,7 @@ class Tracks(object):
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
             start = {**default, **start}
-            matplotlib.pyplot.plot(
+            results["start"] = matplotlib.pyplot.plot(
                 self.xyz[tracks, 0, 0], self.xyz[tracks, 0, 1], **start
             )
         if sigma:
@@ -742,57 +779,76 @@ class Tracks(object):
             if isinstance(mean, dict) and "color" in mean:
                 default["color"] = mean["color"]
             sigma = {**default, **sigma}
+            results["sigma"] = []
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
-                matplotlib.pyplot.errorbar(
-                    self.xyz[i, :, 0],
-                    self.xyz[i, :, 1],
-                    xerr=self.xyz_sigma[i, :, 0],
-                    yerr=self.xyz_sigma[i, :, 1],
-                    **sigma
+                results["sigma"].append(
+                    matplotlib.pyplot.errorbar(
+                        self.xyz[i, :, 0],
+                        self.xyz[i, :, 1],
+                        xerr=self.xyz_sigma[i, :, 0],
+                        yerr=self.xyz_sigma[i, :, 1],
+                        **sigma
+                    )
                 )
+        return results
 
-    def plot_vxy(self, tracks=None, **kwargs):
+    def plot_vxy(
+        self, tracks: Index = slice(None), **kwargs: Any
+    ) -> List[matplotlib.quiver.Quiver]:
         """
         Plot velocities as vector fields on the x-y plane.
 
         Arguments:
-            tracks: Slice object or iterable of indices of tracks to include.
-                If `None`, all tracks are included.
-            **kwargs: Additional arguments to :func:`matplotlib.pyplot.quiver`
+            tracks: Indices of tracks to include.
+            **kwargs: Optional arguments to :func:`matplotlib.pyplot.quiver`.
         """
-        if tracks is None:
-            tracks = slice(None)
         default = {"angles": "xy"}
         kwargs = {**default, **kwargs}
+        results = []
         for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
-            matplotlib.pyplot.quiver(
-                self.xyz[i, :, 0],
-                self.xyz[i, :, 1],
-                self.vxyz[i, :, 0],
-                self.vxyz[i, :, 1],
-                **kwargs
+            results.append(
+                matplotlib.pyplot.quiver(
+                    self.xyz[i, :, 0],
+                    self.xyz[i, :, 1],
+                    self.vxyz[i, :, 0],
+                    self.vxyz[i, :, 1],
+                    **kwargs
+                )
             )
+        return results
 
-    def plot_v1d(self, dim, tracks=None, mean=True, sigma=False):
+    def plot_v1d(
+        self,
+        dim: int,
+        tracks: Index = slice(None),
+        mean: Union[bool, dict] = True,
+        sigma: Union[bool, dict] = False,
+    ) -> Dict[
+        Literal["mean", "sigma"],
+        Union[
+            List[matplotlib.lines.Line2D, List[matplotlib.collections.PolyCollection]]
+        ],
+    ]:
         """
         Plot velocity for one dimension.
 
         Arguments:
-            tracks: Slice object or iterable of indices of tracks to include.
-                If `None`, all tracks are included.
+            dim: Dimension to plot (0: vx, 1: vy, 2: vz).
+            tracks: Indices of tracks to include.
             mean: Whether to plot mean vx (bool) or arguments to
-                :func:`matplotlib.pyplot.plot` (dict)
+                :func:`matplotlib.pyplot.plot` (dict).
             sigma: Whether to plot sigma vx (bool) or arguments to
-                :func:`matplotlib.pyplot.fill_between` (dict)
+                :func:`matplotlib.pyplot.fill_between` (dict).
         """
-        if tracks is None:
-            tracks = slice(None)
+        results = {}
         if mean:
             if mean is True:
                 mean = {}
             default = {"color": "black"}
             mean = {**default, **mean}
-            matplotlib.pyplot.plot(self.datetimes, self.vxyz[tracks, :, dim].T, **mean)
+            results["mean"] = matplotlib.pyplot.plot(
+                self.datetimes, self.vxyz[tracks, :, dim].T, **mean
+            )
         if sigma:
             if sigma is True:
                 sigma = {}
@@ -800,44 +856,46 @@ class Tracks(object):
             if isinstance(mean, dict) and "color" in mean:
                 default["facecolor"] = mean["color"]
             sigma = {**default, **sigma}
+            results["sigma"] = []
             for i in np.atleast_1d(np.arange(len(self.xyz))[tracks]):
-                matplotlib.pyplot.fill_between(
-                    self.datetimes,
-                    y1=self.vxyz[i, :, dim] + self.vxyz_sigma[i, :, dim],
-                    y2=self.vxyz[i, :, dim] - self.vxyz_sigma[i, :, dim],
-                    **sigma
+                results["sigma"].append(
+                    matplotlib.pyplot.fill_between(
+                        self.datetimes,
+                        y1=self.vxyz[i, :, dim] + self.vxyz_sigma[i, :, dim],
+                        y2=self.vxyz[i, :, dim] - self.vxyz_sigma[i, :, dim],
+                        **sigma
+                    )
                 )
+        return results
 
     def animate(
         self,
-        track,
-        obs=0,
-        frames=None,
-        images=None,
-        particles=None,
-        map_size=(20, 20),
-        img_size=(100, 100),
-        subplots={},
-        animation={},
-    ):
+        track: int,
+        obs: int = 0,
+        frames: Iterable[datetime.datetime] = None,
+        images: bool = None,
+        particles: bool = None,
+        map_size: Tuple[Number, Number] = (20, 20),
+        img_size: Tuple[int, int] = (100, 100),
+        subplots: dict = {},
+        animation: dict = {},
+    ) -> matplotlib.animation.FuncAnimation:
         """
         Animate track.
 
         Arguments:
-            track (int): Track index
-            obs (int): Observer index
-            frames (iterable): Datetime index.
-                Any requested datetimes with missing data are skipped.
-                If `None`, all times with a result for `track`, `obs` are used.
-            images (bool): Whether to plot images,
-                or `None` to plot only if :attr:`tracker` is set
-            particles (bool): Whether to plot particles,
-                or `None` to plot only if :attr:`particles` and :attr:`weights` are set
-            map_size (iterable): Size of map window in world units
-            img_size (iterable): Size of image window in pixels
-            subplots (dict): Optional arguments to :func:`matplotlib.pyplot.subplots`
-            animation (dict): Optional arguments to
-                :func:`matplotlib.animation.FuncAnimation`
+            track: Track index.
+            obs: Observer index.
+            frames: Datetime index. Datetimes with no observations are skipped.
+                By default, all times with observations are used.
+            images: Whether to plot images.
+                By default, images are plotted if :attr:`tracker` is set.
+            particles: Whether to plot particles. By default, particles are plotted
+                if :attr:`particles` and :attr:`weights` are set.
+            map_size: Size of map window in world units.
+            img_size: Size of image window in pixels.
+            subplots: Optional arguments to :func:`matplotlib.pyplot.subplots`.
+            animation: Optional arguments to :func:`matplotlib.animation.FuncAnimation`.
         """
         if images is None:
             images = self.tracker is not None
@@ -852,7 +910,7 @@ class Tracks(object):
         if frames is None:
             frames = np.arange(len(self.datetimes))
         has_frame = np.where(
-            ~np.isnan(self.xyz[track, :, 0]) & (self.images[:, obs] != None)
+            ~np.isnan(self.xyz[track, :, 0]) & np.not_equal(self.images[:, obs], None)
         )[0]
         frames = np.intersect1d(frames, has_frame)
         # Initialize plot
@@ -907,7 +965,7 @@ class Tracks(object):
         # Discard last frame
         frames = frames[:-1]
 
-        def update_plot(i):
+        def update_plot(i: int) -> tuple:
             # PathCollections cannot set x, y, so new objects have to be created
             for ax in axes:
                 ax.collections = []
@@ -1002,29 +1060,27 @@ class Tracks(object):
             map_txt.set_text(basename)
             if images:
                 return map_track, map_txt, image_track, image_tile, image_mean
-            else:
-                return map_track, map_txt
+            return map_track, map_txt
 
         return matplotlib.animation.FuncAnimation(
             fig, update_plot, frames=frames, blit=True, **animation
         )
 
 
-class MotionModel(object):
+class MotionModel:
     """
-    `MotionModel` is a base class illustrating the motion model interface
-    required by a `Tracker`.
+    Illustration of the motion model interface required by :class:`Tracker`.
 
-    A `Tracker` requires a motion model to have the following methods:
+    :class:`Tracker` requires a motion model to have the following methods:
 
-        - initialize_particles(): Initializes particles, typically around an
-            initial position.
-        - evolve_particles(particles, dt): Evolves particles forward or backward
-            in time (dt).
-        - compute_log_likelihoods(particles): Computes particle log likelihoods
-            (optional). If provided, these are added to the Observer log
-            likelihoods computed by a `Tracker` to calculate the final particle
-            likelihoods.
+        - `initialize_particles()`: Initializes particles, typically around an
+          initial position.
+        - `evolve_particles(particles, dt)`: Evolves particles forward or backward
+          in time.
+        - `compute_log_likelihoods(particles)`: Computes particle log likelihoods
+          (optional). If provided, these are added to the Observer log
+          likelihoods computed by a `Tracker` to calculate the final particle
+          likelihoods.
 
     This minimal example initializes all particles at the same position
     (x, y, 0) with velocity components in x, y, z drawn from normal
@@ -1032,106 +1088,109 @@ class MotionModel(object):
     initial velocities since accelerations are absent.
 
     Attributes:
-        xy (iterable): Mean initial position (x, y)
-        time_unit (timedelta): Length of time unit for temporal arguments
-        n (int): Number of particles
+        xy (iterable): Mean initial position (x, y).
+        time_unit (timedelta): Length of time unit for temporal arguments.
+        n (int): Number of particles.
         vxyz_sigma (iterable): Standard deviation of velocity
-            (dx/dt, dy/dt, dz/dt) in `time_unit` time units
+            (dx/dt, dy/dt, dz/dt) in `time_unit` time units.
     """
 
-    def __init__(self, xy, time_unit, n=1000, vxyz_sigma=(0, 0, 0)):
+    def __init__(
+        self,
+        xy: Iterable[Number],
+        time_unit: datetime.timedelta,
+        n: int = 1000,
+        vxyz_sigma: Iterable[Number] = (0, 0, 0),
+    ) -> None:
         self.xy = xy
         self.time_unit = time_unit
         self.n = n
         self.vxyz_sigma = vxyz_sigma
 
-    def initialize_particles(self):
+    def initialize_particles(self) -> np.ndarray:
         """
         Initialize particles around an initial mean position.
 
         Returns:
-            array: Particle positions and velocities (x, y, z, vx, vy, vz)
+            Particle positions and velocities (x, y, z, vx, vy, vz).
         """
         particles = np.zeros((self.n, 6), dtype=float)
         particles[:, 0:2] = self.xy
         particles[:, 3:6] = self.vxyz_sigma * np.random.randn(self.n, 3)
         return particles
 
-    def evolve_particles(self, particles, dt):
+    def evolve_particles(self, particles: np.ndarray, dt: datetime.timedelta) -> None:
         """
         Evolve particles through time by stochastic differentiation.
 
         Arguments:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
-            dt (timedelta): Time step to evolve particles forward or backward
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
+            dt: Time step to evolve particles forward or backward.
         """
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
         particles[:, 0:3] += time_units * particles[:, 3:6]
 
-    def compute_log_likelihoods(self, particles):
+    def compute_log_likelihoods(self, particles: np.ndarray) -> Optional[np.ndarray]:
         """
         Compute particle log likelihoods.
 
         If specified, these are added to the Observer log likelihoods computed
-        by a Tracker to calculate the final particle likelihoods.
+        by a :class:`Tracker` to calculate the final particle likelihoods.
 
         Arguments:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
 
         Returns:
-            array: Particle log likelihoods, or `None`
+            Particle log likelihoods, or `None`.
         """
         return None
 
 
 class CartesianMotionModel(MotionModel):
     """
-    `CartesianModelModel` evolves particles following a Cartesian motion model.
+    Evolves particles following a Cartesian motion model.
 
     Initial particle positions and velocities, and random accelerations, are
     specified by independent and normally distributed x, y, z components.
-    Temporal arguments (e.g. `vxyz`, `axyz`) are assumed to be in `time_unit`
-    time units.
+    Temporal arguments (e.g. :attr:`vxyz`, :attr:`axyz`) are assumed to be
+    in :attr:`time_unit` time units.
 
-    Particle heights (z) are initialized based on a mean surface (`dem`) and its
-    associated uncertainty (`dem_sigma`), then evolved following the motion
+    Particle heights (z) are initialized based on a mean surface (:attr:`dem`) and its
+    associated uncertainty (:attr:`dem_sigma`), then evolved following the motion
     model. Particles are weighted based on their distance (dz) from the surface
     and its uncertainty.
 
     Attributes:
-        xy (iterable): Mean initial position (x, y)
-        time_unit (timedelta): Length of time unit for temporal arguments
-        dem: Elevation of the surface on which to track points
-            (scalar or Raster)
+        xy (iterable): Mean initial position (x, y).
+        time_unit (timedelta): Length of time unit for temporal arguments.
+        dem: Elevation of the surface on which to track points (scalar or Raster).
         dem_sigma: Elevation standard deviations, as either a scalar or
              a Raster with the same extent as `dem`. `0` means particles stay
              glued to `dem` and weighing particles by their offset from `dem`
              is disabled.
-        n (int): Number of particles
-        xy_sigma (iterable): Standard deviation of initial position (x, y)
-        vxyz (iterable): Mean initial velocity (dx/dt, dy/dt, dz/dt)
+        n (int): Number of particles.
+        xy_sigma (iterable): Standard deviation of initial position (x, y).
+        vxyz (iterable): Mean initial velocity (dx/dt, dy/dt, dz/dt).
         vxyz_sigma (iterable): Standard deviation of initial velocity
-            (dx/dt, dy/dt, dz/dt)
-        axyz (iterable): Mean acceleration (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2)
+            (dx/dt, dy/dt, dz/dt).
+        axyz (iterable): Mean acceleration (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2).
         axyz_sigma (iterable): Standard deviation of acceleration
-            (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2)
+            (d^2x/dt^2, d^2y/dt^2, d^2z/dt^2).
     """
 
     def __init__(
         self,
-        xy,
-        time_unit,
-        dem,
-        dem_sigma=0,
-        n=1000,
-        xy_sigma=(0, 0),
-        vxyz=(0, 0, 0),
-        vxyz_sigma=(0, 0, 0),
-        axyz=(0, 0, 0),
-        axyz_sigma=(0, 0, 0),
-    ):
+        xy: Iterable[Number],
+        time_unit: datetime.timedelta,
+        dem: Union[Number, Raster],
+        dem_sigma: Union[Number, Raster] = 0,
+        n: int = 1000,
+        xy_sigma: Iterable[Number] = (0, 0),
+        vxyz: Iterable[Number] = (0, 0, 0),
+        vxyz_sigma: Iterable[Number] = (0, 0, 0),
+        axyz: Iterable[Number] = (0, 0, 0),
+        axyz_sigma: Iterable[Number] = (0, 0, 0),
+    ) -> None:
         self.xy = xy
         self.time_unit = time_unit
         self.dem = dem
@@ -1143,13 +1202,12 @@ class CartesianMotionModel(MotionModel):
         self.axyz = axyz
         self.axyz_sigma = axyz_sigma
 
-    def initialize_particles(self):
+    def initialize_particles(self) -> np.ndarray:
         """
         Initialize particles around an initial mean position.
 
         Returns:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
         """
         particles = np.zeros((self.n, 6), dtype=float)
         particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
@@ -1159,14 +1217,13 @@ class CartesianMotionModel(MotionModel):
         particles[:, 3:6] = self.vxyz + self.vxyz_sigma * np.random.randn(self.n, 3)
         return particles
 
-    def evolve_particles(self, particles, dt):
+    def evolve_particles(self, particles: np.ndarray, dt: datetime.timedelta) -> None:
         """
         Evolve particles through time by stochastic differentiation.
 
         Arguments:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
-            dt (timedelta): Time step to evolve particles forward or backward
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
+            dt: Time step to evolve particles forward or backward.
         """
         n = len(particles)
         time_units = dt.total_seconds() / self.time_unit.total_seconds()
@@ -1176,92 +1233,87 @@ class CartesianMotionModel(MotionModel):
         )
         particles[:, 3:6] += time_units * axyz
 
-    def compute_log_likelihoods(self, particles):
+    def compute_log_likelihoods(self, particles: np.ndarray) -> Optional[np.ndarray]:
         """
         Compute particle log likelihoods.
 
         Particles are weighted based on their distance from the mean surface
-        (`dem`) and its associated uncertainty (`dem_sigma`).
+        (:attr:`dem`) and its associated uncertainty (:attr:`dem_sigma`).
 
         Arguments:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
 
         Returns:
-            array: Particle log likelihoods, or `None`
+            Particle log likelihoods, or `None`.
         """
         if self.dem_sigma == 0:
             return None
-        else:
-            z = self._sample_dem(particles[:, 0:2])
-            z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
-            # Avoid division by zero
-            nonzero = np.nonzero(z_sigma)[0]
-            log_likelihoods = np.zeros(len(particles), dtype=float)
-            log_likelihoods[nonzero] = (
-                1
-                / (2 * z_sigma[nonzero] ** 2)
-                * (z[nonzero] - particles[nonzero, 2]) ** 2
-            )
-            return log_likelihoods
+        z = self._sample_dem(particles[:, 0:2])
+        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
+        # Avoid division by zero
+        nonzero = np.nonzero(z_sigma)[0]
+        log_likelihoods = np.zeros(len(particles), dtype=float)
+        log_likelihoods[nonzero] = (
+            1 / (2 * z_sigma[nonzero] ** 2) * (z[nonzero] - particles[nonzero, 2]) ** 2
+        )
+        return log_likelihoods
 
-    def _sample_dem(self, xy, sigma=False):
+    def _sample_dem(self, xy: np.ndarray, sigma: bool = False) -> np.ndarray:
         """
         Sample DEM at points.
 
         Arguments:
-            xy (array-like): Points (x, y)
+            xy: Points [(x, y), ...].
+            sigma: Whether to sample :attr:`dem_sigma` (True) or :attr:`dem` (False).
         """
         obj = self.dem_sigma if sigma else self.dem
         if isinstance(obj, Raster):
             return obj.sample(xy)
-        else:
-            return np.full(len(xy), obj)
+        return np.full(len(xy), obj)
 
 
 class CylindricalMotionModel(CartesianMotionModel):
     """
-    `CylindricalModelModel` evolves particles following a cylindrical motion
-    model.
+    Evolves particles following a cylindrical motion model.
 
-    Identical to `CartesianMotionModel`, except that particle motion is
+    Identical to :class:`CartesianMotionModel`, except that particle motion is
     specified by independent and normally distributed components of magnitude
     (radius), direction (theta), and elevation (z). Angular arguments are
     assumed to be in radians counterclockwise from the +x axis.
 
     Attributes:
-        xy (iterable): Mean initial position (x, y)
-        time_unit (timedelta): Length of time unit for temporal arguments
+        xy (iterable): Mean initial position (x, y).
+        time_unit (timedelta): Length of time unit for temporal arguments.
         dem: Elevation of the surface on which to track points
-            (scalar or Raster)
+            (scalar or Raster).
         dem_sigma: Elevation standard deviations, as either a scalar or
-             a Raster with the same extent as `dem`. `0` means particles stay
+             a Raster with the same extent as :attr:`dem`. `0` means particles stay
              glued to `dem` and weighing particles by their offset from `dem`
              is disabled.
-        n (int): Number of particles
-        xy_sigma (iterable): Standard deviation of initial position (x, y)
-        vrthz (iterable): Mean initial velocity (d radius/dt, theta, dz/dt)
+        n (int): Number of particles.
+        xy_sigma (iterable): Standard deviation of initial position (x, y).
+        vrthz (iterable): Mean initial velocity (d radius/dt, theta, dz/dt).
         vrthz_sigma (iterable): Standard deviation of initial velocity
-            (d radius/dt, theta, dz/dt)
+            (d radius/dt, theta, dz/dt).
         arthz (iterable): Mean acceleration
-            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2)
+            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2).
         arthz_sigma (iterable): Standard deviation of acceleration
-            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2)
+            (d^2 radius/dt^2, d theta/dt, d^2z/dt^2).
     """
 
     def __init__(
         self,
-        xy,
-        time_unit,
-        dem,
-        dem_sigma=0,
-        n=1000,
-        xy_sigma=(0, 0),
-        vrthz=(0, 0, 0),
-        vrthz_sigma=(0, 0, 0),
-        arthz=(0, 0, 0),
-        arthz_sigma=(0, 0, 0),
-    ):
+        xy: Iterable[Number],
+        time_unit: datetime.timedelta,
+        dem: Union[Number, Raster],
+        dem_sigma: Union[Number, Raster] = 0,
+        n: int = 1000,
+        xy_sigma: Iterable[Number] = (0, 0),
+        vrthz: Iterable[Number] = (0, 0, 0),
+        vrthz_sigma: Iterable[Number] = (0, 0, 0),
+        arthz: Iterable[Number] = (0, 0, 0),
+        arthz_sigma: Iterable[Number] = (0, 0, 0),
+    ) -> None:
         self.xy = xy
         self.time_unit = time_unit
         self.dem = dem
@@ -1273,13 +1325,12 @@ class CylindricalMotionModel(CartesianMotionModel):
         self.arthz = arthz
         self.arthz_sigma = arthz_sigma
 
-    def initialize_particles(self):
+    def initialize_particles(self) -> np.ndarray:
         """
         Initialize particles around an initial mean position.
 
         Returns:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
         """
         particles = np.zeros((self.n, 6), dtype=float)
         particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
@@ -1298,14 +1349,13 @@ class CylindricalMotionModel(CartesianMotionModel):
         )
         return particles
 
-    def evolve_particles(self, particles, dt):
+    def evolve_particles(self, particles: np.ndarray, dt: datetime.timedelta) -> None:
         """
         Evolve particles through time by stochastic differentiation.
 
         Arguments:
-            particles (array): Particle positions and velocities
-                (x, y, z, vx, vy, vz)
-            dt (timedelta): Time step to evolve particles forward or backward
+            particles: Particle positions and velocities (x, y, z, vx, vy, vz).
+            dt: Time step to evolve particles forward or backward.
         """
         n = len(particles)
         time_units = dt.total_seconds() / self.time_unit.total_seconds()

@@ -3,12 +3,7 @@ import os
 from typing import Any, Dict
 
 from glimpse import Camera
-from glimpse.convert import (
-    AgisoftCamera,
-    MatlabCamera,
-    OpenCVCamera,
-    PhotoModelerCamera,
-)
+from glimpse.convert.cameras import Agisoft, Matlab, OpenCV, PhotoModeler
 from glimpse.convert import Converter
 import numpy as np
 import pytest
@@ -26,8 +21,8 @@ def test_reads_matlab_means_from_report() -> None:
         "imgsz": (4288, 2848),
     }
     path = os.path.join("tests", "Calib_Results.m")
-    xcam_auto = MatlabCamera.from_report(path, sigmas=False)
-    xcam_manual = MatlabCamera(**means)
+    xcam_auto = Matlab.from_report(path, sigmas=False)
+    xcam_manual = Matlab(**means)
     assert vars(xcam_auto) == vars(xcam_manual)
 
 
@@ -41,8 +36,8 @@ def test_reads_matlab_sigmas_from_report() -> None:
         "imgsz": (0, 0),
     }
     path = os.path.join("tests", "Calib_Results.m")
-    xcam_auto = MatlabCamera.from_report(path, sigmas=True)
-    xcam_manual = MatlabCamera(**sigmas)
+    xcam_auto = Matlab.from_report(path, sigmas=True)
+    xcam_manual = Matlab(**sigmas)
     assert vars(xcam_auto) == vars(xcam_manual)
 
 
@@ -56,7 +51,7 @@ def test_converts_to_matlab_and_back_exactly() -> None:
         k=(0.1, -0.05, 0.02),
         p=(0.03, 0.04),
     )
-    xcam = MatlabCamera.from_camera(cam)
+    xcam = Matlab.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-11)
     cam2 = xcam.to_camera()
@@ -73,9 +68,9 @@ def test_converts_to_matlab_and_back_by_optimization() -> None:
         k=(0.1, -0.05, 0.02, 0.003),
         p=(0.03, 0.04),
     )
-    xcam_initial = MatlabCamera.from_camera(cam, optimize=False)
+    xcam_initial = Matlab.from_camera(cam, optimize=False)
     residuals_initial = Converter(xcam_initial, cam).residuals()
-    xcam = MatlabCamera.from_camera(cam)
+    xcam = Matlab.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     assert np.sum(residuals ** 2) < np.sum(residuals_initial ** 2)
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-2)
@@ -107,8 +102,8 @@ def test_reads_agisoft_from_xml() -> None:
         "p2": -0.01,
     }
     path = os.path.join("tests", "agisoft.xml")
-    xcam_auto = AgisoftCamera.from_xml(path)
-    xcam_manual = AgisoftCamera(**xml)
+    xcam_auto = Agisoft.from_xml(path)
+    xcam_manual = Agisoft(**xml)
     assert vars(xcam_auto) == vars(xcam_manual)
 
 
@@ -122,7 +117,7 @@ def test_converts_to_agisoft_and_back_exactly() -> None:
         k=(0.1, -0.05, 0.02),
         p=(0.03, 0.04),
     )
-    xcam = AgisoftCamera.from_camera(cam)
+    xcam = Agisoft.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-11)
     cam2 = xcam.to_camera()
@@ -139,9 +134,9 @@ def test_converts_to_agisoft_and_back_by_optimization() -> None:
         k=(0.1, -0.05, 0.02, 0.003),
         p=(0.03, 0.04),
     )
-    xcam_initial = AgisoftCamera.from_camera(cam, optimize=False)
+    xcam_initial = Agisoft.from_camera(cam, optimize=False)
     residuals_initial = Converter(xcam_initial, cam).residuals()
-    xcam = AgisoftCamera.from_camera(cam)
+    xcam = Agisoft.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     assert np.sum(residuals ** 2) < np.sum(residuals_initial ** 2)
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-2)
@@ -175,8 +170,8 @@ def test_reads_photomodeler_means_from_report() -> None:
         "p2": 0.0,
     }
     path = os.path.join("tests", "CalibrationReport.txt")
-    xcam_auto = PhotoModelerCamera.from_report(path, imgsz=imgsz)
-    xcam_manual = PhotoModelerCamera(imgsz=imgsz, **means)
+    xcam_auto = PhotoModeler.from_report(path, imgsz=imgsz)
+    xcam_manual = PhotoModeler(imgsz=imgsz, **means)
     assert vars(xcam_auto) == vars(xcam_manual)
 
 
@@ -196,8 +191,8 @@ def test_reads_photomodeler_sigmas_from_report() -> None:
         "p2": 0.0,
     }
     path = os.path.join("tests", "CalibrationReport.txt")
-    xcam_auto = PhotoModelerCamera.from_report(path, imgsz=imgsz, sigmas=True)
-    xcam_manual = PhotoModelerCamera(imgsz=imgsz, **sigmas)
+    xcam_auto = PhotoModeler.from_report(path, imgsz=imgsz, sigmas=True)
+    xcam_manual = PhotoModeler(imgsz=imgsz, **sigmas)
     assert vars(xcam_auto) == vars(xcam_manual)
 
 
@@ -207,7 +202,7 @@ def test_converts_to_photomodeler_and_back_exactly() -> None:
     cam = Camera(
         imgsz=(4288, 2848), fmm=(3200, 3200), cmm=(0.5, -0.4), sensorsz=(35.1, 24.2),
     )
-    xcam = PhotoModelerCamera.from_camera(cam)
+    xcam = PhotoModeler.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-12)
     cam2 = xcam.to_camera()
@@ -220,9 +215,9 @@ def test_converts_to_photomodeler_and_back_by_optimization() -> None:
     cam = Camera(
         imgsz=(4288, 2848), fmm=(3100, 3200), cmm=(0.5, -0.4), sensorsz=(35.1, 24.2)
     )
-    xcam_initial = PhotoModelerCamera.from_camera(cam, optimize=False)
+    xcam_initial = PhotoModeler.from_camera(cam, optimize=False)
     residuals_initial = Converter(xcam_initial, cam).residuals()
-    xcam = PhotoModelerCamera.from_camera(cam)
+    xcam = PhotoModeler.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     assert np.sum(residuals ** 2) < np.sum(residuals_initial ** 2)
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-12)
@@ -235,9 +230,9 @@ def test_converts_to_photomodeler_and_back_by_optimization() -> None:
         k=(0.1, -0.05),
         p=(0.03, 0.04),
     )
-    xcam_initial = PhotoModelerCamera.from_camera(cam, optimize=False)
+    xcam_initial = PhotoModeler.from_camera(cam, optimize=False)
     residuals_initial = Converter(xcam_initial, cam).residuals()
-    xcam = PhotoModelerCamera.from_camera(cam)
+    xcam = PhotoModeler.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     assert np.sum(residuals ** 2) < np.sum(residuals_initial ** 2)
     np.testing.assert_allclose(residuals, 0, rtol=0, atol=1e-2)
@@ -276,10 +271,10 @@ def test_reads_opencv_from_xml() -> None:
         "distCoeffs": list(coeffs.values()),
     }
     path = os.path.join("tests", "opencv.xml")
-    xcam_auto = OpenCVCamera.from_xml(path, imgsz=imgsz)
-    xcam_params = OpenCVCamera(imgsz=imgsz, **{**f, **c, **coeffs})
+    xcam_auto = OpenCV.from_xml(path, imgsz=imgsz)
+    xcam_params = OpenCV(imgsz=imgsz, **{**f, **c, **coeffs})
     assert vars(xcam_auto) == vars(xcam_params)
-    xcam_arrays = OpenCVCamera.from_arrays(imgsz=imgsz, **arrays)
+    xcam_arrays = OpenCV.from_arrays(imgsz=imgsz, **arrays)
     assert vars(xcam_auto) == vars(xcam_arrays)
 
 
@@ -292,7 +287,7 @@ def test_converts_to_opencv_and_back_exactly() -> None:
         k=(0.1, -0.05, 0.02, 0.003, 0.004, 0.005),
         p=(0.03, 0.04),
     )
-    xcam = OpenCVCamera.from_camera(cam)
+    xcam = OpenCV.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()
     np.testing.assert_equal(residuals, 0)
     cam2 = xcam.to_camera()
@@ -309,7 +304,7 @@ def test_converts_to_opencv_and_back_by_optimization() -> None:
         k=(0.1, -0.05, 0.02, 0.003, 0.004, 0.005),
         p=(0.03, 0.04),
     )
-    xcam = OpenCVCamera.from_camera(cam)
+    xcam = OpenCV.from_camera(cam)
     # s* must be non-zero
     xcam.s1 = 1e-5
     cam_initial = xcam.to_camera(optimize=False)
@@ -326,7 +321,7 @@ def test_converts_to_opencv_and_back_by_optimization() -> None:
 def test_plots_residuals_as_quivers() -> None:
     """Plots residuals as quivers."""
     cam = Camera(imgsz=(4288, 2848), f=(3100, 3200), c=(5, -4), k=(0.1, -0.05, 0.02))
-    xcam = MatlabCamera(imgsz=(4288, 2848), fc=(3100, 3200))
+    xcam = Matlab(imgsz=(4288, 2848), fc=(3100, 3200))
     converter = Converter(xcam, cam, uv=100)
     quivers = converter.plot()
     np.testing.assert_equal(quivers.X, converter.uv[:, 0])
@@ -339,6 +334,6 @@ def test_plots_residuals_as_quivers() -> None:
 def test_errors_for_unequal_image_size() -> None:
     """Raises error when camera image size are not equal."""
     cam = Camera(imgsz=(100, 200), f=(10, 10))
-    xcam = MatlabCamera(imgsz=(100, 100), fc=(10, 10))
+    xcam = Matlab(imgsz=(100, 100), fc=(10, 10))
     with pytest.raises(ValueError):
         Converter(xcam, cam)

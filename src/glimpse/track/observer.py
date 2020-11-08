@@ -8,9 +8,9 @@ import matplotlib.pyplot
 import numpy as np
 import scipy.interpolate
 
-from . import helpers
-from .image import Image
-from .raster import Grid
+from .. import helpers
+from ..image import Image
+from ..raster import Grid
 
 
 class Observer:

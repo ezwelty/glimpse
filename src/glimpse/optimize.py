@@ -17,7 +17,7 @@ from typing_extensions import Literal
 from . import config, helpers
 from .camera import Camera
 from .image import Image
-from .observer import Observer
+from .track import Observer
 
 Index = Union[slice, Iterable[int]]
 CamIndex = Union[int, Camera]

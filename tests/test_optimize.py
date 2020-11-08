@@ -3,7 +3,6 @@ import copy
 import os
 
 import glimpse
-import glimpse.optimize
 
 
 def test_optimizes_camera_viewdir_with_ransac() -> None:

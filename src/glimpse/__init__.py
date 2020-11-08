@@ -6,9 +6,8 @@ from . import svg
 from .camera import Camera
 from .exif import Exif
 from .image import Image
-from .observer import Observer
 from .raster import Grid, Raster, RasterInterpolant
-from .tracker import CartesianMotionModel, CylindricalMotionModel, Tracker, Tracks
+from .track import CartesianMotion, CylindricalMotion, Observer, Tracker, Tracks
 
 __all__ = [
     "config",
@@ -21,8 +20,8 @@ __all__ = [
     "Observer",
     "Tracker",
     "Tracks",
-    "CartesianMotionModel",
-    "CylindricalMotionModel",
+    "CartesianMotion",
+    "CylindricalMotion",
     "Grid",
     "Raster",
     "RasterInterpolant",

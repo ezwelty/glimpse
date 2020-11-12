@@ -216,7 +216,7 @@ def _num(x: Numeric) -> Number:
     return x
 
 
-def svg(*children: ET.Element, **attrib: str,) -> ET.Element:
+def svg(*children: ET.Element, **attrib: str) -> ET.Element:
     """
     Create `svg` element.
 
@@ -342,7 +342,7 @@ def path(d: Union[str, Coordinates] = "", **attrib: str) -> ET.Element:
 
 
 def _indent_etree(
-    e: ET.Element, level: int = 0, indent: Union[int, str] = None, last: bool = False,
+    e: ET.Element, level: int = 0, indent: Union[int, str] = None, last: bool = False
 ) -> None:
     if indent is None:
         sep, tab = "", ""

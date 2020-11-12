@@ -37,7 +37,7 @@ class Observer:
     """
 
     def __init__(
-        self, images: Iterable[Image], sigma: float = 0.3, cache: bool = True,
+        self, images: Iterable[Image], sigma: float = 0.3, cache: bool = True
     ) -> None:
         if len(images) < 2:
             raise ValueError("Images are not two or greater")

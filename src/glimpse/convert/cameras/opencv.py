@@ -64,7 +64,7 @@ class OpenCV:
         self.fx, self.fy = fx, fy
         self.cx = imgsz[0] / 2 if cx is None else cx
         self.cy = imgsz[1] / 2 if cy is None else cy
-        self.k1, self.k2, = k1, k2
+        self.k1, self.k2 = k1, k2
         self.p1, self.p2 = p1, p2
         self.k3, self.k4, self.k5, self.k6 = k3, k4, k5, k6
         self.s1, self.s2, self.s3, self.s4 = s1, s2, s3, s4

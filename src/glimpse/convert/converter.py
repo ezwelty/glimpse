@@ -1,8 +1,5 @@
 """Convert between external camera models and the glimpse camera model."""
-import re
-from typing import Any, cast, Dict, Iterable, List, Tuple, TYPE_CHECKING, Union
-import warnings
-import xml.etree.ElementTree
+from typing import Any, Dict, Iterable, TYPE_CHECKING, Union
 
 import matplotlib.pyplot
 import numpy as np

@@ -3,8 +3,8 @@ import os
 from typing import Any, Dict
 
 from glimpse import Camera
-from glimpse.convert.cameras import Agisoft, Matlab, OpenCV, PhotoModeler
 from glimpse.convert import Converter
+from glimpse.convert.cameras import Agisoft, Matlab, OpenCV, PhotoModeler
 import numpy as np
 import pytest
 
@@ -200,7 +200,7 @@ def test_converts_to_photomodeler_and_back_exactly() -> None:
     """Converts to PhotoModeler camera and back exactly."""
     # fmm must be equal, k* and p* must be zero
     cam = Camera(
-        imgsz=(4288, 2848), fmm=(3200, 3200), cmm=(0.5, -0.4), sensorsz=(35.1, 24.2),
+        imgsz=(4288, 2848), fmm=(3200, 3200), cmm=(0.5, -0.4), sensorsz=(35.1, 24.2)
     )
     xcam = PhotoModeler.from_camera(cam)
     residuals = Converter(xcam, cam).residuals()

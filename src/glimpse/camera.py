@@ -567,7 +567,7 @@ class Camera:
         self.c *= scale2d
 
     def xyz_to_uv(
-        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False,
+        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to image coordinates.
@@ -606,7 +606,7 @@ class Camera:
         return uv
 
     def uv_to_xyz(
-        self, uv: np.ndarray, directions: bool = True, depth: Vector = 1,
+        self, uv: np.ndarray, directions: bool = True, depth: Vector = 1
     ) -> np.ndarray:
         """
         Project image coordinates to world coordinates or ray directions.
@@ -856,7 +856,7 @@ class Camera:
         mask = self.inframe(uv)
         a = np.full((self.imgsz[1], self.imgsz[0]), np.nan)
         helpers.rasterize_points(
-            uv[mask, 1].astype(int), uv[mask, 0].astype(int), values[mask], a=a,
+            uv[mask, 1].astype(int), uv[mask, 0].astype(int), values[mask], a=a
         )
         return a
 
@@ -1407,7 +1407,7 @@ class Camera:
         return continuous_row and continuous_col
 
     def _xyz_to_xy(
-        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False,
+        self, xyz: np.ndarray, directions: bool = False, return_depth: bool = False
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """
         Project world coordinates to camera coordinates.

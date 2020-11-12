@@ -98,7 +98,7 @@ class Points:
     """
 
     def __init__(
-        self, cam: Camera, uv: np.ndarray, xyz: np.ndarray, directions: bool = False,
+        self, cam: Camera, uv: np.ndarray, xyz: np.ndarray, directions: bool = False
     ) -> None:
         if len(uv) != len(xyz):
             raise ValueError("Image and world coordinates have different length")

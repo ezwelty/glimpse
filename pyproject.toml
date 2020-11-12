@@ -46,6 +46,7 @@ flake8-annotations = "^2.1.0"
 coverage = {extras = ["toml"], version = "^5.1"}
 pytest-cov = "^2.10.0"
 flake8-docstrings = "^1.5.0"
+nox = "^2020.8.22"
 
 [tool.coverage.paths]
 source = ["src"]

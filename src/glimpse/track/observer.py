@@ -283,7 +283,7 @@ class Observer:
             index: Index of images.
         """
         for img in np.asarray(self.images)[index]:
-            img.I = None
+            img.array = None
 
     def animate(
         self,

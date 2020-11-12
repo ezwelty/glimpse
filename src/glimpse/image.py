@@ -30,7 +30,7 @@ class Image:
         cam (:class:`Camera`): Camera model.
         exif (:class:`Exif`): Image metadata.
         datetime (datetime.datetime): Image capture date and time.
-        I (numpy.ndarray): Cached image content.
+        array (numpy.ndarray): Cached image content.
 
     Example:
         By default, the base camera model (:class:`Camera`) and image capture time
@@ -109,7 +109,7 @@ class Image:
             datetime = exif.datetime
         self.datetime = datetime
         self.exif = exif
-        self.I = None
+        self.array = None
 
     @property
     def _path_imgsz(self) -> Tuple[int, int]:
@@ -118,8 +118,8 @@ class Image:
 
     @property
     def _cache_imgsz(self) -> Optional[Tuple[int, int]]:
-        if self.I is not None:
-            return self.I.shape[1], self.I.shape[0]
+        if self.array is not None:
+            return self.array.shape[1], self.array.shape[0]
         return None
 
     def read(self, box: Iterable[int] = None, cache: bool = True) -> np.ndarray:
@@ -127,8 +127,8 @@ class Image:
         Read image data from file.
 
         The image is resized as needed to the camera image size
-        (:attr:`cam`.imgsz). The result is cached (:attr:`I`) and reused only if
-        it matches the camera image size. To clear the cache, set :attr:`I` to
+        (:attr:`cam`.imgsz). The result is cached (:attr:`array`) and reused only if
+        it matches the camera image size. To clear the cache, set :attr:`array` to
         `None`.
 
         Arguments:
@@ -146,12 +146,12 @@ class Image:
             >>> img.cam.resize(0.5)
             >>> img.cam.imgsz
             array([400, 268])
-            >>> I = img.read()
-            >>> I.shape[1], I.shape[0]
+            >>> a = img.read()
+            >>> a.shape[1], a.shape[0]
             (400, 268)
             >>> img.cam.resize(1)
-            >>> I = img.read()
-            >>> I.shape[1], I.shape[0]
+            >>> a = img.read()
+            >>> a.shape[1], a.shape[0]
             (800, 536)
 
             Reading a subset of the image is equivalent to
@@ -159,19 +159,19 @@ class Image:
 
             >>> box = 0, 5, 100, 94
             >>> tile = img.read(box)
-            >>> np.all(tile == I[box[1] : box[3], box[0] : box[2]])
+            >>> np.all(tile == a[box[1] : box[3], box[0] : box[2]])
             True
             >>> tile = img.read(box, cache=False)
-            >>> np.all(tile == I[box[1] : box[3], box[0] : box[2]])
+            >>> np.all(tile == a[box[1] : box[3], box[0] : box[2]])
             True
         """
         size = self._cache_imgsz or self._path_imgsz
         cam_size = tuple(self.cam.imgsz)
         resize = cam_size != size
-        new_I = True
-        if self.I is not None and not resize:
-            I = self.I
-            new_I = False
+        new_array = True
+        if self.array is not None and not resize:
+            array = self.array
+            new_array = False
         else:
             ds = osgeo.gdal.Open(self.path)
             args = {}
@@ -185,36 +185,35 @@ class Image:
                 args["win_xsize"] = int(round((box[2] - box[0]) * xscale))
                 args["yoff"] = int(round(box[1] * yscale))
                 args["win_ysize"] = int(round((box[3] - box[1]) * yscale))
-            I = np.dstack(
+            array = np.dstack(
                 [
                     ds.GetRasterBand(i + 1).ReadAsArray(**args)
                     for i in range(ds.RasterCount)
                 ]
             )
-            if I.shape[2] == 1:
-                I = I.squeeze(axis=2)
+            if array.shape[2] == 1:
+                array = array.squeeze(axis=2)
             if cache:
-                I = sharedmem.copy(I)
-                self.I = I
-        if box is not None and (cache or not new_I):
+                array = sharedmem.copy(array)
+                self.array = array
+        if box is not None and (cache or not new_array):
             # Caching and cropping: Subset cached array
-            I = I[box[1] : box[3], box[0] : box[2]]
-        return I
+            array = array[box[1] : box[3], box[0] : box[2]]
+        return array
 
-    def write(self, path: str, I: np.ndarray = None, driver: str = None) -> None:
+    def write(self, path: str, array: np.ndarray = None, driver: str = None) -> None:
         """
         Write image data to file.
 
         Arguments:
             path: File path to write to.
-            I: Image data.
-                If `None`, the original image data is read.
+            array: Image data. If `None`, the original image data is read.
             driver: GDAL drivers to use (see https://gdal.org/drivers/raster).
                 If `None`, tries to guess the driver based on the file extension.
         """
-        if I is None:
-            I = self.read()
-        helpers.write_raster(a=I, path=path, driver=driver)
+        if array is None:
+            array = self.read()
+        helpers.write_raster(a=array, path=path, driver=driver)
 
     def plot(self, **kwargs: Any) -> matplotlib.image.AxesImage:
         """
@@ -231,12 +230,16 @@ class Image:
             >>> img = Image('tests/AK10b_20141013_020336.JPG')
             >>> img.plot()
             <matplotlib.image.AxesImage object at ...>
-            >>> plt.show()  #doctest: +SKIP
+            >>> plt.show()  # doctest: +SKIP
             >>> plt.close()
         """
-        I = self.read()
-        kwargs = {"origin": "upper", "extent": (0, I.shape[1], I.shape[0], 0), **kwargs}
-        return matplotlib.pyplot.imshow(I, **kwargs)
+        array = self.read()
+        kwargs = {
+            "origin": "upper",
+            "extent": (0, array.shape[1], array.shape[0], 0),
+            **kwargs,
+        }
+        return matplotlib.pyplot.imshow(array, **kwargs)
 
     def set_plot_limits(self) -> None:
         """
@@ -279,10 +282,10 @@ class Image:
             >>> img = Image('tests/AK10b_20141013_020336.JPG')
             >>> cam = img.cam.copy()
             >>> cam.viewdir = (5, 4, 0)
-            >>> I = img.project(cam, method="nearest")
-            >>> plt.imshow(I)
+            >>> array = img.project(cam, method="nearest")
+            >>> plt.imshow(array)
             <matplotlib.image.AxesImage ...>
-            >>> plt.show()  #doctest: +SKIP
+            >>> plt.show()  # doctest: +SKIP
             >>> plt.close()
         """
         if not all(cam.xyz == self.cam.xyz):
@@ -308,14 +311,16 @@ class Image:
         else:
             pv = np.linspace(0.5, self.cam.imgsz[1] - 0.5, self.cam.imgsz[1])
         # Prepare source image
-        I = self.read()
-        if I.ndim < 3:
-            I = np.expand_dims(I, axis=2)
-        pI = np.full((cam.imgsz[1], cam.imgsz[0], I.shape[2]), np.nan, dtype=I.dtype)
+        array = self.read()
+        if array.ndim < 3:
+            array = np.expand_dims(array, axis=2)
+        projected = np.full(
+            (cam.imgsz[1], cam.imgsz[0], array.shape[2]), np.nan, dtype=array.dtype
+        )
         # Sample source image at target grid
-        for i in range(pI.shape[2]):
+        for i in range(projected.shape[2]):
             f = scipy.interpolate.RegularGridInterpolator(
-                (pv, pu), I[:, :, i], method=method, bounds_error=False
+                (pv, pu), array[:, :, i], method=method, bounds_error=False
             )
-            pI[:, :, i] = f(pvu).reshape(pI.shape[0:2])
-        return pI
+            projected[:, :, i] = f(pvu).reshape(projected.shape[0:2])
+        return projected

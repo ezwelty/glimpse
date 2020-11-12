@@ -2442,7 +2442,7 @@ class KeypointMatcher:
                     # Write keypoints to file
                     helpers.write_pickle(keypoints, path=outpath)
                 if clear_images:
-                    img.I = None
+                    img.array = None
             if clear_keypoints:
                 keypoints = None
             return keypoints

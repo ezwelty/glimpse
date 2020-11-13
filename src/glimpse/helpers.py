@@ -6,7 +6,7 @@ import os
 import pathlib
 import pickle
 import re
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, Match, Optional, Tuple, Union
 
 import numpy as np
 import osgeo.gdal
@@ -291,7 +291,7 @@ def write_json(
         sep = separators[0] if separators else ", "
         squished_sep = re.sub(r"\s", "", sep)
 
-        def flatten(match: re.Match) -> str:
+        def flatten(match: Match) -> str:
             return re.sub(squished_sep, sep, re.sub(r"\s", "", match.group(0)))
 
         txt = re.sub(r"(\[\s*)+[^\]\{]*(\s*\])+", flatten, txt)

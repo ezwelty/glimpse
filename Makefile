@@ -1,10 +1,10 @@
 .PHONY: format
 format:
-	poetry run black src tests noxfile.py
+	poetry run black src tests
 
 .PHONY: lint
 lint:
-	poetry run flake8 src tests noxfile.py
+	poetry run flake8 src tests
 
 .PHONY: test
 test:

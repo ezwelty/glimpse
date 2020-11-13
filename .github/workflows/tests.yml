@@ -6,7 +6,6 @@ on:
     - 'docs/**'
     - '.gitignore'
     - '.pre-commit-config.yaml'
-    - 'noxfile.py'
 jobs:
   tests:
     strategy:
@@ -33,22 +32,34 @@ jobs:
     - name: Install make on windows
       if: matrix.os == 'windows-latest'
       shell: bash -l {0}
-      run: choco install make
+      run: |
+        choco install make
+        make --version
     - name: Install make on mac and linux
       if: matrix.os != 'windows-latest'
       shell: bash -l {0}
-      run: mamba install -y make
-    - name: Install poetry
-      shell: bash -l {0}
-      run: mamba install -y poetry=1.1.3
-    - name: Run tests in conda environment
+      run: |
+        mamba install -y make
+        make --version
+    - name: Install python
       shell: bash -l {0}
       run: |
-        conda create -n test
-        conda activate test
-        mamba install -y python=${{ matrix.python-version }} gdal=3.2.0
-        # Make poetry use current conda environment
-        # https://github.com/python-poetry/poetry/issues/105
+        mamba install -y python=${{ matrix.python-version }}
+        python --version
+    - name: Install poetry
+      shell: bash -l {0}
+      run: |
+        mamba install -y poetry=1.1.3
+        poetry --version
+    - name: Install gdal
+      shell: bash -l {0}
+      run: |
+        mamba install -y gdal=3.2.0
+        gdalinfo --version
+    - name: Run tests
+      shell: bash -l {0}
+      run: |
+        # HACK: Install project into a conda environment with gdal already installed
         poetry config virtualenvs.path $(conda info --base)/envs
         poetry config virtualenvs.create 0
         poetry install

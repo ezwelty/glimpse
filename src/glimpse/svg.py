@@ -239,7 +239,7 @@ def svg(*children: ET.Element, **attrib: str) -> ET.Element:
         >>> len(e)
         2
         >>> e.attrib
-        {'xmlns': '.../svg', 'xmlns:xlink': '.../xlink', 'width': '12', 'height': '8'}
+        {'height': '8', 'width': '12', 'xmlns': '.../svg', 'xmlns:xlink': '.../xlink'}
     """
     e = ET.Element("svg")
     e.extend(children)
@@ -248,11 +248,11 @@ def svg(*children: ET.Element, **attrib: str) -> ET.Element:
         if images:
             width, height = images[-1].get("width"), images[-1].get("height")
             if width and height:
-                attrib = {"width": width, "height": height, **attrib}
+                attrib = {"height": height, "width": width, **attrib}
     e.attrib = {
+        **attrib,
         "xmlns": "http://www.w3.org/2000/svg",
         "xmlns:xlink": "http://www.w3.org/1999/xlink",
-        **attrib,
     }
     return e
 
@@ -306,10 +306,10 @@ def image(
         >>> e.tag
         'image'
         >>> e.attrib
-        {'width': '12', 'height': '8', 'xlink:href': 'photo.jpg'}
+        {'height': '8', 'width': '12', 'xlink:href': 'photo.jpg'}
     """
     optional = {"xlink:href": href} if href else {}
-    attrib = {"width": str(width), "height": str(height), **optional, **attrib}
+    attrib = {"height": str(height), "width": str(width), **optional, **attrib}
     return ET.Element("image", attrib=attrib)
 
 
@@ -396,9 +396,9 @@ def write(
         ... )
         >>> e = svg(*children)
         >>> print(write(e, indent=4))
-        <svg xmlns=".../svg" xmlns:xlink=".../xlink" width="12" height="8">
+        <svg height="8" width="12" xmlns=".../svg" xmlns:xlink=".../xlink">
             <path d="M 0,0 L 1,1" id="horizon" />
-            <image width="12" height="8" xlink:href="photo.jpeg" />
+            <image height="8" width="12" xlink:href="photo.jpeg" />
         </svg>
     """
     txt = _etree_to_string(e, indent=indent)

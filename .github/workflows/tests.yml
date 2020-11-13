@@ -38,5 +38,5 @@ jobs:
         poetry config virtualenvs.path $(conda info --base)/envs
         poetry config virtualenvs.create 0
         poetry install
-        poetry run flake8 src tests noxfile.py
-        poetry run pytest --doctest-modules src tests
+        make lint
+        make test

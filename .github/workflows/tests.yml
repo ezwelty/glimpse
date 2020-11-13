@@ -1,12 +1,12 @@
 name: tests
 on:
   push:
-    paths:
-    - '!**.md'
-    - '!docs/**'
-    - '!.gitignore'
-    - '!.pre-commit-config.yaml'
-    - '!noxfile.py'
+    paths-ignore:
+    - '**.md'
+    - 'docs/**'
+    - '.gitignore'
+    - '.pre-commit-config.yaml'
+    - 'noxfile.py'
 jobs:
   tests:
     strategy:

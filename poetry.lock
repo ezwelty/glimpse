@@ -252,7 +252,7 @@ python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
 
 [[package]]
 name = "gdal"
-version = "3.1.2"
+version = "3.2.0"
 description = "GDAL: Geospatial Data Abstraction Library"
 category = "main"
 optional = false
@@ -850,7 +850,7 @@ testing = ["jaraco.itertools", "func-timeout"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.6.1"
-content-hash = "7ad33e7fba87ce17f8277b61b13c0ba28169406d08dd4c124ef82c2048abf63b"
+content-hash = "b53b2a330bb36dfcc93f612c2c98b2fe047d4374fe789b1d26225739a6af073f"
 
 [metadata.files]
 alabaster = [
@@ -976,7 +976,7 @@ future = [
     {file = "future-0.18.2.tar.gz", hash = "sha256:b1bead90b70cf6ec3f0710ae53a525360fa360d306a86583adc6bf83a4db537d"},
 ]
 gdal = [
-    {file = "GDAL-3.1.2.tar.gz", hash = "sha256:698fa841a1ab75c121da736acb36ffe84c0a0081837884c208a3e5c9bcc4bf2b"},
+    {file = "GDAL-3.2.0.tar.gz", hash = "sha256:2b758fbe60f7ec5c38400d72630df633765e46b5f3f54bcb3115eaea0d531a36"},
 ]
 idna = [
     {file = "idna-2.9-py2.py3-none-any.whl", hash = "sha256:a068a21ceac8a4d63dbfd964670474107f541babbd2250d61922f029858365fa"},

@@ -16,6 +16,8 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.os }} - python ${{ matrix.python-version }}
+    env:
+      coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8' }}
     steps:
     - uses: actions/checkout@v2
     - uses: conda-incubator/setup-miniconda@v2
@@ -52,25 +54,25 @@ jobs:
         pip install --constraint=constraints.txt -r requirements.txt
         pip install --constraint=constraints.txt pytest
     - name: Install coverage dependencies
-      if: matrix.python-version == '3.8'
+      if: env.coverage
       shell: bash -l {0}
       run: |
         conda activate test
         pip install --constraint=constraints.txt pytest-cov coverage[toml] codecov
     - name: Test
-      if: matrix.python-version != '3.8'
+      if: ! "!env.coverage"
       shell: bash -l {0}
       run: |
         conda activate test
         pytest --doctest-modules src tests
     - name: Test with coverage
-      if: matrix.python-version == '3.8'
+      if: env.coverage
       shell: bash -l {0}
       run: |
         conda activate test
         pytest --cov --doctest-modules src tests
     - name: Upload coverage to Codecov
-      if: matrix.python-version == '3.8'
+      if: env.coverage
       shell: bash -l {0}
       run: |
         conda activate test

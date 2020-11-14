@@ -17,6 +17,13 @@ import progress.bar
 import scipy.ndimage
 import scipy.spatial
 
+# Print integer arrays without dtype (e.g. "int64" on platforms with int32 default)
+_array_repr = None
+"""
+>>> def _array_repr(x):
+...   return re.sub(r',\\s*dtype=int(32|64)', '', np.array_repr(x))
+>>> np.set_string_function(_array_repr)
+"""
 
 # ---- General ---- #
 

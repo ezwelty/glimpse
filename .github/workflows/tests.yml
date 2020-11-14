@@ -54,13 +54,13 @@ jobs:
         pip install --constraint=constraints.txt -r requirements.txt
         pip install --constraint=constraints.txt pytest
     - name: Install coverage dependencies
-      if: env.coverage
+      if: env.coverage == 'true'
       shell: bash -l {0}
       run: |
         conda activate test
         pip install --constraint=constraints.txt pytest-cov coverage[toml] codecov
     - name: Test
-      if: "!env.coverage"
+      if: env.coverage == 'false'
       shell: bash -l {0}
       run: |
         conda activate test
@@ -68,7 +68,7 @@ jobs:
       env:
         MPLBACKEND: agg
     - name: Test with coverage
-      if: env.coverage
+      if: env.coverage == 'true'
       shell: bash -l {0}
       run: |
         conda activate test
@@ -76,7 +76,7 @@ jobs:
       env:
         MPLBACKEND: agg
     - name: Upload coverage to Codecov
-      if: env.coverage
+      if: env.coverage == 'true'
       shell: bash -l {0}
       run: |
         conda activate test

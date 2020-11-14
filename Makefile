@@ -1,5 +1,6 @@
 .PHONY: format
 format:
+	poetry run isort src tests
 	poetry run black src tests
 
 .PHONY: lint

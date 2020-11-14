@@ -2,8 +2,9 @@
 import datetime
 import os
 
-import glimpse
 import numpy as np
+
+import glimpse
 
 path = os.path.join("tests", "AK10b_20141013_020336.JPG")
 

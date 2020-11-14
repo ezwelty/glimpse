@@ -1,6 +1,6 @@
 """Manipulate and plot tracked particle trajectories."""
 import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import matplotlib.animation
 import matplotlib.pyplot
@@ -10,6 +10,7 @@ from typing_extensions import Literal
 if TYPE_CHECKING:
     # Prevent circular import (see https://stackoverflow.com/a/39757388)
     from .tracker import Tracker
+
 from .. import helpers
 
 Index = Union[slice, Iterable[int]]

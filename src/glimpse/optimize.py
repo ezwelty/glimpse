@@ -3,8 +3,8 @@ import copyreg
 import datetime
 import os
 import sys
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 import warnings
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import cv2
 import lmfit

@@ -2,8 +2,8 @@
 import copy
 import datetime
 import numbers
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 import warnings
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import matplotlib.colors
 import matplotlib.pyplot
@@ -14,7 +14,6 @@ import scipy.ndimage
 from typing_extensions import Literal
 
 from . import helpers
-
 
 Number = Union[int, float]
 

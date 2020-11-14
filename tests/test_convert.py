@@ -2,11 +2,12 @@
 import os
 from typing import Any, Dict
 
+import numpy as np
+import pytest
+
 from glimpse import Camera
 from glimpse.convert import Converter
 from glimpse.convert.cameras import Agisoft, Matlab, OpenCV, PhotoModeler
-import numpy as np
-import pytest
 
 # ---- Matlab ----
 

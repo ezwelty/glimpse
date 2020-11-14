@@ -1,11 +1,11 @@
 """Read and write image annotations in scalable vector graphics (svg) files."""
-from collections import defaultdict
 import copy
 import inspect
 import re
-from typing import Any, Dict, Iterable, Iterator, List, Optional, TextIO, Tuple, Union
 import warnings
 import xml.etree.ElementTree as ET
+from collections import defaultdict
+from typing import Any, Dict, Iterable, Iterator, List, Optional, TextIO, Tuple, Union
 
 from typing_extensions import TypedDict
 

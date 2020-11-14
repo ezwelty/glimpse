@@ -1,6 +1,7 @@
 """Tests of the camera module."""
-import glimpse
 import numpy as np
+
+import glimpse
 
 
 def test_converts_millimeter_focal_length_to_pixels() -> None:

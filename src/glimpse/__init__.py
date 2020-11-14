@@ -1,8 +1,5 @@
 """glimpse: Timelapse image sequence calibration and tracking."""
-from . import config
-from . import convert
-from . import optimize
-from . import svg
+from . import config, convert, optimize, svg
 from .camera import Camera
 from .exif import Exif
 from .image import Image

@@ -40,7 +40,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate test
-        pip install --constraint=constraints.txt flake8 flake8-annotations flake8-black flake8-docstrings flake8-import-order
+        pip install --constraint=constraints.txt flake8 flake8-annotations flake8-black flake8-docstrings flake8-isort
     - name: Lint
       shell: bash -l {0}
       run: |

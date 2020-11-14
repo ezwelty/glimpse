@@ -3,10 +3,11 @@ import datetime
 import itertools
 import os
 
-import glimpse
 import numpy as np
 import osgeo.osr
 import pytest
+
+import glimpse
 
 
 def test_initializes_default_raster() -> None:

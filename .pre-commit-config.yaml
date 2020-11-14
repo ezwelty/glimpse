@@ -14,7 +14,12 @@ repos:
     language: system
     types: [python]
     pass_filenames: false
-  - id: format
+  - id: format-isort
+    name: isort
+    entry: poetry run isort
+    language: system
+    types: [python]
+  - id: format-black
     name: black
     entry: poetry run black
     language: system

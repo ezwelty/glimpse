@@ -1,13 +1,13 @@
 """OpenCV camera models."""
 import re
-from typing import Any, cast, Dict, Iterable, List, Tuple, Union
 import warnings
 import xml.etree.ElementTree
+from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 import numpy as np
 
-from ..converter import Converter
 from ...camera import Camera
+from ..converter import Converter
 
 Parameters = Dict[str, Union[bool, int, Iterable[int]]]
 Optimize = Union[bool, Parameters]

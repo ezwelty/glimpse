@@ -2,8 +2,9 @@
 import io
 from typing import Tuple, Union
 
-import glimpse.svg
 import pytest
+
+import glimpse.svg
 
 
 def test_errors_for_missing_svg() -> None:

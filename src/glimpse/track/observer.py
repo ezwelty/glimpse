@@ -1,6 +1,6 @@
 """Represent a sequence of images taken from the same camera position."""
 import datetime
-from typing import Any, cast, Iterable, List, Tuple, Union
+from typing import Any, Iterable, List, Tuple, Union, cast
 
 import matplotlib.animation
 import matplotlib.patches

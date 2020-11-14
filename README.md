@@ -54,8 +54,9 @@ Don’t be afraid to open unfinished pull requests or to ask questions if someth
 ## Code & docstrings
 
 Code follows [PEP 8](https://www.python.org/dev/peps/pep-0008/).
-It is formatted (automatically, if you use the pre-commit hooks) to conform to the [`black`](https://github.com/psf/black) code style with a line length of 88 characters.
-Imports follow the [Google style](https://github.com/PyCQA/flake8-import-order/blob/master/tests/test_cases/complete_google.py).
+It is formatted (automatically, if you use the pre-commit hooks)
+to conform to the [`black`](https://github.com/psf/black) code style and import order
+with a maximum line length of 88 characters.
 
 Docstrings follow [PEP 257](https://www.python.org/dev/peps/pep-0257/) and the [Google style](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html), with the exception of using section title `"Arguments:"` instead of `"Args:"`.
 Argument and return types are specified as type annotations and not included in the docstrings.

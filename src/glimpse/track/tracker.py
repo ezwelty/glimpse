@@ -2,19 +2,19 @@
 import datetime
 import sys
 import traceback
-from typing import Iterable, Optional, Tuple, Union
 import warnings
+from typing import Iterable, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 import scipy.ndimage
 from typing_extensions import Literal
 
+from .. import config, helpers
+from ..raster import Raster
 from .motion import Motion
 from .observer import Observer
 from .tracks import Tracks
-from .. import config, helpers
-from ..raster import Raster
 
 Number = Union[int, float]
 

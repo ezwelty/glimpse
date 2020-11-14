@@ -1,11 +1,11 @@
 """Agisoft camera models."""
-from typing import Any, cast, Dict, Iterable, Tuple, Union
 import xml.etree.ElementTree
+from typing import Any, Dict, Iterable, Tuple, Union, cast
 
 import numpy as np
 
-from ..converter import Converter
 from ...camera import Camera
+from ..converter import Converter
 
 Parameters = Dict[str, Union[bool, int, Iterable[int]]]
 Optimize = Union[bool, Parameters]

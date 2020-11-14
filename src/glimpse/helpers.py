@@ -17,7 +17,6 @@ import progress.bar
 import scipy.ndimage
 import scipy.spatial
 
-
 # ---- General ---- #
 
 

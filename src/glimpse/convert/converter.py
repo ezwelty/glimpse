@@ -1,5 +1,5 @@
 """Convert between external camera models and the glimpse camera model."""
-from typing import Any, Dict, Iterable, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Union
 
 import matplotlib.pyplot
 import numpy as np
@@ -7,6 +7,7 @@ import scipy.optimize
 
 if TYPE_CHECKING:
     from .cameras import Agisoft, Matlab, OpenCV, PhotoModeler
+
 from .. import optimize
 from ..camera import Camera
 

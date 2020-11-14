@@ -17,51 +17,41 @@ jobs:
     name: ${{ matrix.os }} - python ${{ matrix.python-version }}
     steps:
     - uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
-        architecture: x64
     - uses: conda-incubator/setup-miniconda@v2
       with:
         activate-environment: ''
         auto-activate-base: true
         auto-update-conda: true
         channels: conda-forge
-        channel-priority: true
-        mamba-version: '*'
-    - name: Install make on windows
-      if: matrix.os == 'windows-latest'
+    - name: Install poetry and export requirements
       shell: bash -l {0}
       run: |
-        choco install make
-        make --version
-    - name: Install make on mac and linux
-      if: matrix.os != 'windows-latest'
+        conda install -y poetry=1.1.3
+        poetry export -o requirements.txt
+        poetry export -o constraints.txt --dev
+    - name: Create test conda environment
       shell: bash -l {0}
       run: |
-        mamba install -y make
-        make --version
-    - name: Install python
+        conda create -n test -y python=${{ matrix.python-version }}
+    - name: Install lint dependencies
       shell: bash -l {0}
       run: |
-        mamba install -y python=${{ matrix.python-version }}
-        python --version
-    - name: Install poetry
+        conda activate test
+        pip install --constraint=constraints.txt flake8 flake8-annotations flake8-black flake8-docstrings flake8-import-order
+    - name: Lint
       shell: bash -l {0}
       run: |
-        mamba install -y poetry=1.1.3
-        poetry --version
-    - name: Install gdal
+        conda activate test
+        flake8 src tests
+    - name: Install test dependencies
       shell: bash -l {0}
       run: |
-        mamba install -y gdal=3.2.0
-        gdalinfo --version
-    - name: Run tests
+        conda activate test
+        conda install -y gdal=3.2.0
+        pip install --constraint=constraints.txt -r requirements.txt
+        pip install --constraint=constraints.txt pytest
+    - name: Test
       shell: bash -l {0}
       run: |
-        # HACK: Install project into a conda environment with gdal already installed
-        poetry config virtualenvs.path $(conda info --base)/envs
-        poetry config virtualenvs.create 0
-        poetry install
-        make lint
-        make test
+        conda activate test
+        pytest --doctest-modules src tests

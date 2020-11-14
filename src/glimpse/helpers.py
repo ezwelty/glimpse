@@ -98,11 +98,11 @@ def numpy_dtype_minmax(
         ValueError: Cannot determine min, max for datatype.
 
     Examples:
-        >>> numpy_dtype_minmax(np.dtype(int))
+        >>> numpy_dtype_minmax(np.dtype('int64'))
         (-9223372036854775808, 9223372036854775807)
-        >>> numpy_dtype_minmax(np.dtype(float))
+        >>> numpy_dtype_minmax(np.dtype('float64'))
         (-1.7976931348623157e+308, 1.7976931348623157e+308)
-        >>> numpy_dtype_minmax(np.dtype(bool))
+        >>> numpy_dtype_minmax(np.dtype('bool'))
         (False, True)
     """
     if issubclass(dtype.type, np.floating):

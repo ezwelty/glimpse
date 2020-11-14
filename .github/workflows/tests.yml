@@ -50,8 +50,29 @@ jobs:
         conda install -y gdal=3.2.0
         pip install --constraint=constraints.txt -r requirements.txt
         pip install --constraint=constraints.txt pytest
+    - name: Install coverage dependencies
+      if: matrix.python-version == '3.8'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        pip install --constraint=constraints.txt coverage[toml] codecov
     - name: Test
+      if: matrix.python-version != '3.8'
       shell: bash -l {0}
       run: |
         conda activate test
         pytest --doctest-modules src tests
+    - name: Test with coverage
+      if: matrix.python-version == '3.8'
+      run: |
+        conda activate test
+        pytest --doctest-modules src tests
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.8'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        coverage xml --fail-under=0
+        codecov
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

@@ -6,12 +6,16 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vscode/
 
 # Python generated files
 *.pyc
 __pycache__/
 .cache/
 .pytest_cache/
+.mypy_cache/
+*.egg-info
+.nox
 
 # Pyenv
 .python-version
@@ -19,6 +23,11 @@ __pycache__/
 # Sphinx
 docs/build
 docs/autosummary
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
 
 # Data
 data

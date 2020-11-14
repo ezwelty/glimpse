@@ -1,0 +1,96 @@
+
+Status Report Tree
+
+Project Name: D300-28-FF.pmr
+
+Problems and Suggestions (0)
+   Project Problems (0)
+   Problems related to most recent processing (0)
+
+Information from most recent processing
+   Last Processing Attempt: Sat Jan 10 14:02:36 2009
+   PhotoModeler Version: 6.2.4.647 - final,full
+   Status: successful
+   Processing Options
+      Orientation: off
+      Global Optimization: on
+      Calibration: on (full calibration)
+      Constraints: off
+   Total Error
+      Number of Processing Iterations: 2
+      Number of Processing Stages: 2
+      First Error: 0.635
+      Last Error: 0.635
+   Precisions / Standard Deviations
+      Camera Calibration Standard Deviations
+         Camera1: NIKON D300 [28.00]
+            Focal Length
+               Value: 29.414069 mm
+               Deviation: Focal: 0.001 mm
+            Xp - principal point x
+               Value: 12.009446 mm
+               Deviation: Xp: 0.001 mm
+            Yp - principal point y
+               Value: 8.105847 mm
+               Deviation: Yp: 7.1e-004 mm
+            Fw - format width
+               Value: 24.001371 mm
+               Deviation: Fw: 1.7e-004 mm
+            Fh - format height
+               Value: 15.940299 mm
+            K1 - radial distortion 1
+               Value: 1.423e-004
+               Deviation: K1: 2.0e-007
+            K2 - radial distortion 2
+               Value: -1.576e-007
+               Deviation: K2: 1.2e-009
+            K3 - radial distortion 3
+               Value: 0.000e+000
+            P1 - decentering distortion 1
+               Value: 3.703e-006
+               Deviation: P1: 3.5e-007
+            P2 - decentering distortion 2
+               Value: 0.000e+000
+
+Quality
+   Photographs
+      Total Number: 12
+         Bad Photos: 0
+         Weak Photos: 0
+         OK Photos: 12
+      Number Oriented: 12
+      Number with inverse camera flags set: 0
+   Cameras
+      Camera1: NIKON D300 [28.00]
+         Calibration: yes
+         Number of photos using camera: 12
+         Average Photo Point Coverage: 89%
+   Photo Coverage
+      Number of referenced points outside of the Camera's calibrated coverage: 0
+   Point Marking Residuals
+      Overall RMS: 0.081 pixels
+      Maximum: 0.340 pixels
+         Point 182 on Photo 8
+      Minimum: 0.074 pixels
+         Point 71 on Photo 11
+      Maximum RMS: 0.219 pixels
+         Point 375
+      Minimum RMS: 0.046 pixels
+         Point 51
+   Point Tightness
+      Maximum: 0.00029 m
+         Point 375
+      Minimum: 6.3e-005 m
+         Point 70
+   Point Precisions
+      Overall RMS Vector Length: 3.02e-005 m
+      Maximum Vector Length: 4.98e-005 m
+         Point 375
+      Minimum Vector Length: 2.89e-005 m
+         Point 174
+      Maximum X: 2.06e-005 m
+      Maximum Y: 2.03e-005 m
+      Maximum Z: 4.06e-005 m
+      Minimum X: 1.12e-005 m
+      Minimum Y: 1.12e-005 m
+      Minimum Z: 2.41e-005 m

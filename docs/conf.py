@@ -1,244 +1,91 @@
-# -*- coding: utf-8 -*-
-#
-# Configuration file for the Sphinx documentation builder.
-#
-# This file does only contain a selection of the most common options. For a
-# full list see the documentation:
-# http://www.sphinx-doc.org/en/master/config
+"""Sphinx configuration."""
+import datetime
+import os
+import sys
 
 # -- Path setup --------------------------------------------------------------
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
+sys.path.insert(0, os.path.abspath(".."))
 
-import os
-import sys
-sys.path.insert(0, os.path.abspath('../'))
 
 def setup(app):
-    app.add_stylesheet('custom.css')
+    app.add_css_file("custom.css")
+
 
 # -- Project information -----------------------------------------------------
 
-project = 'glimpse'
-copyright = '2018, Ethan Welty, Douglas Brinkerhoff'
-author = 'Ethan Welty, Douglas Brinkerhoff'
-version = '0.1.0'
-# Long version format, including alpha/beta/rc tags
-release = version
+project = "glimpse"
+author = "Ethan Welty, Douglas Brinkerhoff"
+copyright = f"{datetime.datetime.now().year}, {author}"
+version = "0.1.0"
+
 
 # -- Napoleon Extension configuration ------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
 
-# Parse Google style docstrings.
-# See http://google.github.io/styleguide/pyguide.html
 napoleon_google_docstring = True
-
-# Parse NumPy style docstrings.
-# See https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
 napoleon_numpy_docstring = False
-
-# Should special members (like __membername__) and private members
-# (like _membername) members be included in the documentation if they
-# have docstrings.
+napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
 napoleon_include_special_with_doc = True
-
-# If True, docstring sections will use the ".. admonition::" directive.
-# If False, docstring sections will use the ".. rubric::" directive.
-# One may look better than the other depending on what HTML theme is used.
 napoleon_use_admonition_for_examples = False
 napoleon_use_admonition_for_notes = False
 napoleon_use_admonition_for_references = False
-
-# If True, use Sphinx :ivar: directive for instance variables:
-#     :ivar attr1: Description of attr1.
-#     :type attr1: type
-# If False, use Sphinx .. attribute:: directive for instance variables:
-#     .. attribute:: attr1
-#
-#        Description of attr1.
-#
-#        :type: type
 napoleon_use_ivar = False
-
-# If True, use Sphinx :param: directive for function parameters:
-#     :param arg1: Description of arg1.
-#     :type arg1: type
-# If False, output function parameters using the :parameters: field:
-#     :parameters: **arg1** (*type*) -- Description of arg1.
 napoleon_use_param = True
-
-# If True, use Sphinx :rtype: directive for the return type:
-#     :returns: Description of return value.
-#     :rtype: type
-# If False, output the return type inline with the return description:
-#     :returns: *type* -- Description of return value.
 napoleon_use_rtype = True
 
 # -- Autodoc configuration -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
 
-autoclass_content = 'class'
-autodoc_member_order = 'bysource'
-autodoc_default_flags = ['members']
+autoclass_content = "class"
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+
+# -- Matplotlib configuration -----------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
+
+plot_include_source = True
+plot_html_show_source_link = False
+plot_working_directory = ".."
 
 # -- General configuration ---------------------------------------------------
 
-# If your documentation needs a minimal Sphinx version, state it here.
-# needs_sphinx = '1.0'
-
-# Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
-# ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.doctest',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.autosummary'
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.intersphinx",
+    "matplotlib.sphinxext.plot_directive",
 ]
 
+doctest_global_setup = """
+import glimpse
+"""
+doctest_test_doctest_blocks = ""
+
 intersphinx_mapping = {
-  'python': ('https://docs.python.org/3', None),
-  'numpy': ('http://docs.scipy.org/doc/numpy/', None),
-  'scipy': ('http://docs.scipy.org/doc/scipy/reference/', None),
-  'matplotlib': ('http://matplotlib.sourceforge.net/', None),
-  'piexif': ('https://piexif.readthedocs.io/en/latest/', None),
-  'PIL': ('https://pillow.readthedocs.io/en/stable/', None)
+    "python": ("https://docs.python.org/3", None),
+    "numpy": ("http://docs.scipy.org/doc/numpy/", None),
+    "scipy": ("http://docs.scipy.org/doc/scipy/reference/", None),
+    "matplotlib": ("http://matplotlib.sourceforge.net/", None),
+    "piexif": ("https://piexif.readthedocs.io/en/latest/", None),
+    "sharedmem": ("http://rainwoodman.github.io/sharedmem/", None),
+    "pyproj": ("http://pyproj4.github.io/pyproj/stable/", None),
 }
 
 autosummary_generate = True
-
-# Add any paths that contain templates here, relative to this directory.
-templates_path = ['templates']
-
-# The suffix(es) of source filenames.
-# You can specify multiple suffix as a list of string:
-#
-# source_suffix = ['.rst', '.md']
-source_suffix = '.rst'
-
-# The master toctree document.
-master_doc = 'index'
-
-# The language for content autogenerated by Sphinx. Refer to documentation
-# for a list of supported languages.
-#
-# This is also used if you do content translation via gettext catalogs.
-# Usually you set "language" from the command line for these cases.
-language = 'en'
-
-# List of patterns, relative to source directory, that match files and
-# directories to ignore when looking for source files.
-# This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['build', 'Thumbs.db', '.DS_Store']
-
-# The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
-
+templates_path = ["templates"]
 
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-html_theme = 'sphinx_rtd_theme'
+html_static_path = ["static"]
 
-# Theme options are theme-specific and customize the look and feel of a theme
-# further. For a list of options available for each theme, see the
-# documentation.
+# https://sphinx-rtd-theme.readthedocs.io/en/latest/configuring.html
+html_theme = "sphinx_rtd_theme"
 html_theme_options = {
-    'style_external_links': False
+    "style_external_links": False,
+    "navigation_depth": 4,
 }
-
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['static']
-
-# Custom sidebar templates, must be a dictionary that maps document names
-# to template names.
-#
-# The default sidebars (for documents that don't match any pattern) are
-# defined by theme itself.  Builtin themes are using these templates by
-# default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
-# 'searchbox.html']``.
-#
-# html_sidebars = {}
-
-
-# -- Options for HTMLHelp output ---------------------------------------------
-
-# Output file base name for HTML help builder.
-htmlhelp_basename = 'glimpsedoc'
-
-
-# -- Options for LaTeX output ------------------------------------------------
-
-latex_elements = {
-    # The paper size ('letterpaper' or 'a4paper').
-    #
-    # 'papersize': 'letterpaper',
-
-    # The font size ('10pt', '11pt' or '12pt').
-    #
-    # 'pointsize': '10pt',
-
-    # Additional stuff for the LaTeX preamble.
-    #
-    # 'preamble': '',
-
-    # Latex figure (float) alignment
-    #
-    # 'figure_align': 'htbp',
-}
-
-# Grouping the document tree into LaTeX files. List of tuples
-# (source start file, target name, title,
-#  author, documentclass [howto, manual, or own class]).
-latex_documents = [
-    (master_doc, 'glimpse.tex', 'glimpse Documentation',
-     'Ethan Welty, Douglas Brinkerhoff', 'manual'),
-]
-
-
-# -- Options for manual page output ------------------------------------------
-
-# One entry per manual page. List of tuples
-# (source start file, name, description, authors, manual section).
-man_pages = [
-    (master_doc, 'glimpse', 'glimpse Documentation',
-     [author], 1)
-]
-
-
-# -- Options for Texinfo output ----------------------------------------------
-
-# Grouping the document tree into Texinfo files. List of tuples
-# (source start file, target name, title, author,
-#  dir menu entry, description, category)
-texinfo_documents = [
-    (master_doc, 'glimpse', 'glimpse Documentation',
-     author, 'glimpse', 'One line description of project.',
-     'Miscellaneous'),
-]
-
-
-# -- Options for Epub output -------------------------------------------------
-
-# Bibliographic Dublin Core info.
-epub_title = project
-
-# The unique identifier of the text. This can be a ISBN number
-# or the project homepage.
-#
-# epub_identifier = ''
-
-# A unique identification for the text.
-#
-# epub_uid = ''
-
-# A list of files that should not be packed into the epub file.
-epub_exclude_files = ['search.html']

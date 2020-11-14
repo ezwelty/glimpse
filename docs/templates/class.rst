@@ -1,5 +1,4 @@
-:class:`{{ objname }}` class
-{{ underline }}
+{{ fullname | escape | underline }}
 
 .. currentmodule:: {{ module }}
 
@@ -13,6 +12,11 @@
       {% if item != "__init__" %}
         ~{{ name }}.{{ item }}
       {% endif %}
-    {%- endfor %}
+    {% endfor %}
+    {% for item in methods %}
+      {% if item != "__init__" %}
+    .. automethod:: {{ item }}
+      {% endif %}
+    {% endfor %}
     {% endif %}
     {% endblock %}

@@ -1,0 +1,12 @@
+[flake8]
+select = ANN, BLK, C, D, E, F, I, W
+# ANN101: Missing type annotation for self in method
+# ANN102: Missing type annotation for cls in classmethod
+# D107: Missing docstring in __init__
+# D212: Multi-line docstring summary should start at the first line
+# E203 whitespace before ':'
+# W503 line break before binary operator
+ignore = ANN101, ANN102, D107, D212, E203, W503
+max-line-length = 88
+docstring-convention = google
+import-order-style = google

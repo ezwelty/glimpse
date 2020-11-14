@@ -1,0 +1,86 @@
+name: tests
+on:
+  push:
+    paths-ignore:
+    - '**.md'
+    - 'docs/**'
+    - '.gitignore'
+    - '.pre-commit-config.yaml'
+    - 'Makefile'
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
+        python-version: ['3.6', '3.7', '3.8']
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} - python ${{ matrix.python-version }}
+    env:
+      coverage: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.8' }}
+    steps:
+    - uses: actions/checkout@v2
+    - uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: ''
+        auto-activate-base: true
+        auto-update-conda: true
+        channels: conda-forge
+    - name: Install poetry and export requirements
+      shell: bash -l {0}
+      run: |
+        conda install -y poetry=1.1.3
+        poetry export -o requirements.txt --without-hashes
+        poetry export -o constraints.txt --dev --without-hashes
+    - name: Create test conda environment
+      shell: bash -l {0}
+      run: |
+        conda create -n test -y python=${{ matrix.python-version }}
+    - name: Install lint dependencies
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        pip install --constraint=constraints.txt flake8 flake8-annotations flake8-black flake8-docstrings flake8-import-order
+    - name: Lint
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        flake8 src tests
+    - name: Install test dependencies
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        conda install -y gdal=3.2.0
+        pip install --constraint=constraints.txt -r requirements.txt
+        pip install --constraint=constraints.txt pytest
+    - name: Install coverage dependencies
+      if: env.coverage == 'true'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        pip install --constraint=constraints.txt pytest-cov coverage[toml] codecov
+    - name: Test
+      if: env.coverage == 'false'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        pytest --doctest-modules src tests
+      env:
+        MPLBACKEND: agg
+    - name: Test with coverage
+      if: env.coverage == 'true'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        pytest --cov --doctest-modules src tests
+      env:
+        MPLBACKEND: agg
+    - name: Upload coverage to Codecov
+      if: env.coverage == 'true'
+      shell: bash -l {0}
+      run: |
+        conda activate test
+        coverage xml --fail-under=0
+        codecov
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

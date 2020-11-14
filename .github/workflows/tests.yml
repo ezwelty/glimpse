@@ -27,8 +27,8 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install -y poetry=1.1.3
-        poetry export -o requirements.txt
-        poetry export -o constraints.txt --dev
+        poetry export -o requirements.txt --without-hashes
+        poetry export -o constraints.txt --dev --without-hashes
     - name: Create test conda environment
       shell: bash -l {0}
       run: |

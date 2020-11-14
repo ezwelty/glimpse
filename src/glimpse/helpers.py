@@ -17,13 +17,6 @@ import progress.bar
 import scipy.ndimage
 import scipy.spatial
 
-# Print integer arrays without dtype (e.g. "int64" on platforms with int32 default)
-_array_repr = None
-"""
->>> def _array_repr(x):
-...   return re.sub(r',\\s*dtype=int(32|64)', '', np.array_repr(x))
->>> np.set_string_function(_array_repr)
-"""
 
 # ---- General ---- #
 
@@ -197,9 +190,12 @@ def sorted_nearest(x: Iterable, y: Iterable) -> np.ndarray:
         Index (in `x`) of nearest neighbor for each value in `y` (n, ).
 
     Examples:
-        >>> sorted_nearest([0, 1, 2], [-1, 0, 3, 1.1])
-        array([0, 0, 2, 1])
+        >>> x, y = np.array([0, 1, 3]), np.array([-1, 0, 3, 1.1])
+        >>> idx = sorted_nearest(x, y)
+        >>> x[idx]
+        array([0, 0, 3, 1])
     """
+    # NOTE: Returns int64 index on int32 platforms
     x, y = np.asarray(x), np.asarray(y)
     neighbors = _sorted_neighbors(x, y)
     nearest = np.argmin(np.abs(y.reshape(-1, 1) - x[neighbors]), axis=1)
@@ -443,9 +439,11 @@ def compute_cdf(
         >>> a = np.array([3, 2, 1, 2])
         >>> compute_cdf(a)
         (array([1, 2, 3]), array([0.25, 0.75, 1.  ]))
-        >>> compute_cdf(a, return_inverse=True)
-        (array([1, 2, 3]), array([0.25, 0.75, 1.  ]), array([2, 1, 0, 1]))
+        >>> values, _, inverse = compute_cdf(a, return_inverse=True)
+        >>> all(values[inverse] == a)
+        True
     """
+    # NOTE: inverse returned as int64 on int32 platforms
     results = np.unique(a, return_inverse=return_inverse, return_counts=True)
     # Normalize cumulative sum of counts by the number of cells
     quantiles = np.cumsum(results[-1]) / a.size
@@ -1409,8 +1407,9 @@ def rasterize_points(
         >>> cols = (0, 0, 1)
         >>> values = (1, 2, 3)
         >>> shape = (4, 3)
-        >>> rasterize_points(rows, cols, values, shape=shape)
-        (array([0, 4]), array([1.5, 3. ]))
+        >>> idx, means = rasterize_points(rows, cols, values, shape=shape)
+        >>> all(idx == [0, 4]) and all(means == [1.5, 3.0])
+        True
 
         Alternatively, an existing array can be passed instead of an array shape,
         to be modified in-place.
@@ -1434,6 +1433,7 @@ def rasterize_points(
                [nan, nan, nan],
                [nan, nan, nan]])
     """
+    # NOTE: Returns int64 flat indices on int32 platforms.
     values = np.asarray(values)
     if shape is None:
         shape = a.shape

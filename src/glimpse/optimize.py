@@ -35,13 +35,6 @@ copyreg.pickle(
     ),
 )
 
-# Print integer arrays without dtype (e.g. "int64" on platforms with int32 default)
-_array_repr = None
-"""
->>> def _array_repr(x):
-...   return re.sub(r',\\s*dtype=int(32|64)', '', np.array_repr(x))
->>> np.set_string_function(_array_repr)
-"""
 
 # ---- Controls ----
 
@@ -1039,8 +1032,8 @@ class Polynomial:
 
         >>> params, inliers = ransac(
         ...     model, n=2, max_error=0.2, min_inliers=2, iterations=100)
-        >>> inliers
-        array([0, 1, 2, 3, 4])
+        >>> set(inliers) == set([0, 1, 2, 3, 4])
+        True
         >>> params
         array([ 1.01659751, -0.03319502])
 
@@ -2178,6 +2171,7 @@ def ransac(
     if params is None:
         raise ValueError("Best fit does not meet acceptance criteria")
     # HACK: Recompute inlier index on best params
+    # NOTE: Returns int64 index on int32 platforms
     inliers = np.where(model.errors(params) <= max_error)[0]
     return params, inliers
 

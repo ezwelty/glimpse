@@ -60,7 +60,7 @@ jobs:
         conda activate test
         pip install --constraint=constraints.txt pytest-cov coverage[toml] codecov
     - name: Test
-      if: ! "!env.coverage"
+      if: "!env.coverage"
       shell: bash -l {0}
       run: |
         conda activate test

@@ -19,3 +19,7 @@ testcov:
 pushcov:
 	poetry run coverage xml --fail-under=0
 	poetry run codecov
+
+.PHONY: docs
+docs:
+	poetry run sphinx-build docs docs/build

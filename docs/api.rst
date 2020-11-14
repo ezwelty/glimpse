@@ -19,8 +19,8 @@ Classes
     Observer
     Tracker
     Tracks
-    CartesianMotionModel
-    CylindricalMotionModel
+    CartesianMotion
+    CylindricalMotion
 
 Modules
 -------

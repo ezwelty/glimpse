@@ -6,6 +6,7 @@ on:
     - 'docs/**'
     - '.gitignore'
     - '.pre-commit-config.yaml'
+    - 'Makefile'
 jobs:
   tests:
     strategy:

@@ -5,7 +5,7 @@ with open('README.md', 'r') as file:
 
 setuptools.setup(
     name='glimpse',
-    version='0.1.0b1',
+    version='0.1.0',
     description='Timelapse camera calibration and surface motion extraction',
     long_description=long_description,
     long_description_content_type='text/markdown',

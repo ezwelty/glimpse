@@ -65,12 +65,16 @@ jobs:
       run: |
         conda activate test
         pytest --doctest-modules src tests
+      env:
+        MPLBACKEND: agg
     - name: Test with coverage
       if: env.coverage
       shell: bash -l {0}
       run: |
         conda activate test
         pytest --cov --doctest-modules src tests
+      env:
+        MPLBACKEND: agg
     - name: Upload coverage to Codecov
       if: env.coverage
       shell: bash -l {0}

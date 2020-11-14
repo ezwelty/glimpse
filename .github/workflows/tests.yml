@@ -67,7 +67,7 @@ jobs:
       shell: bash -l {0}
       run: |
         conda activate test
-        pytest --doctest-modules src tests
+        pytest --cov --doctest-modules src tests
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.8'
       shell: bash -l {0}

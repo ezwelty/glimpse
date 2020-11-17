@@ -519,7 +519,7 @@ class Tracker:
         # Compute image box centered around particle mean
         xyz = self.particle_mean[None, 0:3]
         uv = self.observers[obs].xyz_to_uv(xyz, img=img).ravel()
-        box = self.observers[obs].tile_box(uv, size=tile_size)
+        box = self.observers[obs].tile_box(uv, size=tile_size, img=img)
         # Build template
         template = {
             "obs": obs,
@@ -566,7 +566,7 @@ class Tracker:
             box[:, 1] += np.hstack((-nrows, nrows)) * 0.5
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)
         # Check that box is within image bounds
-        if not all(self.observers[obs].grid.inbounds(box)):
+        if not all(self.observers[obs].images[img].inbounds(box)):
             warnings.warn(
                 "Particles too close to or beyond image bounds, skipping image"
             )

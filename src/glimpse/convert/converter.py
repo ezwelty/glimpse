@@ -47,7 +47,7 @@ class Converter:
         self.xcam = xcam
         self.cam = cam
         if isinstance(uv, int):
-            uv = self._grid(n=uv)
+            uv = self._grid(uv)
         self.uv = np.atleast_2d(uv)
 
     def _grid(self, n: int) -> np.ndarray:

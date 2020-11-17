@@ -18,6 +18,7 @@ def test_initializes_with_attributes_from_file() -> None:
     np.testing.assert_allclose(
         img.cam.f, img.exif.fmm * np.divide(img.exif.imgsz, img.exif.sensorsz)
     )
+    np.testing.assert_equal(img.size, img.cam.imgsz)
 
 
 def test_initializes_with_custom_attributes() -> None:
@@ -33,6 +34,7 @@ def test_initializes_with_custom_attributes() -> None:
         img.cam.f,
         img.exif.fmm * np.divide(args["cam"]["imgsz"], args["cam"]["sensorsz"]),
     )
+    np.testing.assert_equal(img.size, args["cam"]["imgsz"])
 
 
 def test_reads_data_from_file() -> None:

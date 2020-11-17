@@ -12,19 +12,19 @@ import glimpse
 
 def test_initializes_default_raster() -> None:
     """Initializes Raster with default coordinate system."""
-    Z = np.zeros((3, 3))
+    Z = np.zeros((4, 3))
     dem = glimpse.Raster(Z)
     assert all(dem.xlim == (0, Z.shape[1]))
     assert all(dem.ylim == (0, Z.shape[0]))
     assert all(dem.zlim == (Z.min(), Z.max()))
-    assert all(dem.n == Z.shape)
+    assert all(dem.size == Z.shape[::-1])
     assert all(dem.d == (1, 1))
     assert all(dem.min == (0, 0))
     assert all(dem.max == Z.shape[::-1])
     assert all(dem.x == (0.5, 1.5, 2.5))
-    assert all(dem.y == (0.5, 1.5, 2.5))
-    assert (dem.X == ((dem.x, dem.x, dem.x))).all()
-    assert (dem.Y.T == ((dem.y, dem.y, dem.y))).all()
+    assert all(dem.y == (0.5, 1.5, 2.5, 3.5))
+    assert (dem.X == [dem.x] * Z.shape[0]).all()
+    assert (dem.Y.T == [dem.y] * Z.shape[1]).all()
 
 
 def test_initializes_custom_raster() -> None:
@@ -62,7 +62,7 @@ def test_samples_raster(tol: float = 1e-13) -> None:
     dem = glimpse.Raster(Z, (-0.5, 3.5), (-0.5, 3.5))
     # Sample cells centers along diagonal
     xy_diagonal = np.column_stack((dem.x, dem.y))
-    dz_points = dem.sample(xy_diagonal) - dem.Z.diagonal()
+    dz_points = dem.sample(xy_diagonal) - dem.array.diagonal()
     assert all(dz_points < tol)
 
 
@@ -76,39 +76,39 @@ def test_crops_raster_with_ascending_y() -> None:
     # Equal bounds
     cdem = dem.copy()
     cdem.crop(xlim=(0, 3), ylim=(0, 3))
-    assert (dem.Z == cdem.Z).all()
+    assert (dem.array == cdem.array).all()
     # Crop bounds: x left edge
     cdem = dem.copy()
     cdem.crop(xlim=(0, 2))
     assert all(cdem.xlim == (0, 2))
-    assert (cdem.Z == Z[:, 0:2]).all()
+    assert (cdem.array == Z[:, 0:2]).all()
     # Crop bounds: x right edge (w/ overshoot)
     cdem = dem.copy()
     cdem.crop(xlim=(2, 4))
     assert all(cdem.xlim == (2, 3))
-    assert (cdem.Z == Z[:, 2:3]).all()
+    assert (cdem.array == Z[:, 2:3]).all()
     # Crop bounds: y top edge
     cdem = dem.copy()
     cdem.crop(ylim=(0, 2))
     assert all(cdem.ylim == (0, 2))
-    assert (cdem.Z == Z[0:2, :]).all()
+    assert (cdem.array == Z[0:2, :]).all()
     # Crop bounds: y bottom edge (w/ overshoot)
     cdem = dem.copy()
     cdem.crop(ylim=(2, 4))
     assert all(cdem.ylim == (2, 3))
-    assert (cdem.Z == Z[2:3, :]).all()
+    assert (cdem.array == Z[2:3, :]).all()
     # Crop bounds: x, y interior
     cdem = dem.copy()
     cdem.crop(xlim=(1, 2), ylim=(1, 2))
     assert all(cdem.xlim == (1, 2))
     assert all(cdem.ylim == (1, 2))
-    assert (cdem.Z == Z[1:2, 1:2]).all()
+    assert (cdem.array == Z[1:2, 1:2]).all()
     # Crop bounds: x, y interior (non-edges)
     cdem = dem.copy()
     cdem.crop(xlim=(1.5, 1.9), ylim=(1, 1.9))
     assert all(cdem.xlim == (1, 2))
     assert all(cdem.ylim == (1, 2))
-    assert (cdem.Z == Z[1:2, 1:2]).all()
+    assert (cdem.array == Z[1:2, 1:2]).all()
 
 
 def test_crops_raster_with_descending_y() -> None:
@@ -119,13 +119,13 @@ def test_crops_raster_with_descending_y() -> None:
     cdem = dem.copy()
     cdem.crop(xlim=(0, 3), ylim=(0, 3))
     assert all(dem.xlim == cdem.xlim)
-    assert (dem.Z == cdem.Z).all()
+    assert (dem.array == cdem.array).all()
     # Crop bounds: x, y interior (non-edges)
     cdem = dem.copy()
     cdem.crop(xlim=(1.5, 1.9), ylim=(1, 1.9))
     assert all(cdem.xlim == (2, 1))
     assert all(cdem.ylim == (2, 1))
-    assert (cdem.Z == Z[1:2, 1:2]).all()
+    assert (cdem.array == Z[1:2, 1:2]).all()
 
 
 def test_resizes_raster() -> None:
@@ -147,7 +147,7 @@ def test_resizes_raster() -> None:
 def test_writes_and_reads_raster() -> None:
     """Writes Raster to file and reads it back from file."""
     old = glimpse.Raster(
-        Z=np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
+        np.array([(0, 0, 0), (0, np.nan, 0), (1, 1, 1)], dtype=float),
         x=np.array((1, 2, 3), dtype=float),
         y=np.array((3, 2, 1), dtype=float),
         crs="+init=epsg:4326",
@@ -155,8 +155,8 @@ def test_writes_and_reads_raster() -> None:
     # Write to file and read
     tempfile = "temp.tif"
     old.write(tempfile)
-    new = glimpse.Raster.read(tempfile)
-    np.testing.assert_equal(old.Z, new.Z)
+    new = glimpse.Raster.open(tempfile)
+    np.testing.assert_equal(old.array, new.array)
     np.testing.assert_equal(old.x, new.x)
     np.testing.assert_equal(old.y, new.y)
     old_crs = osgeo.osr.SpatialReference()
@@ -175,8 +175,8 @@ def test_interpolates_rasters() -> None:
         os.path.join("tests", "000nan.tif"),
         os.path.join("tests", "11-1nan.tif"),
     ]
-    means = [glimpse.Raster.read(path) for path in mean_paths]
-    Zs = [mean.Z for mean in means]
+    means = [glimpse.Raster.open(path) for path in mean_paths]
+    Zs = [mean.array for mean in means]
     sigma_paths = mean_paths
     sigmas = means
     # Define tests
@@ -207,7 +207,7 @@ def test_interpolates_rasters() -> None:
         xi = x[0] + (x[1] - x[0]) * scale
         imean, isigma = interpolant(xi, extrapolate=extrapolate, return_sigma=True)
         mean = Zs[0] + (Zs[1] - Zs[0]) * scale
-        np.testing.assert_equal(imean.Z, mean)
+        np.testing.assert_equal(imean.array, mean)
         if isinstance(xi, datetime.datetime):
             # Test whether Raster.datetime set when appropriate
             assert imean.datetime == xi

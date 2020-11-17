@@ -31,6 +31,7 @@ class Image:
         exif (:class:`Exif`): Image metadata.
         datetime (datetime.datetime): Image capture date and time.
         array (numpy.ndarray): Cached image content.
+        size (numpy.ndarray): Image pixel size (:attr:`Camera.imgsz`).
 
     Example:
         By default, the base camera model (:class:`Camera`) and image capture time
@@ -110,6 +111,11 @@ class Image:
         self.datetime = datetime
         self.exif = exif
         self.array = None
+
+    @property
+    def size(self) -> np.ndarray:
+        """Image size in pixels (nx, ny)."""
+        return self.cam.imgsz
 
     @property
     def _path_imgsz(self) -> Tuple[int, int]:
@@ -262,6 +268,28 @@ class Image:
             True
         """
         self.cam.set_plot_limits()
+
+    def xyz_to_uv(self, xyz: np.ndarray, **kwargs: Any) -> np.ndarray:
+        """
+        Project world coordinates to image coordinates.
+
+        See :meth:`Camera.xyz_to_uv`.
+        """
+        return self.cam.xyz_to_uv(xyz, **kwargs)
+
+    def uv_to_xyz(
+        self, uv: np.ndarray, directions: bool = False, **kwargs: Any
+    ) -> np.ndarray:
+        """
+        Project world coordinates to image coordinates.
+
+        See :meth:`Camera.uv_to_xyz`. Returns absolute world coordinates by default.
+        """
+        return self.cam.uv_to_xyz(uv, directions=directions, **kwargs)
+
+    def inbounds(self, uv: np.ndarray) -> np.ndarray:
+        """Whether image coordinates are in (or on the edges of) the image."""
+        return self.cam.inframe(uv)
 
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """

@@ -12,6 +12,8 @@ from . import helpers
 from .camera import Camera
 from .exif import Exif
 
+Number = Union[int, float]
+
 
 class Image:
     """
@@ -268,6 +270,14 @@ class Image:
             True
         """
         self.cam.set_plot_limits()
+
+    def xyz_to_uv(self, xyz: np.ndarray, **kwargs: Any) -> np.ndarray:
+        """
+        Project world coordinates to image coordinates.
+
+        See :meth:`Camera.xyz_to_uv`.
+        """
+        return self.cam.xyz_to_uv(xyz, **kwargs)
 
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """

@@ -12,8 +12,6 @@ from . import helpers
 from .camera import Camera
 from .exif import Exif
 
-Number = Union[int, float]
-
 
 class Image:
     """
@@ -278,6 +276,16 @@ class Image:
         See :meth:`Camera.xyz_to_uv`.
         """
         return self.cam.xyz_to_uv(xyz, **kwargs)
+
+    def uv_to_xyz(
+        self, uv: np.ndarray, directions: bool = False, **kwargs: Any
+    ) -> np.ndarray:
+        """
+        Project world coordinates to image coordinates.
+
+        See :meth:`Camera.uv_to_xyz`. Returns absolute world coordinates by default.
+        """
+        return self.cam.uv_to_xyz(uv, directions=directions, **kwargs)
 
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """

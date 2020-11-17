@@ -155,7 +155,7 @@ def test_writes_and_reads_raster() -> None:
     # Write to file and read
     tempfile = "temp.tif"
     old.write(tempfile)
-    new = glimpse.Raster.read(tempfile)
+    new = glimpse.Raster.open(tempfile)
     np.testing.assert_equal(old.array, new.array)
     np.testing.assert_equal(old.x, new.x)
     np.testing.assert_equal(old.y, new.y)
@@ -175,7 +175,7 @@ def test_interpolates_rasters() -> None:
         os.path.join("tests", "000nan.tif"),
         os.path.join("tests", "11-1nan.tif"),
     ]
-    means = [glimpse.Raster.read(path) for path in mean_paths]
+    means = [glimpse.Raster.open(path) for path in mean_paths]
     Zs = [mean.array for mean in means]
     sigma_paths = mean_paths
     sigmas = means

@@ -1026,7 +1026,7 @@ class Camera:
         ntiles = len(tile_indices)
         # Initialize array
         nbands = (values.shape[2] if has_values else 0) + return_depth
-        # TODO: Use something faster that full
+        # TODO: Use something faster than full
         array = np.full((self.imgsz[1], self.imgsz[0], nbands), np.nan)
         # Define parallel process
         bar = helpers._progress_bar(max=ntiles)

@@ -635,12 +635,22 @@ class Raster(Grid):
         datetime: datetime.datetime = None,
         crs: Union[int, str] = None,
     ) -> None:
-        self.array = array
-        self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
-        self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
+        if array is None:
+            # HACK: Support initialization from file
+            self._array = None
+            self.xlim, self._x, self._X = x, None, None
+            self.ylim, self._y, self._Y = y, None, None
+        else:
+            self.array = array
+            self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
+            self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.datetime = datetime
         self.crs = crs
         # Placeholders
+        self.path = None
+        self._band = None
+        self._nan = None
+        self._gdal_kwargs = {}
         self._Zf = None
 
     def __eq__(self, other: "Raster") -> bool:
@@ -677,7 +687,7 @@ class Raster(Grid):
         return self.__class__(self.array[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
-    def read(
+    def open(
         cls,
         path: str,
         band: int = 1,
@@ -688,9 +698,9 @@ class Raster(Grid):
         nan: Any = None,
     ) -> "Raster":
         """
-        Read Raster from gdal raster file.
+        Open raster from file with GDAL.
 
-        See `gdal.Open()` for details.
+        See :func:`osgeo.gdal.Open` for details.
         If raster is float and has a defined no-data value,
         no-data values are replaced with `np.nan`.
         Otherwise, the raster data is unchanged.
@@ -721,9 +731,19 @@ class Raster(Grid):
         else:
             buf_xsize = win_xsize
             buf_ysize = win_ysize
-        band = raster.GetRasterBand(band)
-        Z = band.ReadAsArray(
-            # ReadAsArray() requires int, not numpy.int#
+        raster_band = raster.GetRasterBand(band)
+        dtype = osgeo.gdal_array.GDALTypeCodeToNumericTypeCode(raster_band.DataType)
+        is_float = np.issubdtype(dtype, np.floating)
+        default_nan = raster_band.GetNoDataValue()
+        if nan is None and (is_float and default_nan):
+            nan = default_nan
+        crs = raster.GetProjection()
+        obj = cls(None, x=xlim, y=ylim, datetime=datetime, crs=crs if crs else None)
+        obj.path = path
+        obj._band = band
+        obj._nan = nan
+        # ReadAsArray() requires int, not numpy.int#
+        obj._gdal_kwargs = dict(
             xoff=int(cols[0]),
             yoff=int(rows[0]),
             win_xsize=int(win_xsize),
@@ -731,31 +751,103 @@ class Raster(Grid):
             buf_xsize=int(buf_xsize),
             buf_ysize=int(buf_ysize),
         )
-        # FIXME: band.GetNoDataValue() not equal to read values due to rounding
-        default_nan = band.GetNoDataValue()
-        is_float = np.issubdtype(Z.dtype, np.floating)
-        if nan is not None or (is_float and default_nan):
-            if nan is None:
-                nan = default_nan
-            if not is_float:
-                Z = Z.astype(float)
-            Z[Z == nan] = np.nan
-        crs = raster.GetProjection()
-        return cls(Z, x=xlim, y=ylim, datetime=datetime, crs=crs if crs else None)
+        return obj
+
+    def read(self, box: Iterable[int] = None, cache: bool = True) -> "Raster":
+        """
+        Read raster data.
+
+        Arguments:
+            box: Crop extent in image coordinates (left, top, right, bottom).
+                If `None`, the full raster is returned.
+            cache: Whether to cache raster data.
+                If `True`, the region is extracted from the cached raster.
+                If `False`, the region is extracted directly from the file
+                (faster than reading the entire raster).
+                To clear the cache, set :attr:`array` to `None`.
+
+        Raises:
+            ValueError: Box must be integers.
+            ValueError: Box is out of bounds.
+
+        Returns:
+            Raster data.
+
+        Examples:
+            >>> raster = Raster.open('tests/000nan.tif')
+            >>> raster.read(box=[0, 0, 1, 1], cache=False)
+            array([[0.]], dtype=float32)
+            >>> raster.read()
+            array([[ 0.,  0.],
+                   [ 0., nan]], dtype=float32)
+            >>> raster.read(box=[0, 0, 1, 1])
+            array([[0.]], dtype=float32)
+            >>> raster = Raster.open('tests/000nan.tif', nan=0)
+            >>> raster.read()
+            array([[   nan,    nan],
+                   [   nan, -9999.]], dtype=float32)
+        """
+        if box is not None:
+            box = np.asarray(box).reshape(-1, 2)
+            if not np.issubdtype(box.dtype, np.integer):
+                raise ValueError("Box must be integers")
+            if not np.all(self.inbounds(self.uv_to_xyz(box)[:, 0:2])):
+                raise ValueError("Box is out of bounds")
+        new_array = False
+        # HACK: Avoid infinite recursion
+        array = self._array
+        if array is None:
+            new_array = True
+            raster = osgeo.gdal.Open(self.path, osgeo.gdal.GA_ReadOnly)
+            band = raster.GetRasterBand(self._band)
+            kwargs = self._gdal_kwargs
+            if box is not None:
+                # Convert box coordinates to source coordinates
+                scale = np.array((kwargs["win_xsize"], kwargs["win_ysize"])) / np.array(
+                    (kwargs["buf_xsize"], kwargs["buf_ysize"])
+                )
+                sbox = box * scale + np.array((kwargs["xoff"], kwargs["yoff"]))
+                kwargs = dict(
+                    xoff=int(sbox[0][0]),
+                    yoff=int(sbox[0][1]),
+                    win_xsize=int(sbox[1][0] - sbox[0][0]),
+                    win_ysize=int(sbox[1][1] - sbox[0][1]),
+                    buf_xsize=int(box[1][0] - box[0][0]),
+                    buf_ysize=int(box[1][1] - box[0][1]),
+                )
+            array = band.ReadAsArray(**kwargs)
+            if self._nan is not None:
+                if not np.issubdtype(array.dtype, np.floating):
+                    array = array.astype(float)
+                # FIXME: band.GetNoDataValue() not equal to read values due to rounding
+                array[array == self._nan] = np.nan
+            if cache:
+                self.array = array
+        if box is not None and (cache or not new_array):
+            # Caching and cropping: Subset cached array
+            array = array[box[0][1] : box[1][1], box[0][0] : box[1][0]]
+        return array
 
     @property
     def array(self) -> np.ndarray:
         """Raster values (ny, nx)."""
+        if self._array is None:
+            self._array = self.read()
         return self._array
 
     @array.setter
     def array(
         self, value: Union[Number, Iterable[Union[Number, Iterable[Number]]]]
     ) -> None:
-        value = np.atleast_2d(value)
+        if value is not None:
+            value = np.atleast_2d(value)
         if hasattr(self, "_array"):
             self._clear_cache(["Zf"])
-            if value.shape != self._array.shape:
+            if (
+                value is not None
+                and self._array is not None
+                and (value.shape != self._array.shape)
+            ):
                 self._clear_cache(["x", "X", "y", "Y"])
         self._array = value
 
@@ -770,6 +862,10 @@ class Raster(Grid):
     @property
     def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
+        if self.array is None:
+            # TODO: Avoid reopening file
+            raster = osgeo.gdal.Open(self.path, osgeo.gdal.GA_ReadOnly)
+            return raster.RasterXSize, raster.RasterYSize
         return np.array(self.array.shape[0:2][::-1]).astype(int)
 
     @property
@@ -1469,7 +1565,7 @@ class RasterInterpolant:
         if isinstance(obj, str):
             # Path to raster
             # Read from file
-            return Raster.read(obj, d=d, xlim=xlim, ylim=ylim, datetime=t)
+            return Raster.open(obj, d=d, xlim=xlim, ylim=ylim, datetime=t)
         raise ValueError("Cannot cast as Raster: " + str(type(obj)))
 
     def _read_mean(

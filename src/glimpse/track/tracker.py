@@ -566,7 +566,7 @@ class Tracker:
             box[:, 1] += np.hstack((-nrows, nrows)) * 0.5
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)
         # Check that box is within image bounds
-        if not all(self.observers[obs].grid.inbounds(box)):
+        if not all(self.observers[obs].images[img].inbounds(box)):
             warnings.warn(
                 "Particles too close to or beyond image bounds, skipping image"
             )

@@ -287,6 +287,10 @@ class Image:
         """
         return self.cam.uv_to_xyz(uv, directions=directions, **kwargs)
 
+    def inbounds(self, uv: np.ndarray) -> np.ndarray:
+        """Whether image coordinates are in (or on the edges of) the image."""
+        return self.cam.inframe(uv)
+
     def project(self, cam: Camera, method: str = "linear") -> np.ndarray:
         """
         Project image into another camera.

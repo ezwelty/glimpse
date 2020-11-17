@@ -58,7 +58,7 @@ class Observer:
         self.datetimes = np.array(datetimes)
         self.sigma = sigma
         self.cache = cache
-        size = self.images[0].cam.imgsz
+        size = self.images[0].size
         self._grid = Grid(size, x=(0, size[0]), y=(0, size[1]))
 
     def index(
@@ -107,7 +107,7 @@ class Observer:
         Returns:
             Image coordinates (n, [u, v]).
         """
-        return self.images[img].cam.xyz_to_uv(xyz, directions=directions)
+        return self.images[img].xyz_to_uv(xyz, directions=directions)
 
     def tile_box(self, uv: Iterable[float], size: Iterable[int] = (1, 1)) -> np.ndarray:
         """
@@ -259,7 +259,7 @@ class Observer:
                 If `None`, uses the full extent of the images.
         """
         if box is None:
-            box = (0, 0, self._grid.n[0], self._grid.n[1])
+            box = (0, 0, self._grid.size[0], self._grid.size[1])
         matplotlib.pyplot.xlim(box[0::2])
         matplotlib.pyplot.ylim(box[1::2])
 
@@ -312,10 +312,10 @@ class Observer:
                 :class:'matplotlib.animation.FuncAnimation'.
         """
         if uv is None:
-            uv = self.images[0].cam.imgsz / 2
+            uv = self.images[0].size / 2
         if frames is None:
             frames = np.arange(len(self.images))
-        dxyz = self.images[frames[0]].cam.uv_to_xyz(np.atleast_2d(uv))
+        xyz = self.images[frames[0]].uv_to_xyz(np.atleast_2d(uv))
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
@@ -338,14 +338,14 @@ class Observer:
 
         # Update plot
         def update_plot(i: int) -> list:
-            puv = self.images[i].cam.xyz_to_uv(dxyz, directions=True)[0]
+            puv = self.images[i].xyz_to_uv(xyz)[0]
             box = np.vstack([puv - halfsize, puv + halfsize]).ravel()
-            inbounds = self.images[i].cam.inframe(helpers.box_to_polygon(box))
+            inbounds = self.images[i].inbounds(helpers.box_to_polygon(box))
             if np.any(inbounds):
                 if not np.all(inbounds):
                     # Intersect box with image bounds
                     box = helpers.intersect_boxes(
-                        (box, np.concatenate(([0, 0], self.images[i].cam.imgsz)))
+                        (box, np.concatenate(([0, 0], self.images[i].size)))
                     )
                 box = self._grid.snap_xy(
                     helpers.unravel_box(box), centers=False, edges=True
@@ -402,7 +402,7 @@ class Observer:
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
-        track_uv: np.ndarray = self.images[frames[0]].cam.xyz_to_uv(xyz[0:1])
+        track_uv: np.ndarray = self.images[frames[0]].xyz_to_uv(xyz[0:1])
         uv = track_uv[-1]
         box = self.tile_box(uv, size=size)
         tile = self.extract_tile(img=frames[0], box=box)
@@ -436,7 +436,7 @@ class Observer:
         # Update plot
         def update_plot(i: int) -> list:
             j = np.where(frames == i)[0][0]
-            track_uv: np.ndarray = self.images[i].cam.xyz_to_uv(xyz[: j + 1])
+            track_uv: np.ndarray = self.images[i].xyz_to_uv(xyz[: j + 1])
             uv = track_uv[-1]
             box = self.tile_box(uv, size=size)
             tile = self.extract_tile(img=i, box=box)

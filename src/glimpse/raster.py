@@ -11,6 +11,7 @@ import numpy as np
 import osgeo.gdal
 import scipy.interpolate
 import scipy.ndimage
+import sharedmem
 from typing_extensions import Literal
 
 from . import helpers
@@ -778,14 +779,14 @@ class Raster(Grid):
             >>> raster.read(box=[0, 0, 1, 1], cache=False)
             array([[0.]], dtype=float32)
             >>> raster.read()
-            array([[ 0.,  0.],
-                   [ 0., nan]], dtype=float32)
+            anonymousmemmap([[ 0.,  0.],
+                             [ 0., nan]], dtype=float32)
             >>> raster.read(box=[0, 0, 1, 1])
-            array([[0.]], dtype=float32)
+            anonymousmemmap([[0.]], dtype=float32)
             >>> raster = Raster.open('tests/000nan.tif', nan=0)
             >>> raster.read()
-            array([[   nan,    nan],
-                   [   nan, -9999.]], dtype=float32)
+            anonymousmemmap([[   nan,    nan],
+                             [   nan, -9999.]], dtype=float32)
         """
         if box is not None:
             box = np.asarray(box).reshape(-1, 2)
@@ -822,6 +823,7 @@ class Raster(Grid):
                 # FIXME: band.GetNoDataValue() not equal to read values due to rounding
                 array[array == self._nan] = np.nan
             if cache:
+                array = sharedmem.copy(array)
                 self.array = array
         if box is not None and (cache or not new_array):
             # Caching and cropping: Subset cached array
@@ -862,11 +864,11 @@ class Raster(Grid):
     @property
     def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
-        if self.array is None:
+        if self._array is None:
             # TODO: Avoid reopening file
             raster = osgeo.gdal.Open(self.path, osgeo.gdal.GA_ReadOnly)
             return raster.RasterXSize, raster.RasterYSize
-        return np.array(self.array.shape[0:2][::-1]).astype(int)
+        return np.array(self._array.shape[0:2][::-1]).astype(int)
 
     @property
     def box3d(self) -> np.ndarray:

@@ -351,7 +351,9 @@ class Tracks:
                 track_uv[-1, 0], track_uv[-1, 1], color="red", marker="."
             )[0]
             # Image: Tile
-            box = self.tracker.observers[obs].tile_box(track_uv[-1], size=img_size)
+            box = self.tracker.observers[obs].tile_box(
+                track_uv[-1], size=img_size, img=img
+            )
             tile = self.tracker.observers[obs].extract_tile(img=img, box=box)
             image_tile = self.tracker.observers[obs].plot_tile(
                 tile=tile, box=box, axes=axes[1]
@@ -463,7 +465,7 @@ class Tracks:
                 image_mean.set_data(track_uv[-1, 0], track_uv[-1, 1])
                 # Image: Tile
                 box = self.tracker.observers[obs].tile_box(
-                    uv=track_uv[-1, :], size=img_size
+                    uv=track_uv[-1, :], size=img_size, img=img
                 )
                 tile = self.tracker.observers[obs].extract_tile(box=box, img=img)
                 image_tile.set_data(tile)

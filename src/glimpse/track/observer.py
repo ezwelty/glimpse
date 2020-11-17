@@ -10,16 +10,20 @@ import scipy.interpolate
 
 from .. import helpers
 from ..image import Image
-from ..raster import Grid
+from ..raster import Grid, Raster
 
 
 class Observer:
     """
-    A sequence of images taken from the same camera position.
+    A sequence of image observations.
+
+    Although images are not checked for consistency, for best results,
+    they should represent physical features at the same scale and from the same
+    view angle. For example, photographic images should be taken from the same
+    camera position and pixel focal length.
 
     Attributes:
-        images (List[Image]): Images with equal camera position (xyz),
-            focal length (f), image size (imgsz) and
+        images (List[Union[Image, Raster]]): Photographic or geographic images
             strictly increasing in time (datetime).
         datetimes (np.ndarray): Image capture times.
         sigma (float): Standard deviation of pixel values between images
@@ -30,13 +34,24 @@ class Observer:
         ValueError: Images are not two or greater.
         ValueError: Image is missing datetime.
         ValueError: Image datetimes are not stricly increasing.
-        ValueError: Camera image sizes are not equal.
-        ValueError: Camera positions are not equal.
-        ValueError: Camera focal lengths are not equal.
+
+    Example:
+        >>> images = [
+        ...     Raster.open('tests/000nan.tif', datetime=datetime.datetime(2020, 1, 1)),
+        ...     Raster.open('tests/11-1nan.tif', datetime=datetime.datetime(2020, 1, 2))
+        ... ]
+        >>> obs = Observer(images)
+        >>> obs.index(images[0]) == 0
+        True
+        >>> obs.index(images[1].datetime) == 1
+        True
     """
 
     def __init__(
-        self, images: Iterable[Image], sigma: float = 0.3, cache: bool = True
+        self,
+        images: Iterable[Union[Image, Raster]],
+        sigma: float = 0.3,
+        cache: bool = True,
     ) -> None:
         if len(images) < 2:
             raise ValueError("Images are not two or greater")
@@ -45,12 +60,6 @@ class Observer:
             if img.datetime is None:
                 raise ValueError(f"Image {i} is missing datetime")
             datetimes.append(img.datetime)
-            if np.linalg.norm(img.cam.xyz - images[0].cam.xyz) > 1e-3:
-                raise ValueError("Camera positions (xyz) are not equal")
-            if any(img.cam.f != images[0].cam.f):
-                raise ValueError("Camera focal lengths (f) are not equal")
-            if any(img.cam.imgsz != images[0].cam.imgsz):
-                raise ValueError("Camera image sizes (imgsz) are not equal")
         time_deltas = np.array([dt.total_seconds() for dt in np.diff(datetimes)])
         if any(time_deltas <= 0):
             raise ValueError("Image datetimes are not stricly increasing")
@@ -58,12 +67,10 @@ class Observer:
         self.datetimes = np.array(datetimes)
         self.sigma = sigma
         self.cache = cache
-        size = self.images[0].size
-        self._grid = Grid(size, x=(0, size[0]), y=(0, size[1]))
 
     def index(
         self,
-        value: Union[Image, datetime.datetime],
+        value: Union[Image, Raster, datetime.datetime],
         maxdt: datetime.timedelta = datetime.timedelta(0),
     ) -> int:
         """
@@ -109,18 +116,22 @@ class Observer:
         """
         return self.images[img].xyz_to_uv(xyz, directions=directions)
 
-    def tile_box(self, uv: Iterable[float], size: Iterable[int] = (1, 1)) -> np.ndarray:
+    def tile_box(
+        self, uv: Iterable[float], size: Iterable[int], img: int
+    ) -> np.ndarray:
         """
         Compute a grid-aligned box centered around a point.
 
         Arguments:
             uv: Desired box center in image coordinates (u, v).
             size: Size of the box in pixels (nx, ny).
+            img: Image integer index.
 
         Returns:
             Integer (pixel edge) boundaries (left, top, right, bottom).
         """
-        return self._grid.snap_box(uv, size, centers=False, edges=True).astype(int)
+        grid = Grid(self.images[img].size)
+        return grid.snap_box(uv, size, centers=False, edges=True).astype(int)
 
     def extract_tile(self, box: Iterable[int], img: int) -> np.ndarray:
         """
@@ -157,8 +168,8 @@ class Observer:
         if any(np.abs(duv) > 0.5):
             raise ValueError("Shift larger than 0.5 pixels")
         # Cell center coordinates (arbitrary origin)
-        cu = self._grid.x[0 : tile.shape[0]]  # x|cols
-        cv = self._grid.y[0 : tile.shape[1]]  # y|rows
+        cu = np.arange(0.5, tile.shape[1])  # x|cols
+        cv = np.arange(0.5, tile.shape[0])  # y|rows
         # Interpolate at shifted center coordinates
         tile = np.atleast_3d(tile)
         for i in range(tile.shape[2]):
@@ -250,19 +261,6 @@ class Observer:
             )
         )
 
-    def set_plot_limits(self, box: Iterable[float] = None) -> None:
-        """
-        Set limits of current plot axes.
-
-        Arguments:
-            box: Plot limits in image coordinates (left, top, right, bottom).
-                If `None`, uses the full extent of the images.
-        """
-        if box is None:
-            box = (0, 0, self._grid.size[0], self._grid.size[1])
-        matplotlib.pyplot.xlim(box[0::2])
-        matplotlib.pyplot.ylim(box[1::2])
-
     def cache_images(self, index: Union[Iterable[int], slice] = slice(None)) -> None:
         """
         Cache image data.
@@ -319,7 +317,7 @@ class Observer:
         halfsize = (size[0] * 0.5, size[1] * 0.5)
         # Initialize plot
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
-        box = self.tile_box(uv, size=size)
+        box = self.tile_box(uv, size=size, img=0)
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes) for axes in ax]
         pt = [axis.plot(uv[0], uv[1], marker=".", color="red")[0] for axis in ax]
@@ -347,7 +345,8 @@ class Observer:
                     box = helpers.intersect_boxes(
                         (box, np.concatenate(([0, 0], self.images[i].size)))
                     )
-                box = self._grid.snap_xy(
+                grid = Grid(self.images[i].size)
+                box = grid.snap_xy(
                     helpers.unravel_box(box), centers=False, edges=True
                 ).ravel()
                 tile = self.extract_tile(img=i, box=box)
@@ -404,7 +403,7 @@ class Observer:
         fig, ax = matplotlib.pyplot.subplots(ncols=2, **subplots)
         track_uv: np.ndarray = self.images[frames[0]].xyz_to_uv(xyz[0:1])
         uv = track_uv[-1]
-        box = self.tile_box(uv, size=size)
+        box = self.tile_box(uv, size=size, img=0)
         tile = self.extract_tile(img=frames[0], box=box)
         im = [self.plot_tile(tile=tile, box=box, axes=axes, zorder=1) for axes in ax]
         track = ax[1].plot(track_uv[:, 0], track_uv[:, 1], "y.-", alpha=0.5, zorder=2)[
@@ -438,7 +437,7 @@ class Observer:
             j = np.where(frames == i)[0][0]
             track_uv: np.ndarray = self.images[i].xyz_to_uv(xyz[: j + 1])
             uv = track_uv[-1]
-            box = self.tile_box(uv, size=size)
+            box = self.tile_box(uv, size=size, img=i)
             tile = self.extract_tile(img=i, box=box)
             im[1].set_array(tile)
             im[1].set_extent((box[0], box[2], box[3], box[1]))

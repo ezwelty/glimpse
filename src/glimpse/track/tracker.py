@@ -519,7 +519,7 @@ class Tracker:
         # Compute image box centered around particle mean
         xyz = self.particle_mean[None, 0:3]
         uv = self.observers[obs].xyz_to_uv(xyz, img=img).ravel()
-        box = self.observers[obs].tile_box(uv, size=tile_size)
+        box = self.observers[obs].tile_box(uv, size=tile_size, img=img)
         # Build template
         template = {
             "obs": obs,

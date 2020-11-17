@@ -58,8 +58,8 @@ class Observer:
         self.datetimes = np.array(datetimes)
         self.sigma = sigma
         self.cache = cache
-        n = self.images[0].cam.imgsz
-        self._grid = Grid(n=n, x=(0, n[0]), y=(0, n[1]))
+        size = self.images[0].cam.imgsz
+        self._grid = Grid(size, x=(0, size[0]), y=(0, size[1]))
 
     def index(
         self,

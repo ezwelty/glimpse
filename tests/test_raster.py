@@ -12,19 +12,19 @@ import glimpse
 
 def test_initializes_default_raster() -> None:
     """Initializes Raster with default coordinate system."""
-    Z = np.zeros((3, 3))
+    Z = np.zeros((4, 3))
     dem = glimpse.Raster(Z)
     assert all(dem.xlim == (0, Z.shape[1]))
     assert all(dem.ylim == (0, Z.shape[0]))
     assert all(dem.zlim == (Z.min(), Z.max()))
-    assert all(dem.n == Z.shape)
+    assert all(dem.size == Z.shape[::-1])
     assert all(dem.d == (1, 1))
     assert all(dem.min == (0, 0))
     assert all(dem.max == Z.shape[::-1])
     assert all(dem.x == (0.5, 1.5, 2.5))
-    assert all(dem.y == (0.5, 1.5, 2.5))
-    assert (dem.X == ((dem.x, dem.x, dem.x))).all()
-    assert (dem.Y.T == ((dem.y, dem.y, dem.y))).all()
+    assert all(dem.y == (0.5, 1.5, 2.5, 3.5))
+    assert (dem.X == [dem.x] * Z.shape[0]).all()
+    assert (dem.Y.T == [dem.y] * Z.shape[1]).all()
 
 
 def test_initializes_custom_raster() -> None:

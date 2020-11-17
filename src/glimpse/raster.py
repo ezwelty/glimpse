@@ -31,7 +31,7 @@ class Grid:
     Attributes:
         xlim (numpy.ndarray): Outer x limits of the grid (left, right).
         ylim (numpy.ndarray): Outer y limits of the grid (top, bottom).
-        n (numpy.ndarray): Grid dimensions (nx, ny).
+        size (numpy.ndarray): Grid dimensions (nx, ny).
         d (numpy.ndarray): Grid cell size (dx, dy).
         x (numpy.ndarray): Cell center x coordinates from left to right (nx,).
         y (numpy.ndarray): Cell center y coordinates from top to bottom (ny,).
@@ -45,12 +45,12 @@ class Grid:
 
     def __init__(
         self,
-        n: Tuple[int, int],
+        size: Tuple[int, int],
         x: Iterable[Union[Number, Iterable[Number]]] = None,
         y: Iterable[Union[Number, Iterable[Number]]] = None,
         crs: Union[int, str] = None,
     ) -> None:
-        self.n = n
+        self._size = size
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.crs = crs
@@ -66,12 +66,12 @@ class Grid:
     # ---- Properties ---- #
 
     @property
-    def n(self) -> np.ndarray:
+    def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
-        return self._n
+        return self._size
 
-    @n.setter
-    def n(self, value: Iterable[int]) -> None:
+    @size.setter
+    def size(self, value: Iterable[int]) -> None:
         value = np.atleast_1d(value)
         if value.shape == (1,):
             value = np.concatenate((value, value))
@@ -81,7 +81,7 @@ class Grid:
             raise ValueError("Grid dimensions must be integer")
         if (value <= 0).any():
             raise ValueError("Grid dimensions must be positive")
-        self._n = value
+        self._size = value
 
     @property
     def xlim(self) -> np.ndarray:
@@ -112,12 +112,12 @@ class Grid:
     @property
     def shape(self) -> Tuple[int, int]:
         """Array shape (ny, nx)."""  # noqa: D402
-        return self.n[1], self.n[0]
+        return self.size[1], self.size[0]
 
     @property
     def d(self) -> np.ndarray:
         """Grid cell size (dx, dy)."""
-        return np.hstack((np.diff(self.xlim), np.diff(self.ylim))) / self.n
+        return np.hstack((np.diff(self.xlim), np.diff(self.ylim))) / self.size
 
     @property
     def min(self) -> np.ndarray:
@@ -141,7 +141,7 @@ class Grid:
             value = np.linspace(
                 start=self.min[0] + abs(self.d[0]) / 2,
                 stop=self.max[0] - abs(self.d[0]) / 2,
-                num=self.n[0],
+                num=self.size[0],
             )
             if self.d[0] < 0:
                 self._x = value[::-1]
@@ -153,7 +153,7 @@ class Grid:
     def X(self) -> np.ndarray:
         """Cell center x coordinates for each cell (ny, nx)."""
         if self._X is None:
-            self._X = np.tile(self.x, (self.n[1], 1))
+            self._X = np.tile(self.x, (self.size[1], 1))
         return self._X
 
     @property
@@ -163,7 +163,7 @@ class Grid:
             value = np.linspace(
                 start=self.min[1] + abs(self.d[1]) / 2,
                 stop=self.max[1] - abs(self.d[1]) / 2,
-                num=self.n[1],
+                num=self.size[1],
             )
             if self.d[1] < 0:
                 self._y = value[::-1]
@@ -175,7 +175,7 @@ class Grid:
     def Y(self) -> np.ndarray:
         """Cell center y coordinates for each cell (ny, nx)."""
         if self._Y is None:
-            self._Y = np.tile(self.y, (self.n[0], 1)).T
+            self._Y = np.tile(self.y, (self.size[0], 1)).T
         return self._Y
 
     @classmethod
@@ -197,12 +197,12 @@ class Grid:
         """
         raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
-        n = (raster.RasterXSize, raster.RasterYSize)
+        size = (raster.RasterXSize, raster.RasterYSize)
         crs = raster.GetProjection()
         grid = cls(
-            n=n,
-            x=transform[0] + transform[1] * np.array([0, n[0]]),
-            y=transform[3] + transform[5] * np.array([0, n[1]]),
+            size,
+            x=transform[0] + transform[1] * np.array([0, size[0]]),
+            y=transform[3] + transform[5] * np.array([0, size[1]]),
             crs=crs if crs else None,
         )
         xlim, ylim, rows, cols = grid.crop_extent(xlim=xlim, ylim=ylim)
@@ -242,7 +242,7 @@ class Grid:
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Parse limits, coordinate vector, and coordinate matrix."""
         if value is None:
-            value = (0, self.n[dim])
+            value = (0, self.size[dim])
         if not isinstance(value, np.ndarray):
             value = np.atleast_1d(value)
         is_X = value.shape[0:2] == self.shape[0:2]
@@ -284,7 +284,7 @@ class Grid:
 
     def copy(self) -> "Grid":
         """Copy grid."""
-        return Grid(n=self.n.copy(), x=self.xlim.copy(), y=self.ylim.copy())
+        return Grid(self.size.copy(), x=self.xlim.copy(), y=self.ylim.copy())
 
     def resize(self, scale: Number) -> None:
         """
@@ -296,7 +296,7 @@ class Grid:
         Arguments:
             scale: Fraction of current size.
         """
-        self.n = np.floor(self.n * scale + 0.5).astype(int)
+        self.size = np.floor(self.size * scale + 0.5).astype(int)
 
     def shift(self, dx: Number = None, dy: Number = None) -> None:
         """
@@ -465,7 +465,7 @@ class Grid:
         Returns:
             Flat array indices (n, ).
         """
-        return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.n[::-1])
+        return np.ravel_multi_index((rowcol[:, 0], rowcol[:, 1]), self.size[::-1])
 
     def idx_to_rowcol(self, idx: np.ndarray) -> np.ndarray:
         """
@@ -477,7 +477,7 @@ class Grid:
         Returns:
             Array indices (n, [row, col]).
         """
-        return np.column_stack(np.unravel_index(idx, self.n[::-1]))
+        return np.column_stack(np.unravel_index(idx, self.size[::-1]))
 
     def crop_extent(
         self, xlim: Iterable[Number] = None, ylim: Iterable[Number] = None
@@ -547,11 +547,11 @@ class Grid:
         Returns:
             Pairs of slice objects (rows, cols) with which to subset grid.
         """
-        n = np.round(self.n / size).astype(int)
+        n = np.round(self.size / size).astype(int)
         # Ignore divide by zero
         with np.errstate(divide="ignore"):
-            xi = np.floor(np.arange(self.n[0]) / np.ceil(self.n[0] / n[0]))
-            yi = np.floor(np.arange(self.n[1]) / np.ceil(self.n[1] / n[1]))
+            xi = np.floor(np.arange(self.size[0]) / np.ceil(self.size[0] / n[0]))
+            yi = np.floor(np.arange(self.size[1]) / np.ceil(self.size[1] / n[1]))
         xends = np.insert(np.searchsorted(xi, np.unique(xi), side="right"), 0, 0)
         yends = np.insert(np.searchsorted(yi, np.unique(yi), side="right"), 0, 0)
         # HACK: Achieves overlap by increasing tile size
@@ -670,7 +670,7 @@ class Raster(Grid):
         raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         grid = Grid(
-            n=(raster.RasterXSize, raster.RasterYSize),
+            (raster.RasterXSize, raster.RasterYSize),
             x=transform[0] + transform[1] * np.array([0, raster.RasterXSize]),
             y=transform[3] + transform[5] * np.array([0, raster.RasterYSize]),
         )
@@ -730,7 +730,7 @@ class Raster(Grid):
         return np.array(value)
 
     @property
-    def n(self) -> np.ndarray:
+    def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
         return np.array(self.array.shape[0:2][::-1]).astype(int)
 
@@ -743,7 +743,7 @@ class Raster(Grid):
     @property
     def grid(self) -> "Grid":
         """Raster grid."""
-        return Grid(n=self.n, x=self.xlim, y=self.ylim)
+        return Grid(self.size, x=self.xlim, y=self.ylim)
 
     # ---- Properties (cached) ----
 
@@ -832,7 +832,7 @@ class Raster(Grid):
                     raise error
         has_fill = not bounds_error and fill_value is not None
         # Test which dimensions are non-singleton
-        dims = np.where(self.n > 1)[0]
+        dims = np.where(self.size > 1)[0]
         ndims = len(dims)
         # Take samples
         if grid:
@@ -1077,10 +1077,10 @@ class Raster(Grid):
         # Filled circle indices
         ind = []
         y = np.unique(xyi[:, 1])
-        yin = (y > -1) & (y < self.n[1])
+        yin = (y > -1) & (y < self.size[1])
         for yi in y[yin]:
             xb = xyi[xyi[:, 1] == yi, 0]
-            xi = range(max(xb.min(), 0), min(xb.max(), self.n[0] - 1) + 1)
+            xi = range(max(xb.min(), 0), min(xb.max(), self.size[0] - 1) + 1)
             if xi:
                 rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
                 ind.extend(self.rowcol_to_idx(rowcols))
@@ -1156,8 +1156,8 @@ class Raster(Grid):
         if not self.inbounds(np.atleast_2d(origin[0:2])):
             warnings.warn("Origin not in DEM - may lead to unexpected results")
         # Compute distance to all cell centers
-        dx = np.tile(self.x - origin[0], self.n[1])
-        dy = np.repeat(self.y - origin[1], self.n[0])
+        dx = np.tile(self.x - origin[0], self.size[1])
+        dy = np.repeat(self.y - origin[1], self.size[0])
         dz = self.array.ravel() - origin[2]
         dxy = dx ** 2 + dy ** 2  # wait to square root
         if correction is True:
@@ -1479,7 +1479,7 @@ class RasterInterpolant:
         if isinstance(obj, str):
             return Grid.read(obj)
         if isinstance(obj, numbers.Number):
-            return Grid(n=(1, 1), x=(-np.inf, np.inf), y=(-np.inf, np.inf))
+            return Grid((1, 1), x=(-np.inf, np.inf), y=(-np.inf, np.inf))
         raise ValueError("Cannot cast as Grid: " + str(type(obj)))
 
     def nearest(

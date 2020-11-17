@@ -31,6 +31,7 @@ class Image:
         exif (:class:`Exif`): Image metadata.
         datetime (datetime.datetime): Image capture date and time.
         array (numpy.ndarray): Cached image content.
+        size (numpy.ndarray): Image pixel size (:attr:`Camera.imgsz`).
 
     Example:
         By default, the base camera model (:class:`Camera`) and image capture time
@@ -110,6 +111,11 @@ class Image:
         self.datetime = datetime
         self.exif = exif
         self.array = None
+
+    @property
+    def size(self) -> np.ndarray:
+        """Image size in pixels (nx, ny)."""
+        return self.cam.imgsz
 
     @property
     def _path_imgsz(self) -> Tuple[int, int]:

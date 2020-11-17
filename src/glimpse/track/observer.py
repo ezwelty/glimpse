@@ -18,7 +18,6 @@ class Observer:
     A sequence of images taken from the same camera position.
 
     Attributes:
-        xyz (np.ndarray): Camera position in world coordinates.
         images (List[Image]): Images with equal camera position (xyz),
             focal length (f), image size (imgsz) and
             strictly increasing in time (datetime).
@@ -56,7 +55,6 @@ class Observer:
         if any(time_deltas <= 0):
             raise ValueError("Image datetimes are not stricly increasing")
         self.images = list(images)
-        self.xyz = images[0].cam.xyz
         self.datetimes = np.array(datetimes)
         self.sigma = sigma
         self.cache = cache

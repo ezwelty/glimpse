@@ -414,6 +414,44 @@ class Grid:
             xy_box, centers=centers, edges=edges, inbounds=inbounds
         ).flatten()
 
+    def xyz_to_uv(self, xyz: np.ndarray) -> np.ndarray:
+        """
+        Convert world coordinates to image coordinates.
+
+        Arguments:
+            xyz: World coordinates (n, [x, y, z]). Dimension z is optional and unused.
+
+        Returns:
+            Image coordinates (n, [u, v]).
+
+        Examples:
+            >>> grid = Grid((3, 2), x=(0, 30), y=(4, 0))
+            >>> xyz = [(5, 3), (15, 2), (30, 0)]
+            >>> uv = grid.xyz_to_uv(xyz)
+            >>> uv
+            array([[0.5, 0.5],
+                   [1.5, 1. ],
+                   [3. , 2. ]])
+            >>> (grid.uv_to_xyz(uv)[:, 0:2] == xyz).all()
+            True
+        """
+        xyz = np.asarray(xyz)
+        return (xyz[:, 0:2] - (self.xlim[0], self.ylim[0])) / self.d
+
+    def uv_to_xyz(self, uv: np.ndarray) -> np.ndarray:
+        """
+        Convert image coordinates to world coordinates.
+
+        Arguments:
+            uv: Image coordinates (n, [u, v]).
+
+        Returns:
+            World coordinates (n, [x, y, z]). Dimension z is NaN.
+        """
+        uv = np.asarray(uv)
+        xy = uv * self.d + (self.xlim[0], self.ylim[0])
+        return np.column_stack((xy, np.full((xy.shape[0], 1), np.nan)))
+
     def rowcol_to_xy(self, rowcol: np.ndarray) -> np.ndarray:
         """
         Convert array indices to map coordinates.

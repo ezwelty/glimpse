@@ -576,13 +576,13 @@ class Raster(Grid):
     since cell size cannot be determined from adjacent cell coordinates.
 
     Arguments:
-        Z: Raster values.
+        array: Raster values.
         x: Either `xlim`, `x`, or `X`.
         y: Either `ylim`, `y`, or `Y`.
         crs: Coordinate reference system as int (EPSG) or str (Proj4 or WKT).
 
     Attributes (in addition to those inherited from `Grid`):
-        Z (numpy.ndarray): Raster values.
+        array (numpy.ndarray): Raster values.
         zlim (numpy.ndarray): Limits of raster values (nanmin, nanmax).
         box3d (numpy.ndarray): Bounding box (xmin, ymin, zmin, xmax, ymax, zmax).
         datetime (datetime.datetime): Capture date and time.
@@ -591,13 +591,13 @@ class Raster(Grid):
 
     def __init__(
         self,
-        Z: Union[Number, Iterable[Union[Number, Iterable[Number]]]],
+        array: Union[Number, Iterable[Union[Number, Iterable[Number]]]],
         x: Iterable[Union[Number, Iterable[Number]]] = None,
         y: Iterable[Union[Number, Iterable[Number]]] = None,
         datetime: datetime.datetime = None,
         crs: Union[int, str] = None,
     ) -> None:
-        self.Z = Z
+        self.array = array
         self.xlim, self._x, self._X = self._parse_xy(x, dim=0)
         self.ylim, self._y, self._Y = self._parse_xy(y, dim=1)
         self.datetime = datetime
@@ -608,7 +608,7 @@ class Raster(Grid):
     def __eq__(self, other: "Raster") -> bool:
         """Consider equal if coordinate system and values are equal."""
         return (
-            np.array_equiv(self.Z, other.Z)
+            np.array_equiv(self.array, other.array)
             and (self.xlim == other.xlim).all()
             and (self.ylim == other.ylim).all()
         )
@@ -636,7 +636,7 @@ class Raster(Grid):
             x = x[[0, -1]] + (-0.5, 0.5) * d[0:1]
         if len(y) < 3:
             y = y[[0, -1]] + (-0.5, 0.5) * d[1:2]
-        return self.__class__(self.Z[i, j], x=x, y=y, datetime=self.datetime)
+        return self.__class__(self.array[i, j], x=x, y=y, datetime=self.datetime)
 
     @classmethod
     def read(
@@ -706,33 +706,33 @@ class Raster(Grid):
         return cls(Z, x=xlim, y=ylim, datetime=datetime, crs=crs if crs else None)
 
     @property
-    def Z(self) -> np.ndarray:
+    def array(self) -> np.ndarray:
         """Raster values (ny, nx)."""
-        return self._Z
+        return self._array
 
-    @Z.setter
-    def Z(
+    @array.setter
+    def array(
         self, value: Union[Number, Iterable[Union[Number, Iterable[Number]]]]
     ) -> None:
         value = np.atleast_2d(value)
-        if hasattr(self, "_Z"):
+        if hasattr(self, "_array"):
             self._clear_cache(["Zf"])
-            if value.shape != self._Z.shape:
+            if value.shape != self._array.shape:
                 self._clear_cache(["x", "X", "y", "Y"])
-        self._Z = value
+        self._array = value
 
     # ---- Properties (dependent) ----
 
     @property
     def zlim(self) -> np.ndarray:
         """Raster value limits (nanmin, nanmax)."""
-        value = [np.nanmin(self.Z), np.nanmax(self.Z)]
+        value = [np.nanmin(self.array), np.nanmax(self.array)]
         return np.array(value)
 
     @property
     def n(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
-        return np.array(self.Z.shape[0:2][::-1]).astype(int)
+        return np.array(self.array.shape[0:2][::-1]).astype(int)
 
     @property
     def box3d(self) -> np.ndarray:
@@ -754,7 +754,7 @@ class Raster(Grid):
             sign = np.sign(self.d).astype(int)
             self._Zf = scipy.interpolate.RegularGridInterpolator(
                 (self.x[:: sign[0]], self.y[:: sign[1]]),
-                self.Z.T[:: sign[0], :: sign[1]],
+                self.array.T[:: sign[0], :: sign[1]],
             )
         return self._Zf
 
@@ -763,7 +763,7 @@ class Raster(Grid):
     def copy(self) -> "Raster":
         """Copy raster."""
         return self.__class__(
-            self.Z.copy(),
+            self.array.copy(),
             x=self.xlim.copy(),
             y=self.ylim.copy(),
             datetime=copy.copy(self.datetime),
@@ -851,7 +851,7 @@ class Raster(Grid):
                 )
             else:
                 # 0D: Return constant
-                samples = np.full((len(xy[0]), len(xy[1])), self.Z.flat[0])
+                samples = np.full((len(xy[0]), len(xy[1])), self.array.flat[0])
             if has_fill:
                 # Fill out of bounds with value
                 samples[yout, :] = fill_value
@@ -880,9 +880,9 @@ class Raster(Grid):
             else:
                 # 0D: Return constant
                 if has_fill:
-                    samples[xyin] = self.Z.flat[0]
+                    samples[xyin] = self.array.flat[0]
                 else:
-                    samples = np.full(len(xy), self.Z.flat[0])
+                    samples = np.full(len(xy), self.array.flat[0])
         return samples
 
     def _sample_1d(
@@ -891,7 +891,7 @@ class Raster(Grid):
         """Sample raster values with singleton dimension."""
         xdir = np.sign(self.d[dim]).astype(int)
         xi = (self.y if dim else self.x)[::xdir]
-        zi = (self.Z[:, 0] if dim else self.Z[0])[::xdir]
+        zi = (self.array[:, 0] if dim else self.array[0])[::xdir]
         zxfun = scipy.interpolate.interp1d(
             x=xi, y=zi, kind=kind, assume_sorted=True, fill_value="extrapolate"
         )
@@ -909,13 +909,13 @@ class Raster(Grid):
         x, y = xy
         signs = np.sign(self.d).astype(int)
         # HACK: scipy.interpolate.RectBivariateSpline does not support NAN
-        Zmin = np.nanmin(self.Z)
-        is_nan = np.isnan(self.Z)
-        self.Z[is_nan] = helpers.numpy_dtype_minmax(self.Z.dtype)[0]
+        Zmin = np.nanmin(self.array)
+        is_nan = np.isnan(self.array)
+        self.array[is_nan] = helpers.numpy_dtype_minmax(self.array.dtype)[0]
         fun = scipy.interpolate.RectBivariateSpline(
             self.y[:: signs[1]],
             self.x[:: signs[0]],
-            self.Z[:: signs[1], :: signs[0]],
+            self.array[:: signs[1], :: signs[0]],
             bbox=(min(self.ylim), max(self.ylim), min(self.xlim), max(self.xlim)),
             kx=kx,
             ky=ky,
@@ -925,7 +925,7 @@ class Raster(Grid):
         ydir = 1 if (len(y) < 2) or y[1] > y[0] else -1
         samples = fun(y[::ydir], x[::xdir], grid=True)[::ydir, ::xdir]
         samples[samples < Zmin] = np.nan
-        self.Z[is_nan] = np.nan
+        self.array[is_nan] = np.nan
         return samples
 
     def resample(self, grid: Grid, **kwargs: Any) -> None:
@@ -937,7 +937,7 @@ class Raster(Grid):
             **kwargs: Optional arguments to :meth:`sample`.
         """
         array = self.sample((grid.x, grid.y), grid=True, **kwargs)
-        self.Z = array
+        self.array = array
         self.xlim, self.ylim = grid.xlim, grid.ylim
         self._x, self._y = grid.x, grid.y
 
@@ -948,11 +948,11 @@ class Raster(Grid):
         Plot.
 
         Arguments:
-            array: Values to plot. If `None`, :attr:`Z` is used.
+            array: Values to plot. If `None`, :attr:`array` is used.
             **kwargs: Optional arguments to :func:`matplotlib.pyplot.imshow`.
         """
         if array is None:
-            array = self.Z
+            array = self.array
         return matplotlib.pyplot.imshow(
             array,
             extent=(self.xlim[0], self.xlim[1], self.ylim[1], self.ylim[0]),
@@ -968,14 +968,14 @@ class Raster(Grid):
             values: Point values (n, ).
 
         Returns:
-            Image array (float) of mean values of the same dimensions as :attr:`Z`.
+            Image array (float) of mean values of the same dimensions as :attr:`array`.
             Pixels without points are `NaN`.
         """
         mask = self.inbounds(xy)
         rowcol = self.xy_to_rowcol(xy[mask, :], snap=True)
-        a = self.Z.copy()
-        helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=a)
-        return a
+        array = self.array.copy()
+        helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=array)
+        return array
 
     def rasterize_poygons(
         self,
@@ -1014,17 +1014,17 @@ class Raster(Grid):
         """
         if xlim is not None or ylim is not None:
             xlim, ylim, rows, cols = self.crop_extent(xlim=xlim, ylim=ylim)
-            self.Z = self.Z[rows[0] : rows[1] + 1, cols[0] : cols[1] + 1]
+            self.array = self.array[rows[0] : rows[1] + 1, cols[0] : cols[1] + 1]
             self.xlim = xlim
             self.ylim = ylim
         if zlim is not None:
-            outbounds = (self.Z < min(zlim)) | (self.Z > max(zlim))
+            outbounds = (self.array < min(zlim)) | (self.array > max(zlim))
             if np.count_nonzero(outbounds) and not issubclass(
-                self.Z.dtype.type, np.floating
+                self.array.dtype.type, np.floating
             ):
-                warnings.warn("Z cast to float to accommodate NaN")
-                self.Z = self.Z.astype(float)
-            self.Z[outbounds] = np.nan
+                warnings.warn("array cast to float to accommodate NaN")
+                self.array = self.array.astype(float)
+            self.array[outbounds] = np.nan
 
     def resize(self, scale: Number, order: int = 1) -> None:
         """
@@ -1035,7 +1035,7 @@ class Raster(Grid):
             order: Interpolation order
                 (0: nearest, 1: linear, 2: quadratic, 3: cubic, 4: quartic, 5: quintic).
         """
-        self.Z = scipy.ndimage.zoom(self.Z, zoom=float(scale), order=order)
+        self.array = scipy.ndimage.zoom(self.array, zoom=float(scale), order=order)
 
     def shift(self, dx: Number = None, dy: Number = None, dz: Number = None) -> None:
         """
@@ -1085,7 +1085,7 @@ class Raster(Grid):
                 rowcols = np.column_stack((np.repeat(yi, len(xi)), xi))
                 ind.extend(self.rowcol_to_idx(rowcols))
         # Apply
-        self.Z.flat[ind] = value
+        self.array.flat[ind] = value
 
     def hillshade(
         self, azimuth: Number = 315, altitude: Number = 45, **kwargs: Any
@@ -1102,7 +1102,7 @@ class Raster(Grid):
                 :meth:`matplotlib.colors.LightSource.hillshade`.
         """
         light = matplotlib.colors.LightSource(azdeg=azimuth, altdeg=altitude)
-        return light.hillshade(self.Z, dx=self.d[0], dy=self.d[1], **kwargs)
+        return light.hillshade(self.array, dx=self.d[0], dy=self.d[1], **kwargs)
 
     def fill_crevasses(
         self,
@@ -1118,14 +1118,14 @@ class Raster(Grid):
             maximum: Optional arguments to :func:`helpers.maximum_filter`.
             gaussian: Optional arguments to :func:`helpers.gaussian_filter`.
             mask: Boolean array of cells to include (True) or exclude (False),
-                or callable that generates the mask from :attr:`Z`.
+                or callable that generates the mask from :attr:`array`.
                 If `None`, all cells are included.
             fill: Whether to fill cells excluded by `mask` with interpolated values.
         """
         if callable(mask):
-            mask = mask(self.Z)
-        self.Z = helpers.gaussian_filter(
-            helpers.maximum_filter(self.Z, **maximum, mask=mask, fill=fill),
+            mask = mask(self.array)
+        self.array = helpers.gaussian_filter(
+            helpers.maximum_filter(self.array, **maximum, mask=mask, fill=fill),
             **gaussian,
             mask=mask,
             fill=fill
@@ -1143,7 +1143,7 @@ class Raster(Grid):
                 `True` for default arguments, or `None` or `False` to skip.
 
         Returns:
-            Boolean array of the same shape as :attr:`Z`
+            Boolean array of the same shape as :attr:`array`
             with visible cells tagged as `True`.
         """
         if not all(abs(self.d[0]) == abs(self.d)):
@@ -1158,7 +1158,7 @@ class Raster(Grid):
         # Compute distance to all cell centers
         dx = np.tile(self.x - origin[0], self.n[1])
         dy = np.repeat(self.y - origin[1], self.n[0])
-        dz = self.Z.ravel() - origin[2]
+        dz = self.array.ravel() - origin[2]
         dxy = dx ** 2 + dy ** 2  # wait to square root
         if correction is True:
             correction = {}
@@ -1183,7 +1183,7 @@ class Raster(Grid):
                 rings = np.array([0])
             else:
                 # Single co-located pixel, return all visible
-                return np.ones(self.Z.shape, dtype=bool)
+                return np.ones(self.array.shape, dtype=bool)
         rings = np.append(rings, len(ix))
         # Compute elevation ratio
         first_ring = ix[rings[0] : rings[1]]
@@ -1193,7 +1193,7 @@ class Raster(Grid):
         # Compute max number of points on most distant ring
         # N = int(np.ceil(2 * np.pi * dxy_cell_sorted[-1]))
         # Initialize result raster
-        vis = np.zeros(self.Z.size, dtype=bool)
+        vis = np.zeros(self.array.size, dtype=bool)
         # Loop through rings
         period = 2 * np.pi
         previous_headings = None
@@ -1227,7 +1227,7 @@ class Raster(Grid):
                 max_elevations_has_nan = any(np.isnan(relev))
             vis[rix] = is_visible
             previous_headings = rheading
-        return vis.reshape(self.Z.shape)
+        return vis.reshape(self.array.shape)
 
     def horizon(
         self,
@@ -1282,7 +1282,7 @@ class Raster(Grid):
                 rowcol = rowcol[1:]
             idx = self.rowcol_to_idx(rowcol)
             # TODO: Precompute Z.flatten()?
-            dz = self.Z.flat[idx] - origin[2]
+            dz = self.array.flat[idx] - origin[2]
             xy = self.rowcol_to_xy(rowcol)
             dxy = np.sum((xy - origin[0:2]) ** 2, axis=1)  # wait to take square root
             if isinstance(correction, dict):
@@ -1310,10 +1310,10 @@ class Raster(Grid):
         Return gradients in x and y.
 
         Returns:
-            array: Derivative of :attr:`Z` with respect to x.
-            array: Derivative of :attr:`Z` with respect to y.
+            array: Derivative of :attr:`array` with respect to x.
+            array: Derivative of :attr:`array` with respect to y.
         """
-        dzdy, dzdx = np.gradient(self.Z, self.d[1], self.d[0])
+        dzdy, dzdx = np.gradient(self.array, self.d[1], self.d[0])
         return dzdx, dzdy
 
     def write(self, path: str, **kwargs: Any) -> None:
@@ -1330,7 +1330,7 @@ class Raster(Grid):
             "crs": self.crs,
             **kwargs,
         }
-        helpers.write_raster(a=self.Z, path=path, **kwargs)
+        helpers.write_raster(a=self.array, path=path, **kwargs)
 
     def data_extent(self) -> Tuple[slice, slice]:
         """
@@ -1342,7 +1342,7 @@ class Raster(Grid):
         Raises:
             ValueError: No non-missing values present.
         """
-        data = ~np.isnan(self.Z)
+        data = ~np.isnan(self.array)
         data_row = np.any(data, axis=1)
         first_data_row = np.argmax(data_row)
         if first_data_row == 0 and not data_row[0]:
@@ -1363,7 +1363,7 @@ class Raster(Grid):
         y = self.y[slices[0]]
         self.xlim = x[[0, -1]] + (-0.5, 0.5) * self.d[0:1]
         self.ylim = y[[0, -1]] + (-0.5, 0.5) * self.d[1:2]
-        self.Z = self.Z[slices]
+        self.array = self.array[slices]
         self._x = x
         self._y = y
 
@@ -1521,17 +1521,17 @@ class RasterInterpolant:
         sigmas: Iterable[Raster] = None,
     ) -> Union[Raster, Tuple[Raster, Raster]]:
         """Interpolate between two rasters."""
-        dz = means[1].Z - means[0].Z
+        dz = means[1].array - means[0].array
         dx = x[1] - x[0]
         scale = (xi - x[0]) / dx
-        z = means[0].Z + dz * scale
+        z = means[0].array + dz * scale
         t = xi if isinstance(xi, datetime.datetime) else None
         raster = means[0].__class__(z, x=means[0].xlim, y=means[0].ylim, datetime=t)
         if sigmas is not None:
             # Bounds uncertainty: error propagation of z above
             # NOTE: 'a * (1 - scale) + b * scale' form underestimates uncertainty
-            z_var = sigmas[0].Z ** 2 + scale ** 2 * (
-                sigmas[0].Z ** 2 + sigmas[1].Z ** 2
+            z_var = sigmas[0].array ** 2 + scale ** 2 * (
+                sigmas[0].array ** 2 + sigmas[1].array ** 2
             )
             # Interpolation uncertainty: nearest bound at 99.7%
             nearest_dx = np.min(np.abs(np.subtract(xi, x)))

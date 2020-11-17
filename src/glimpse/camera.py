@@ -963,12 +963,12 @@ class Camera:
         Arguments:
             dem: :class:`Raster` object containing elevations.
             values: Values to use in building the image.
-                Must have the same 2-dimensional shape as `dem.Z` but can have
+                Must have the same 2-dimensional shape as `dem.array` but can have
                 multiple layers stacked along the 3rd dimension.
                 Cannot be `None` unless `return_depth` is True.
             mask: Boolean mask of cells of `dem` to include.
-                Must have the same shape as `dem.Z`.
-                If `None`, only NaN cells in `dem.Z` are skipped.
+                Must have the same shape as `dem.array`.
+                If `None`, only NaN cells in `dem.array` are skipped.
             tile_size: Target size of `dem` tiles.
             tile_overlap: Overlap between `dem` tiles.
             scale: Target `dem` cells per image pixel.
@@ -1017,7 +1017,7 @@ class Camera:
         elif not return_depth:
             raise ValueError("values cannot be missing if return_depth is False")
         if mask is None:
-            mask = ~np.isnan(dem.Z)
+            mask = ~np.isnan(dem.array)
         if mask.shape != dem.shape:
             raise ValueError("mask does not have the same 2-d shape as dem")
         parallel = helpers._parse_parallel(parallel)
@@ -1042,7 +1042,11 @@ class Camera:
             if has_values:
                 tile_values = values[ij]  # type: ignore
             # Scale tile based on distance from camera
-            mean_xyz = tile.xlim.mean(), tile.ylim.mean(), np.nanmean(tile.Z[tile_mask])
+            mean_xyz = (
+                tile.xlim.mean(),
+                tile.ylim.mean(),
+                np.nanmean(tile.array[tile_mask]),
+            )
             if np.isnan(mean_xyz[2]):
                 # No cells with elevations
                 return None
@@ -1062,7 +1066,7 @@ class Camera:
                 )
             # Project tile
             xyz = helpers.grid_to_points(
-                (tile.X[tile_mask], tile.Y[tile_mask], tile.Z[tile_mask])
+                (tile.X[tile_mask], tile.Y[tile_mask], tile.array[tile_mask])
             )
             if return_depth:
                 xy, depth = self._xyz_to_xy(xyz, return_depth=True)

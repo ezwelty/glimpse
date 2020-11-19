@@ -345,12 +345,10 @@ class Tracker:
                 # TODO: Use tblib instead (https://stackoverflow.com/a/26096355)
                 if errors:
                     raise e
-                elif parallel:
+                else:
                     error = e.__class__(
                         "".join(traceback.format_exception(*sys.exc_info()))
                     )
-                else:
-                    error = e
             results = [means, sigmas, error, all_warnings]
             if return_particles:
                 results += [particles, weights]

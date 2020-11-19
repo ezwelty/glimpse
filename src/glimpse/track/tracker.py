@@ -255,6 +255,11 @@ class Tracker:
         # Save original function arguments (stored in result)
         # NOTE: Must be called first
         params = locals().copy()
+        if len(motion_models) > 1:
+            time_unit = motion_models[0].time_unit
+            for model in motion_models:
+                if model.time_unit != time_unit:
+                    raise ValueError("Motion models must have equal time units")
         # Clear previous tracking state
         self.reset()
         # Enforce defaults
@@ -372,6 +377,7 @@ class Tracker:
             means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
         kwargs = {
+            "time_unit": time_unit,
             "datetimes": datetimes,
             "means": means,
             "particles": particles,

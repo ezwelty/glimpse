@@ -971,7 +971,7 @@ class Raster(Grid):
                     raise error
         has_fill = not bounds_error and fill_value is not None
         # Test which dimensions are non-singleton
-        dims = np.where(self.size > 1)[0]
+        dims = np.where(np.array(self.size) > 1)[0]
         ndims = len(dims)
         # Take samples
         if grid:

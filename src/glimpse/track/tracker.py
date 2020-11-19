@@ -141,9 +141,10 @@ class Tracker:
             log_likelihoods.append(motion_model.compute_log_likelihoods(self.particles))
         # Remove empty elements
         log_likelihoods = [x for x in log_likelihoods if x is not None]
-        likelihoods = np.exp(-sum(log_likelihoods))
-        self.weights = likelihoods + 1e-300
-        self.weights *= 1 / self.weights.sum()
+        if log_likelihoods:
+            likelihoods = np.exp(-sum(log_likelihoods))
+            self.weights = likelihoods + 1e-300
+            self.weights *= 1 / self.weights.sum()
 
     def resample_particles(
         self, method: Literal["systematic", "stratified", "residual", "choice"] = None

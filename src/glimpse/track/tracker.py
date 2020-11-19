@@ -292,8 +292,8 @@ class Tracker:
             else:
                 sigmas = np.full((ntimes, 6), np.nan)
             if return_particles:
-                particles = np.full((ntimes, ntracks, 6), np.nan)
-                weights = np.full((ntimes, ntracks), np.nan)
+                particles = np.full((ntimes, motion_model.n, 6), np.nan)
+                weights = np.full((ntimes, motion_model.n), np.nan)
             error = None
             all_warnings = None
             try:

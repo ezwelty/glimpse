@@ -562,12 +562,12 @@ class Tracker:
         # Enlarge box to ensure SSE has cols, rows (ky + 1, kx + 1) for interpolation
         ky = self.interpolation.get("ky", 3)
         ncols = ky - (np.diff(box[:, 0]) - size[0])
-        if ncols > 0:
+        if np.all(ncols > 0):
             # Widen box in 2nd ('y') dimension (x|cols)
             box[:, 0] += np.hstack((-ncols, ncols)) * 0.5
         kx = self.interpolation.get("kx", 3)
         nrows = kx - (np.diff(box[:, 1]) - size[1])
-        if nrows > 0:
+        if np.all(nrows > 0):
             # Widen box in 1st ('x') dimension (y|rows)
             box[:, 1] += np.hstack((-nrows, nrows)) * 0.5
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)

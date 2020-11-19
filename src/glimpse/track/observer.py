@@ -99,22 +99,18 @@ class Observer:
             return index
         return self.images.index(value)
 
-    def xyz_to_uv(
-        self, xyz: np.ndarray, img: int, directions: bool = False
-    ) -> np.ndarray:
+    def xyz_to_uv(self, xyz: np.ndarray, img: int) -> np.ndarray:
         """
         Project world coordinates to image coordinates.
 
         Arguments:
             xyz: World coordinates (n, [x, y, z]).
             img: Index of image to project into.
-            directions: Whether `xyz` are absolute coordinates (`False`)
-                or ray directions (`True`).
 
         Returns:
             Image coordinates (n, [u, v]).
         """
-        return self.images[img].xyz_to_uv(xyz, directions=directions)
+        return self.images[img].xyz_to_uv(xyz)
 
     def tile_box(
         self, uv: Iterable[float], size: Iterable[int], img: int

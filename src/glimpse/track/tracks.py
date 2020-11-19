@@ -376,14 +376,14 @@ class Tracks:
         )
         if particles:
             # Compute quiver scales
-            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+            scales = np.diff(self.datetimes[frames]) / self.time_unit
             # Compute weight limits for static colormap
             clim = (
                 self.weights[track, :].ravel().min(),
                 self.weights[track, :].ravel().max(),
             )
         elif self.tracker is not None:
-            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+            scales = np.diff(self.datetimes[frames]) / self.time_unit
         else:
             scales = np.ones(len(frames) - 1)
         # Discard last frame

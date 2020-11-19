@@ -869,9 +869,8 @@ class Raster(Grid):
     def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
         if self._array is None:
-            # TODO: Avoid reopening file
-            raster = osgeo.gdal.Open(self.path, osgeo.gdal.GA_ReadOnly)
-            return raster.RasterXSize, raster.RasterYSize
+            # HACK: Use gdal.ReadAsArray arguments
+            return self._gdal_kwargs["buf_xsize"], self._gdal_kwargs["buf_ysize"]
         return np.array(self._array.shape[0:2][::-1]).astype(int)
 
     @property

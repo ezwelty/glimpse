@@ -23,6 +23,14 @@ Some useful things one can do with `glimpse`:
   - `glimpse.Tracker`: Compute the velocity (and corresponding uncertainty) of points visible in photographs taken from one or more positions.
   - `glimpse.Raster.viewshed()`: Compute the viewshed of a position, for tracking point selection.
 
+### References
+
+The methods implemented in this software are described in great detail across two PhD dissertations.
+
+- Douglas Brinkerhoff (2017): *[Bayesian methods in glaciology](http://hdl.handle.net/11122/8113)*, chapter 4. Uses particle filtering to extract velocities from one year of oblique time-lapse images of Columbia Glacier, Alaska.
+
+- Ethan Welty (2018): *[High-precision photogrammetry for glaciology](https://doi.org/10.13140/RG.2.2.20751.64164)*. Calibrates and stabilizes time-lapse cameras using landscape cues, extends the particle filter from 2-d to 3-d (to account for uncertain surface elevations), and uses the methods on thirteen years of oblique time-lapse images of Columbia Glacier, Alaska.
+
 # Installation
 
 `glimpse` has not yet been released for distribution, but can still be installed with [`pip`](https://pip.pypa.io/en/stable/installing) from the source code on GitHub:

@@ -309,7 +309,7 @@ class Grid:
         """
         self._shift_xy(dx=dx, dy=dy)
 
-    def inbounds(
+    def inbounds_xy(
         self, xy: Union[np.ndarray, Tuple[np.ndarray, np.ndarray]], grid: bool = False
     ) -> np.ndarray:
         """
@@ -334,6 +334,10 @@ class Grid:
                 (xy[1] >= self.min[1]) & (xy[1] <= self.max[1]),
             )
         return np.all((xy >= self.min[0:2]) & (xy <= self.max[0:2]), axis=1)
+
+    def inbounds(self, uv: np.ndarray) -> np.ndarray:
+        """Test whether image coordinates are in (or on) bounds."""
+        return np.all((uv >= 0) & (uv <= self.size), axis=1)
 
     def snap_xy(
         self,
@@ -409,7 +413,7 @@ class Grid:
         """
         halfsize = np.multiply(size, 0.5)
         xy_box = np.vstack((xy - halfsize, xy + halfsize))
-        if any(~self.inbounds(xy_box)):
+        if any(~self.inbounds_xy(xy_box)):
             raise IndexError("Box extends beyond grid bounds")
         return self.snap_xy(
             xy_box, centers=centers, edges=edges, inbounds=inbounds
@@ -792,7 +796,7 @@ class Raster(Grid):
             box = np.asarray(box).reshape(-1, 2)
             if not np.issubdtype(box.dtype, np.integer):
                 raise ValueError("Box must be integers")
-            if not np.all(self.inbounds(self.uv_to_xyz(box)[:, 0:2])):
+            if not np.all(self.inbounds(box)):
                 raise ValueError("Box is out of bounds")
         new_array = False
         # HACK: Avoid infinite recursion
@@ -865,9 +869,8 @@ class Raster(Grid):
     def size(self) -> np.ndarray:
         """Grid dimensions (nx, ny)."""
         if self._array is None:
-            # TODO: Avoid reopening file
-            raster = osgeo.gdal.Open(self.path, osgeo.gdal.GA_ReadOnly)
-            return raster.RasterXSize, raster.RasterYSize
+            # HACK: Use gdal.ReadAsArray arguments
+            return self._gdal_kwargs["buf_xsize"], self._gdal_kwargs["buf_ysize"]
         return np.array(self._array.shape[0:2][::-1]).astype(int)
 
     @property
@@ -957,7 +960,7 @@ class Raster(Grid):
         methods = ("nearest", "linear", "quadratic", "cubic", "quartic", "quintic")
         if bounds_error or fill_value is not None:
             # Test whether sampling points are in bounds
-            xyin = self.inbounds(xy, grid=grid)
+            xyin = self.inbounds_xy(xy, grid=grid)
             if grid:
                 xout, yout = ~xyin[0], ~xyin[1]
                 if bounds_error and (xout.any() or yout.any()):
@@ -968,7 +971,7 @@ class Raster(Grid):
                     raise error
         has_fill = not bounds_error and fill_value is not None
         # Test which dimensions are non-singleton
-        dims = np.where(self.size > 1)[0]
+        dims = np.where(np.array(self.size) > 1)[0]
         ndims = len(dims)
         # Take samples
         if grid:
@@ -1107,7 +1110,7 @@ class Raster(Grid):
             Image array (float) of mean values of the same dimensions as :attr:`array`.
             Pixels without points are `NaN`.
         """
-        mask = self.inbounds(xy)
+        mask = self.inbounds_xy(xy)
         rowcol = self.xy_to_rowcol(xy[mask, :], snap=True)
         array = self.array.copy()
         helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=array)
@@ -1289,7 +1292,7 @@ class Raster(Grid):
                 + " - "
                 + "may lead to unexpected results"
             )
-        if not self.inbounds(np.atleast_2d(origin[0:2])):
+        if not self.inbounds_xy(np.atleast_2d(origin[0:2])):
             warnings.warn("Origin not in DEM - may lead to unexpected results")
         # Compute distance to all cell centers
         dx = np.tile(self.x - origin[0], self.size[1])
@@ -1399,7 +1402,7 @@ class Raster(Grid):
         box = np.concatenate((self.min[0:2], self.max[0:2]))
         xy_starts, xy_ends = helpers.intersect_rays_box(origin[0:2], directions, box)
         # Convert spatial coordinates (x, y) to grid indices (xi, yi)
-        inside = self.inbounds(np.atleast_2d(origin[0:2]))[0]
+        inside = self.inbounds_xy(np.atleast_2d(origin[0:2]))[0]
         if inside:
             # If inside, start at origin
             rowcol = self.xy_to_rowcol(np.atleast_2d(origin[0:2]), snap=True)

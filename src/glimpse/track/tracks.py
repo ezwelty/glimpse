@@ -29,6 +29,7 @@ class Tracks:
 
     Attributes:
         datetimes (numpy.ndarray): Datetimes at which particles were estimated (m,).
+        time_unit (datetime.timedelta): Time unit for the velocities.
         means (numpy.ndarray): Mean particle positions and velocities
             (x, y, z, vx, vy, vz) (n, m, 6).
         sigmas (numpy.ndarray): Standard deviations of particle positions and velocities
@@ -51,6 +52,7 @@ class Tracks:
     def __init__(
         self,
         datetimes: Iterable[datetime.datetime],
+        time_unit: datetime.timedelta,
         means: Iterable[Iterable[Iterable[Number]]],
         sigmas: Iterable[Iterable[Iterable[Number]]] = None,
         covariances: Iterable[Iterable[Iterable[Iterable[Number]]]] = None,
@@ -63,6 +65,7 @@ class Tracks:
         warnings: Iterable = None,
     ) -> None:
         self.datetimes = np.asarray(datetimes)
+        self.time_unit = time_unit
         if np.iterable(means) and not isinstance(means, np.ndarray):
             means = np.stack(means, axis=0)
         self.means = means
@@ -373,14 +376,14 @@ class Tracks:
         )
         if particles:
             # Compute quiver scales
-            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+            scales = np.diff(self.datetimes[frames]) / self.time_unit
             # Compute weight limits for static colormap
             clim = (
                 self.weights[track, :].ravel().min(),
                 self.weights[track, :].ravel().max(),
             )
         elif self.tracker is not None:
-            scales = np.diff(self.datetimes[frames]) / self.tracker.time_unit
+            scales = np.diff(self.datetimes[frames]) / self.time_unit
         else:
             scales = np.ones(len(frames) - 1)
         # Discard last frame

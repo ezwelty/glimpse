@@ -141,9 +141,10 @@ class Tracker:
             log_likelihoods.append(motion_model.compute_log_likelihoods(self.particles))
         # Remove empty elements
         log_likelihoods = [x for x in log_likelihoods if x is not None]
-        likelihoods = np.exp(-sum(log_likelihoods))
-        self.weights = likelihoods + 1e-300
-        self.weights *= 1 / self.weights.sum()
+        if log_likelihoods:
+            likelihoods = np.exp(-sum(log_likelihoods))
+            self.weights = likelihoods + 1e-300
+            self.weights *= 1 / self.weights.sum()
 
     def resample_particles(
         self, method: Literal["systematic", "stratified", "residual", "choice"] = None
@@ -255,6 +256,10 @@ class Tracker:
         # Save original function arguments (stored in result)
         # NOTE: Must be called first
         params = locals().copy()
+        time_unit = motion_models[0].time_unit
+        for model in motion_models[1:]:
+            if model.time_unit != time_unit:
+                raise ValueError("Motion models must have equal time units")
         # Clear previous tracking state
         self.reset()
         # Enforce defaults
@@ -288,8 +293,8 @@ class Tracker:
             else:
                 sigmas = np.full((ntimes, 6), np.nan)
             if return_particles:
-                particles = np.full((ntimes, ntracks, 6), np.nan)
-                weights = np.full((ntimes, ntracks), np.nan)
+                particles = np.full((ntimes, motion_model.n, 6), np.nan)
+                weights = np.full((ntimes, motion_model.n), np.nan)
             error = None
             all_warnings = None
             try:
@@ -341,12 +346,10 @@ class Tracker:
                 # TODO: Use tblib instead (https://stackoverflow.com/a/26096355)
                 if errors:
                     raise e
-                elif parallel:
+                else:
                     error = e.__class__(
                         "".join(traceback.format_exception(*sys.exc_info()))
                     )
-                else:
-                    error = e
             results = [means, sigmas, error, all_warnings]
             if return_particles:
                 results += [particles, weights]
@@ -372,6 +375,7 @@ class Tracker:
             means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
         kwargs = {
+            "time_unit": time_unit,
             "datetimes": datetimes,
             "means": means,
             "particles": particles,
@@ -556,12 +560,12 @@ class Tracker:
         # Enlarge box to ensure SSE has cols, rows (ky + 1, kx + 1) for interpolation
         ky = self.interpolation.get("ky", 3)
         ncols = ky - (np.diff(box[:, 0]) - size[0])
-        if ncols > 0:
+        if np.all(ncols > 0):
             # Widen box in 2nd ('y') dimension (x|cols)
             box[:, 0] += np.hstack((-ncols, ncols)) * 0.5
         kx = self.interpolation.get("kx", 3)
         nrows = kx - (np.diff(box[:, 1]) - size[1])
-        if nrows > 0:
+        if np.all(nrows > 0):
             # Widen box in 1st ('x') dimension (y|rows)
             box[:, 1] += np.hstack((-nrows, nrows)) * 0.5
         box = np.vstack((np.floor(box[0, :]), np.ceil(box[1, :]))).astype(int)

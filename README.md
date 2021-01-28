@@ -162,3 +162,12 @@ You can run the pre-commit hooks anytime using:
 ```bash
 pre-commit run --all-files
 ```
+
+Other useful commands are listed in the [`Makefile`](Makefile).
+For example, to build the documentation:
+
+```bash
+make docs
+# Equivalent to:
+# poetry run sphinx-build docs docs/build
+```

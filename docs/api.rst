@@ -21,6 +21,11 @@ Classes
     Tracks
     CartesianMotion
     CylindricalMotion
+    convert.Converter
+    convert.cameras.Agisoft
+    convert.cameras.Matlab
+    convert.cameras.OpenCV
+    convert.cameras.PhotoModeler
 
 Modules
 -------
@@ -29,6 +34,6 @@ Modules
     :toctree: autosummary
     :template: module.rst
 
-    optimize
-    convert
     helpers
+    optimize
+    svg

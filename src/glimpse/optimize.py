@@ -2467,7 +2467,7 @@ class KeypointMatcher:
         clear_matches: bool = False,
         parallel: Union[bool, int] = False,
         weights: bool = False,
-        as_type: Literal[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
+        mtype: Literal[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
         filter: dict = None,
         **kwargs: Any
     ) -> None:
@@ -2500,7 +2500,7 @@ class KeypointMatcher:
                 defaults to :func:`os.cpu_count`.
             weights: Whether to include weights in :class:`Matches`,
                 computed as the inverse of the maximum descriptor-distance ratio.
-            as_type: Subclass of :class:`Matches` to return instead.
+            mtype: Subclass of :class:`Matches` to return instead.
             filter: Arguments to :meth:`Matches.filter`.
                 If truthy, :class:`Matches` are filtered before being saved
                 to :attr:`matches`. Ignored if `clear_matches=True`.
@@ -2563,8 +2563,8 @@ class KeypointMatcher:
                         match = helpers.read_pickle(outfile)
                         # Point matches to existing Camera objects
                         match.cams = (imgA.cam, imgB.cam)
-                        if as_type:
-                            match = match.as_type(as_type)
+                        if mtype is not None:
+                            match = match.to_type(mtype)
                         matches.append(match)
                 else:
                     result = match_keypoints(
@@ -2578,8 +2578,8 @@ class KeypointMatcher:
                     if path is not None:
                         helpers.write_pickle(match, outfile)
                     if not clear_matches:
-                        if as_type:
-                            match = match.as_type(as_type)
+                        if mtype is not None:
+                            match = match.to_type(mtype)
                         matches.append(match)
             if clear_keypoints:
                 self.keypoints[i] = None
@@ -2649,7 +2649,7 @@ class KeypointMatcher:
         parallel = helpers._parse_parallel(parallel)
 
         def process(i: int, m: Matches) -> Tuple[int, Matches]:
-            m = m.as_type(mtype)
+            m = m.to_type(mtype)
             if clear_uvs and mtype in (RotationMatchesXY, RotationMatchesXYZ):
                 m.uvs = None
             return i, m

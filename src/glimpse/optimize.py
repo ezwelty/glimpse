@@ -3,7 +3,6 @@ import copyreg
 import datetime
 import os
 import sys
-import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import cv2
@@ -2014,11 +2013,7 @@ class ObserverCameras:
     ) -> None:
         self.observer = observer
         if anchors is None:
-            is_anchor = [img.anchor for img in self.observer.images]
-            anchors = np.where(is_anchor)[0]
-            if len(anchors) == 0:
-                warnings.warn("No anchor image found, using first image as anchor")
-                anchors = (0,)
+            anchors = [0]
         self.anchors = anchors
         self.matches = matches
         self.matcher = KeypointMatcher(images=self.observer.images)

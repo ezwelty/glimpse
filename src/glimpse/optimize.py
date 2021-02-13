@@ -2058,9 +2058,8 @@ class ObserverCameras:
             Optimization result.
         """
         # Ensure matches are in COO sparse matrix format
-        if isinstance(self.matches, scipy.sparse.coo.coo_matrix):
-            matches = self.matches
-        else:
+        matches = self.matches
+        if not isinstance(matches, scipy.sparse.coo.coo_matrix):
             matches = scipy.sparse.coo_matrix(matches)
 
         # Define combined objective, jacobian function

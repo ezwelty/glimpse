@@ -2508,6 +2508,8 @@ class KeypointMatcher:
         basenames = self._prepare_image_basenames()
         if self.keypoints is None:
             self.keypoints = [None] * len(self.images)
+        if any(k is None for k in self.keypoints) and not keypoints_path:
+            raise ValueError("Missing keypoints so keypoints_path is required")
         # Match images
         n = len(self.images)
         if maxdt is None and seq is None:
@@ -2531,53 +2533,6 @@ class KeypointMatcher:
             for i, m in enumerate(matching_images):
                 matching_images[i] = m[np.isin(m, imgs)]
 
-        # Define parallel process
-        def process(i: int, js: np.ndarray) -> Optional[List[Matches]]:
-            if len(js) > 0:
-                print("Matching", i, "->", ", ".join(js.astype(str)))
-            matches = []
-            imgA = self.images[i]
-            if self.keypoints[i] is None and keypoints_path:
-                self.keypoints[i] = helpers.read_pickle(
-                    os.path.join(keypoints_path, basenames[i] + ".pkl")
-                )
-            for j in js:
-                imgB = self.images[j]
-                if self.keypoints[j] is None and keypoints_path:
-                    self.keypoints[j] = helpers.read_pickle(
-                        os.path.join(keypoints_path, basenames[j] + ".pkl")
-                    )
-                if path:
-                    outfile = os.path.join(
-                        path, basenames[i] + "-" + basenames[j] + ".pkl"
-                    )
-                if path and not overwrite and os.path.exists(outfile):
-                    if not clear_matches:
-                        match = helpers.read_pickle(outfile)
-                        # Point matches to existing Camera objects
-                        match.cams = (imgA.cam, imgB.cam)
-                        if mtype is not None:
-                            match = match.to_type(mtype)
-                        matches.append(match)
-                else:
-                    result = match_keypoints(
-                        self.keypoints[i], self.keypoints[j], **kwargs
-                    )
-                    match = Matches(
-                        cams=(imgA.cam, imgB.cam),
-                        uvs=result[0:2],
-                        weights=(1 / result[2]) if weights else None,
-                    )
-                    if path is not None:
-                        helpers.write_pickle(match, outfile)
-                    if not clear_matches:
-                        if mtype is not None:
-                            match = match.to_type(mtype)
-                        matches.append(match)
-            if clear_keypoints:
-                self.keypoints[i] = None
-            return None if clear_matches else matches
-
         def reduce(matches: Iterable[Matches]) -> Iterable[Matches]:
             if filter:
                 for match in matches:
@@ -2587,6 +2542,55 @@ class KeypointMatcher:
 
         # Run process in parallel
         with config.backend(np=parallel) as pool:
+
+            # Define parallel process
+            def process(i: int, js: np.ndarray) -> Optional[List[Matches]]:
+                if len(js) > 0:
+                    print("Matching", i, "->", ", ".join(js.astype(str)))
+                matches = []
+                imgA = self.images[i]
+                if self.keypoints[i] is None:
+                    self.keypoints[i] = helpers.read_pickle(
+                        os.path.join(keypoints_path, basenames[i] + ".pkl")
+                    )
+                for j in js:
+                    imgB = self.images[j]
+                    if self.keypoints[j] is None:
+                        self.keypoints[j] = helpers.read_pickle(
+                            os.path.join(keypoints_path, basenames[j] + ".pkl")
+                        )
+                    if path:
+                        outfile = os.path.join(
+                            path, basenames[i] + "-" + basenames[j] + ".pkl"
+                        )
+                    if path and not overwrite and os.path.exists(outfile):
+                        if not clear_matches:
+                            match = helpers.read_pickle(outfile)
+                            # Point matches to existing Camera objects
+                            match.cams = (imgA.cam, imgB.cam)
+                            if mtype is not None:
+                                match = match.to_type(mtype)
+                            matches.append(match)
+                    else:
+                        result = match_keypoints(
+                            self.keypoints[i], self.keypoints[j], **kwargs
+                        )
+                        match = Matches(
+                            cams=(imgA.cam, imgB.cam),
+                            uvs=result[0:2],
+                            weights=(1 / result[2]) if weights else None,
+                        )
+                        if path is not None:
+                            helpers.write_pickle(match, outfile)
+                        if not clear_matches:
+                            if mtype is not None:
+                                match = match.to_type(mtype)
+                            matches.append(match)
+                if clear_keypoints:
+                    with pool.ordered:
+                        self.keypoints[i] = None
+                return None if clear_matches else matches
+
             matches = pool.map(
                 func=process,
                 reduce=reduce,

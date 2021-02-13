@@ -702,9 +702,9 @@ class Matches:
             ValueError: Filtering on weights failed since these are missing.
         """
         selected = np.ones(self.size, dtype=bool)
+        if (n_best or min_weight) and self.weights is None:
+            raise ValueError("Filtering on weights failed since these are missing")
         if self.weights is not None:
-            if n_best or min_weight:
-                raise ValueError("Filtering on weights failed since these are missing")
             if n_best:
                 order = np.argsort(-self.weights)
                 selected[order[min(n_best, self.size) :]] = False
@@ -864,7 +864,7 @@ class RotationMatchesXY(RotationMatches):
         weights: np.ndarray = None,
     ) -> None:
         self.cams = cams
-        self.uvs, self.xyz = self._initialize_uvs_xys(uvs, xys)
+        self.uvs, self.xys = self._initialize_uvs_xys(uvs, xys)
         self.xys = self._build_xys()
         self.weights = weights
         self._test_matches()
@@ -2408,7 +2408,7 @@ class KeypointMatcher:
         basenames = self._prepare_image_basenames()
         # Enforce defaults
         if masks is None or isinstance(masks, np.ndarray):
-            masks = (masks,) * len(self.images)
+            masks = [masks] * len(self.images)
         parallel = helpers._parse_parallel(parallel)
         if not self.keypoints:
             self.keypoints = [None] * len(self.images)
@@ -2500,7 +2500,7 @@ class KeypointMatcher:
             **kwargs: Optional arguments to :func:`match_keypoints`.
         """
         if clear_matches and not path:
-            raise ValueError("path is required when clear_keypoints is True")
+            raise ValueError("path is required when clear_matches is True")
         if path and os.path.isfile(path):
             raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)

@@ -854,8 +854,6 @@ class RotationMatchesXY(RotationMatches):
         ValueError: Both :attr:`uvs` and :attr:`xys` are missing.
     """
 
-    _EXCLUDED = ["plot"]
-
     def __init__(
         self,
         cams: Iterable[Camera],
@@ -870,18 +868,6 @@ class RotationMatchesXY(RotationMatches):
         self._test_matches()
         # [imgsz, f, c, k, p]
         self._internals = [cam.to_array()[6:] for cam in self.cams]
-
-    def __dir__(self) -> list:
-        """Exclude certain inherited attributes from class attributes."""
-        return sorted(
-            (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
-        )
-
-    def __getattribute__(self, name: str) -> Any:
-        """Raise error if excluded attributes are accessed."""
-        if name in self._EXCLUDED:
-            raise AttributeError(name)
-        return super(RotationMatches, self).__getattribute__(name)
 
     @property
     def size(self) -> int:
@@ -927,6 +913,10 @@ class RotationMatchesXY(RotationMatches):
             return mtype(cams=self.cams, uvs=uvs, weights=self.weights)
         return mtype(cams=self.cams, uvs=self.uvs, xys=self.xys, weights=self.weights)
 
+    def plot() -> None:
+        """Plotting is not available for RotationMatchesXY and RotationMatchesXYZ."""
+        raise NotImplementedError()
+
 
 class RotationMatchesXYZ(RotationMatchesXY):
     """
@@ -951,8 +941,6 @@ class RotationMatchesXYZ(RotationMatchesXY):
         ValueError: Both :attr:`uvs` and :attr:`xys` are missing.
     """
 
-    _EXCLUDED = ["observed"]
-
     def __init__(
         self,
         cams: Iterable[Camera],
@@ -961,18 +949,6 @@ class RotationMatchesXYZ(RotationMatchesXY):
         weights: np.ndarray = None,
     ) -> None:
         super().__init__(cams=cams, uvs=uvs, xys=xys, weights=weights)
-
-    def __dir__(self) -> list:
-        """Exclude certain inherited attributes from class attributes."""
-        return sorted(
-            (set(dir(self.__class__)) | set(self.__dict__.keys())) - set(self._EXCLUDED)
-        )
-
-    def __getattribute__(self, name: str) -> Any:
-        """Raise error if excluded attributes are accessed."""
-        if name in self._EXCLUDED:
-            raise AttributeError(name)
-        return super(RotationMatchesXY, self).__getattribute__(name)
 
     def predicted(self, cam: CamIndex = 0, index: Index = slice(None)) -> np.ndarray:
         """
@@ -991,6 +967,10 @@ class RotationMatchesXYZ(RotationMatchesXY):
         # Normalize world coordinates to unit sphere
         dxyz *= 1 / np.linalg.norm(dxyz, ord=2, axis=1, keepdims=True)
         return dxyz
+
+    def observed() -> None:
+        """Observed image coordinates are not available for RotationMatchesXYZ."""
+        raise NotImplementedError()
 
 
 # ---- Models ----

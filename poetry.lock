@@ -572,7 +572,7 @@ numpy = ">=1.13.3"
 
 [[package]]
 name = "sharedmem"
-version = "0.3.7"
+version = "0.3.8"
 description = "Dispatch your trivially parallizable jobs with sharedmem."
 category = "main"
 optional = false
@@ -1165,7 +1165,7 @@ scipy = [
     {file = "scipy-1.4.1.tar.gz", hash = "sha256:dee1bbf3a6c8f73b6b218cb28eed8dd13347ea2f87d572ce19b289d6fd3fbc59"},
 ]
 sharedmem = [
-    {file = "sharedmem-0.3.7.tar.gz", hash = "sha256:483e414b8c5d03093a02baf548449f1d8426a88855556fa42102bba82b86b2a8"},
+    {file = "sharedmem-0.3.8.tar.gz", hash = "sha256:c654a6bee2e2f35c82e6cc8b6c262fcabd378f5ba11ac9ef71530f8dabb8e2f7"},
 ]
 six = [
     {file = "six-1.15.0-py2.py3-none-any.whl", hash = "sha256:8b74bedcbbbaca38ff6d7491d76f2b06b3592611af620f8426e82dddb04a5ced"},

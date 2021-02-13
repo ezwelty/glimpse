@@ -11,7 +11,6 @@ import matplotlib.pyplot
 import numpy as np
 import scipy.optimize
 import scipy.sparse
-from typing_extensions import Literal
 
 from . import config, helpers
 from .camera import Camera
@@ -2462,7 +2461,7 @@ class KeypointMatcher:
         clear_matches: bool = False,
         parallel: Union[bool, int] = False,
         weights: bool = False,
-        mtype: Literal[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
+        mtype: Union[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
         filter: dict = None,
         **kwargs: Any
     ) -> None:
@@ -2625,7 +2624,7 @@ class KeypointMatcher:
 
     def convert_matches(
         self,
-        mtype: Literal[Matches, RotationMatches, RotationMatchesXY, RotationMatchesXYZ],
+        mtype: Union[Matches, RotationMatches, RotationMatchesXY, RotationMatchesXYZ],
         clear_uvs: bool = False,
         parallel: Union[bool, int] = False,
     ) -> None:

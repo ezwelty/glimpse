@@ -2670,8 +2670,8 @@ class KeypointMatcher:
 
         Arguments:
             clear_weights: Whether to clear :attr:`Matches.weights` after filtering.
-            parallel: Number of image keypoints to detect in parallel (int),
-                or whether to detect in parallel (bool). If `True`,
+            parallel: Number of matches to filter in parallel (int),
+                or whether to filter in parallel (bool). If `True`,
                 defaults to :func:`os.cpu_count`.
             **kwargs: Arguments to :meth:`Matches.filter`.
         """

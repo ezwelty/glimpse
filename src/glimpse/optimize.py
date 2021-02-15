@@ -2567,7 +2567,10 @@ class KeypointMatcher:
                                 match = match.to_type(mtype)
                             matches.append(match)
                 if clear_keypoints:
-                    with pool.ordered:
+                    if parallel:
+                        with pool.ordered:
+                            self.keypoints[i] = None
+                    else:
                         self.keypoints[i] = None
                 return None if clear_matches else matches
 

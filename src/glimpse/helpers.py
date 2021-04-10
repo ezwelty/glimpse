@@ -1513,7 +1513,9 @@ def polygons_to_mask(
         return ds
 
     driver = osgeo.gdal.GetDriverByName("MEM")
-    raster = driver.Create("", size[0], size[1], 1, osgeo.gdal.GDT_Byte)
+    raster = driver.Create(
+        "", numpy_to_native(size[0]), numpy_to_native(size[1]), 1, osgeo.gdal.GDT_Byte
+    )
     raster.SetGeoTransform((0, 1, 0, 0, 0, 1))
     ds = _gdal_polygon_datasource(polygons)
     layer = ds.GetLayer(0)

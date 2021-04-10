@@ -1129,6 +1129,14 @@ class Raster(Grid):
         Arguments:
             polygons: Polygons [[(xi, yi), ...], ...].
             holes: Polygons representing holes in `polygons` [[(xi, yi), ...], ...].
+
+        Examples:
+            >>> raster = Raster([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+            >>> polygons = [[(0.1, 0.1), (1.9, 0.1), (1.9, 1.9), (0.1, 1.9)]]
+            >>> raster.rasterize_polygons(polygons)
+            array([[ True,  True, False],
+                   [ True,  True, False],
+                   [False, False, False]])
         """
         size = self.shape[0:2][::-1]
         polygons = [self.xy_to_rowcol(xy)[:, ::-1] + 0.5 for xy in polygons]

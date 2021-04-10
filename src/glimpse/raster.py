@@ -1116,7 +1116,7 @@ class Raster(Grid):
         helpers.rasterize_points(rowcol[:, 0], rowcol[:, 1], values[mask], a=array)
         return array
 
-    def rasterize_poygons(
+    def rasterize_polygons(
         self,
         polygons: Iterable[Iterable[Iterable[Number]]],
         holes: Iterable[Iterable[Iterable[Number]]] = None,

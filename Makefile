@@ -1,25 +1,21 @@
-.PHONY: format
+.PHONY: format lint test testcov pushcov docs
+
 format:
 	poetry run isort src tests
 	poetry run black src tests
 
-.PHONY: lint
 lint:
 	poetry run flake8 src tests
 
-.PHONY: test
 test:
 	poetry run pytest --doctest-modules src tests
 
-.PHONY: testcov
 testcov:
 	poetry run pytest --cov --doctest-modules src tests
 
-.PHONY: pushcov
 pushcov:
 	poetry run coverage xml --fail-under=0
 	poetry run codecov
 
-.PHONY: docs
 docs:
 	poetry run sphinx-build docs docs/build

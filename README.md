@@ -2,7 +2,7 @@
 ==========================================
 
 [![tests](https://github.com/ezwelty/glimpse/workflows/tests/badge.svg)](https://github.com/ezwelty/glimpse/actions?workflow=tests)
-[![coverage](https://codecov.io/gh/ezwelty/glimpse/branch/master/graph/badge.svg)](https://codecov.io/gh/ezwelty/glimpse)
+[![coverage](https://codecov.io/gh/ezwelty/glimpse/branch/main/graph/badge.svg)](https://codecov.io/gh/ezwelty/glimpse)
 [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 `glimpse` is a Python package built for quickly and precisely analyzing time-lapse photographs of glaciers.
@@ -36,7 +36,7 @@ The methods implemented in this software are described in great detail across tw
 `glimpse` has not yet been released for distribution, but can still be installed with [`pip`](https://pip.pypa.io/en/stable/installing) from the source code on GitHub:
 
 ```bash
-pip install https://github.com/ezwelty/glimpse/tarball/master#egg=glimpse
+pip install https://github.com/ezwelty/glimpse/tarball/main#egg=glimpse
 ```
 
 The installation requires [`gdal`](https://gdal.org/download.html#binaries) to be present. The simplest way of achieving this is to install `gdal` into a [`conda`](https://docs.conda.io/projects/conda/en/latest/user-guide/install) environment:
@@ -44,7 +44,7 @@ The installation requires [`gdal`](https://gdal.org/download.html#binaries) to b
 ```bash
 conda create -n glimpse -c conda-forge python=3.8 gdal=3.2.0
 conda activate glimpse
-pip install https://github.com/ezwelty/glimpse/tarball/master#egg=glimpse
+pip install https://github.com/ezwelty/glimpse/tarball/main#egg=glimpse
 ```
 
 # Contribute

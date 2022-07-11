@@ -16,6 +16,7 @@ __pycache__/
 .mypy_cache/
 *.egg-info
 .nox
+.hypothesis
 
 # Pyenv
 .python-version

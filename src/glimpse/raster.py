@@ -1192,11 +1192,21 @@ class Raster(Grid):
             dx: Shift in x.
             dy: Shift in y.
             dz: Shift in z.
+
+        Examples:
+            >>> raster = Raster([[0]], x=(0, 1), y=(0, 1))
+            >>> raster.xlim, raster.ylim
+            (array([0, 1]), array([0, 1]))
+            >>> raster.shift(1, -2, 3)
+            >>> raster.xlim, raster.ylim
+            (array([1, 2]), array([-2, -1]))
+            >>> raster.array
+            array([[3]])
         """
         self._shift_xy(dx=dx, dy=dy)
         if dz is not None:
             # Prevent reset of cached interpolants
-            self._Z += dz
+            self._array += dz
         if self._Zf is not None:
             # Shift cached interpolants
             if dx is not None:

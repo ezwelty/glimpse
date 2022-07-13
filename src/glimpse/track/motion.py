@@ -106,11 +106,8 @@ class CartesianMotion(Motion):
     Attributes:
         xy (iterable): Mean initial position (x, y).
         time_unit (timedelta): Length of time unit for temporal arguments.
-        dem: Elevation of the surface on which to track points (scalar or Raster).
-        dem_sigma: Elevation standard deviations, as either a scalar or
-             a Raster with the same extent as `dem`. `0` means particles stay
-             glued to `dem` and weighing particles by their offset from `dem`
-             is disabled.
+        dem: Elevation of the surface on which to track points.
+        dem_sigma: Elevation standard deviations.
         n (int): Number of particles.
         xy_sigma (iterable): Standard deviation of initial position (x, y).
         vxyz (iterable): Mean initial velocity (dx/dt, dy/dt, dz/dt).
@@ -126,7 +123,7 @@ class CartesianMotion(Motion):
         xy: Iterable[Number],
         time_unit: datetime.timedelta,
         dem: Union[Number, Raster],
-        dem_sigma: Union[Number, Raster] = 0,
+        dem_sigma: Union[Number, Raster] = None,
         n: int = 1000,
         xy_sigma: Iterable[Number] = (0, 0),
         vxyz: Iterable[Number] = (0, 0, 0),
@@ -136,7 +133,11 @@ class CartesianMotion(Motion):
     ) -> None:
         self.xy = xy
         self.time_unit = time_unit
+        if not isinstance(dem, Raster):
+            dem = Raster(dem)
         self.dem = dem
+        if not isinstance(dem_sigma, Raster):
+            dem_sigma = Raster(dem_sigma)
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma
@@ -154,9 +155,10 @@ class CartesianMotion(Motion):
         """
         particles = np.zeros((self.n, 6), dtype=float)
         particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
-        z = self._sample_dem(particles[:, 0:2])
-        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
-        particles[:, 2] = z + z_sigma * np.random.randn(self.n)
+        particles[:, 2] = self.dem.sample(particles[:, 0:2])
+        if self.dem_sigma is not None:
+            z_sigma = self.dem_sigma.sample(particles[:, 0:2])
+            particles[:, 2] += z_sigma * np.random.randn(self.n)
         particles[:, 3:6] = self.vxyz + self.vxyz_sigma * np.random.randn(self.n, 3)
         return particles
 
@@ -189,10 +191,10 @@ class CartesianMotion(Motion):
         Returns:
             Particle log likelihoods, or `None`.
         """
-        if self.dem_sigma == 0:
+        if self.dem_sigma is None:
             return None
-        z = self._sample_dem(particles[:, 0:2])
-        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
+        z = self.dem.sample(particles[:, 0:2])
+        z_sigma = self.dem_sigma.sample(particles[:, 0:2])
         # Avoid division by zero
         nonzero = np.nonzero(z_sigma)[0]
         log_likelihoods = np.zeros(len(particles), dtype=float)
@@ -200,19 +202,6 @@ class CartesianMotion(Motion):
             1 / (2 * z_sigma[nonzero] ** 2) * (z[nonzero] - particles[nonzero, 2]) ** 2
         )
         return log_likelihoods
-
-    def _sample_dem(self, xy: np.ndarray, sigma: bool = False) -> np.ndarray:
-        """
-        Sample DEM at points.
-
-        Arguments:
-            xy: Points [(x, y), ...].
-            sigma: Whether to sample :attr:`dem_sigma` (True) or :attr:`dem` (False).
-        """
-        obj = self.dem_sigma if sigma else self.dem
-        if isinstance(obj, Raster):
-            return obj.sample(xy)
-        return np.full(len(xy), obj)
 
 
 class CylindricalMotion(CartesianMotion):
@@ -227,12 +216,8 @@ class CylindricalMotion(CartesianMotion):
     Attributes:
         xy (iterable): Mean initial position (x, y).
         time_unit (timedelta): Length of time unit for temporal arguments.
-        dem: Elevation of the surface on which to track points
-            (scalar or Raster).
-        dem_sigma: Elevation standard deviations, as either a scalar or
-             a Raster with the same extent as :attr:`dem`. `0` means particles stay
-             glued to `dem` and weighing particles by their offset from `dem`
-             is disabled.
+        dem: Elevation of the surface on which to track points.
+        dem_sigma: Elevation standard deviations.
         n (int): Number of particles.
         xy_sigma (iterable): Standard deviation of initial position (x, y).
         vrthz (iterable): Mean initial velocity (d radius/dt, theta, dz/dt).
@@ -249,7 +234,7 @@ class CylindricalMotion(CartesianMotion):
         xy: Iterable[Number],
         time_unit: datetime.timedelta,
         dem: Union[Number, Raster],
-        dem_sigma: Union[Number, Raster] = 0,
+        dem_sigma: Union[Number, Raster] = None,
         n: int = 1000,
         xy_sigma: Iterable[Number] = (0, 0),
         vrthz: Iterable[Number] = (0, 0, 0),
@@ -259,7 +244,11 @@ class CylindricalMotion(CartesianMotion):
     ) -> None:
         self.xy = xy
         self.time_unit = time_unit
+        if not isinstance(dem, Raster):
+            dem = Raster(dem)
         self.dem = dem
+        if not isinstance(dem_sigma, Raster):
+            dem_sigma = Raster(dem_sigma)
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma
@@ -277,9 +266,10 @@ class CylindricalMotion(CartesianMotion):
         """
         particles = np.zeros((self.n, 6), dtype=float)
         particles[:, 0:2] = self.xy + self.xy_sigma * np.random.randn(self.n, 2)
-        z = self._sample_dem(particles[:, 0:2])
-        z_sigma = self._sample_dem(particles[:, 0:2], sigma=True)
-        particles[:, 2] = z + z_sigma * np.random.randn(self.n)
+        particles[:, 2] = self.dem.sample(particles[:, 0:2])
+        if self.dem_sigma is not None:
+            z_sigma = self.dem_sigma.sample(particles[:, 0:2])
+            particles[:, 2] += z_sigma * np.random.randn(self.n)
         v = self.vrthz + self.vrthz_sigma * np.random.randn(self.n, 3)
         particles[:, 3:6] = np.column_stack(
             (

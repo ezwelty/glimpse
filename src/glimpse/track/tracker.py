@@ -72,11 +72,13 @@ class Tracker:
     @property
     def particle_mean(self) -> np.ndarray:
         """Weighted particle mean [x, y, z, vx, vy, vz]."""
+        # NOTE: np.average normalizes weights
         return np.average(self.particles, weights=self.weights, axis=0)
 
     @property
     def particle_covariance(self) -> np.ndarray:
         """Weighted (biased) particle covariance matrix (6, 6)."""
+        # NOTE: np.cov normalizes weights
         return np.cov(self.particles.T, aweights=self.weights, ddof=0)
 
     @property
@@ -95,6 +97,7 @@ class Tracker:
         """
         if mean is None:
             mean = self.particle_mean
+        # NOTE: np.average normalizes weights
         variance = np.average(
             (self.particles - mean) ** 2, weights=self.weights, axis=0
         )
@@ -118,7 +121,7 @@ class Tracker:
     def initialize_weights(self) -> None:
         """Initialize particle weights."""
         n = len(self.particles)
-        self.weights = np.full(n, 1 / n)
+        self.weights = np.ones(n)
 
     def update_weights(
         self, imgs: Iterable[Optional[int]], motion_model: Motion = None
@@ -144,7 +147,6 @@ class Tracker:
         if log_likelihoods:
             likelihoods = np.exp(-sum(log_likelihoods))
             self.weights = likelihoods + 1e-300
-            self.weights *= 1 / self.weights.sum()
 
     def resample_particles(
         self, method: Literal["systematic", "stratified", "residual", "choice"] = None
@@ -162,31 +164,36 @@ class Tracker:
                 - 'choice': Random choice with replacement
                   (:func:`numpy.random.choice` with `replace=True`).
         """
-        n = len(self.particles)
 
-        def systematic() -> np.ndarray:
+        def systematic(n: int, weights: np.ndarray) -> np.ndarray:
             """Systematic resampling."""
             # Vectorized version of FilterPy
             # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+            weights = weights / weights.sum()
             positions = (np.arange(n) + np.random.random()) * (1 / n)
-            cumulative_weight = np.cumsum(self.weights)
+            cumulative_weight = np.cumsum(weights)
+            # NOTE: Assumes weights sum to 1
             return np.searchsorted(cumulative_weight, positions)
 
-        def stratified() -> np.ndarray:
+        def stratified(n: int, weights: np.ndarray) -> np.ndarray:
             """Stratified resampling."""
             # Vectorized version of FilterPy
             # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
+            weights = weights / weights.sum()
             positions = (np.arange(n) + np.random.random(n)) * (1 / n)
-            cumulative_weight = np.cumsum(self.weights)
+            cumulative_weight = np.cumsum(weights)
+            # NOTE: Assumes weights sum to 1
             return np.searchsorted(cumulative_weight, positions)
 
-        def residual() -> np.ndarray:
+        def residual(n: int, weights: np.ndarray) -> np.ndarray:
             """Residual resampling."""
             # Vectorized version of FilterPy
             # https://github.com/rlabbe/filterpy/blob/master/filterpy/monte_carlo/resampling.py
-            repetitions = (n * self.weights).astype(int)
+            weights = weights / weights.sum()
+            # NOTE: Assumes weights sum to 1
+            repetitions = (n * weights).astype(int)
             initial_indexes = np.repeat(np.arange(n), repetitions)
-            residuals = self.weights - repetitions
+            residuals = weights - repetitions
             residuals *= 1 / residuals.sum()
             cumulative_sum = np.cumsum(residuals)
             cumulative_sum[-1] = 1.0
@@ -195,25 +202,25 @@ class Tracker:
             )
             return np.hstack((initial_indexes, additional_indexes))
 
-        def choice() -> np.ndarray:
+        def choice(n: int, weights: np.ndarray) -> np.ndarray:
             """Random choice with replacement."""
-            return np.random.choice(
-                np.arange(n), size=(n,), replace=True, p=self.weights
-            )
+            # NOTE: np.random.choice requires weights to sum to 1
+            weights = weights / weights.sum()
+            return np.random.choice(np.arange(n), size=(n,), replace=True, p=weights)
 
+        n = len(self.particles)
         if method is None:
             method = self.resample_method
         if method == "systematic":
-            indexes = systematic()
+            indexes = systematic(n, self.weights)
         elif method == "stratified":
-            indexes = stratified()
+            indexes = stratified(n, self.weights)
         elif method == "residual":
-            indexes = residual()
+            indexes = residual(n, self.weights)
         elif method == "choice":
-            indexes = choice()
+            indexes = choice(n, self.weights)
         self.particles = self.particles[indexes]
         self.weights = self.weights[indexes]
-        self.weights *= 1 / self.weights.sum()
 
     def track(
         self,

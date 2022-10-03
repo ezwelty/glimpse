@@ -3,7 +3,7 @@ import datetime
 import sys
 import traceback
 import warnings
-from typing import Iterable, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -231,6 +231,7 @@ class Tracker:
         observer_mask: np.ndarray = None,
         return_covariances: bool = False,
         return_particles: bool = False,
+        reduce_particles: Callable[[np.ndarray, np.ndarray], Any] = None,
         parallel: Union[bool, int] = False,
     ) -> Tracks:
         """
@@ -253,6 +254,12 @@ class Tracker:
                 matrices or just particle standard deviations.
             return_particles: Whether to return all particles and weights
                 at each timestep.
+            reduce_particles: Function used to reduce particles and weights,
+                with signature (`f(particles, weights)`).
+                Results are stored in `Tracks.reduced` as a list
+                (one element for each `motion_models`).
+                If provided, particles and weights are not returned,
+                regardless of `return_particles`.
             parallel: Number of motion models to track in parallel (int),
                 or whether to track in parallel (bool). If `True`,
                 defaults to :func:`os.cpu_count`.
@@ -260,6 +267,8 @@ class Tracker:
         Returns:
             Motion tracks.
         """
+        if reduce_particles:
+            return_particles = True
         # Save original function arguments (stored in result)
         # NOTE: Must be called first
         params = locals().copy()
@@ -358,7 +367,9 @@ class Tracker:
                         "".join(traceback.format_exception(*sys.exc_info()))
                     )
             results = [means, sigmas, error, all_warnings]
-            if return_particles:
+            if reduce_particles:
+                results += [reduce_particles(particles, weights)]
+            elif return_particles:
                 results += [particles, weights]
             return results
 
@@ -376,11 +387,14 @@ class Tracker:
             )
         bar.finish()
         # Return results as Tracks
-        if return_particles:
+        if return_particles and not reduce_particles:
             means, sigmas, errors, all_warnings, particles, weights = zip(*results)
         else:
-            means, sigmas, errors, all_warnings = zip(*results)
             particles, weights = None, None
+            if reduce_particles:
+                means, sigmas, errors, all_warnings, reduced = zip(*results)
+            else:
+                means, sigmas, errors, all_warnings = zip(*results)
         kwargs = {
             "time_unit": time_unit,
             "datetimes": datetimes,
@@ -397,7 +411,10 @@ class Tracker:
             kwargs["covariances"] = sigmas
         else:
             kwargs["sigmas"] = sigmas
-        return Tracks(**kwargs)
+        tracks = Tracks(**kwargs)
+        if reduce_particles:
+            tracks.reduced = list(reduced)
+        return tracks
 
     def reset(self) -> None:
         """Reset to initial state."""

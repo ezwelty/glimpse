@@ -1610,6 +1610,7 @@ def select_datetimes(
     end: datetime.datetime = None,
     snap: datetime.timedelta = None,
     maxdt: datetime.timedelta = None,
+    origin: datetime.datetime = datetime.datetime(1970, 1, 1, 0, 0, 0),
 ) -> np.ndarray:
     """
     Select datetimes matching the specified criteria.
@@ -1618,10 +1619,11 @@ def select_datetimes(
         datetimes: Datetimes in ascending order.
         start: Minimum datetime (inclusive).
         end: Maximum datetime (inclusive).
-        snap: Interval (relative to 1970-01-01 00:00:00)
+        snap: Interval (relative to `origin`)
             on which to select nearest `datetimes`, or all if `None`.
         maxdt: Maximum distance from nearest `snap` to select `datetimes`.
             If `None`, defaults to half of `snap`.
+        origin: Reference datetime for `snap`.
 
     Returns:
         Boolean mask of selected `datetimes`.
@@ -1660,7 +1662,6 @@ def select_datetimes(
     if start > end:
         raise ValueError("Start datetime is after end datetime")
     if snap:
-        origin = datetime.datetime(1970, 1, 1, 0, 0, 0)
         shift = (origin - start) % snap
         start = start + shift
         targets = datetime_range(start, end, step=snap)

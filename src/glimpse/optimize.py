@@ -725,8 +725,8 @@ class Matches:
                 max_distance = max_distance * self.cams[ci].imgsz[0]
             scale = self.cams[ci].imgsz / self.cams[co].imgsz
             distances = np.linalg.norm(
-                self.predicted(co, index=selected) * scale
-                - self.predicted(ci, index=selected),
+                self.observed(co, index=selected) * scale
+                - self.observed(ci, index=selected),
                 axis=1,
             )
             selected[selected] &= distances <= max_distance

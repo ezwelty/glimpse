@@ -720,7 +720,7 @@ class Matches:
                 axis=1,
             )
             selected[selected] &= errors <= max_error
-        if max_distance:
+        if max_distance and selected.any():
             if scaled:
                 max_distance = max_distance * self.cams[ci].imgsz[0]
             scale = self.cams[ci].imgsz / self.cams[co].imgsz
@@ -2581,16 +2581,18 @@ class KeypointMatcher:
                 sequence=tuple(enumerate(matching_images)),
             )
             if not clear_matches:
-                # Build Compressed Sparse Row (CSR) matrix
-                matches = scipy.sparse.csr_matrix(
-                    (
-                        np.concatenate(matches),  # data
-                        np.concatenate(matching_images),  # column indices
-                        np.cumsum([0] + [len(row) for row in matching_images]),
-                    )
-                )  # row ranges
-                # Convert to Coordinate Format (COO) matrix
-                matches = matches.tocoo()
+                # Build Coordinate Format (COO) matrix
+                data = np.concatenate(matches)
+                rows = np.concatenate(
+                    [
+                        np.asarray([i] * len(row), dtype=int)
+                        for i, row in enumerate(matching_images)
+                    ]
+                )
+                cols = np.concatenate(matching_images)
+                # HACK: Initialize with numeric data to avoid type errors
+                matches = scipy.sparse.coo_matrix(([1] * len(data), (rows, cols)))
+                matches.data = data
         if clear_matches:
             self.matches = None
         else:

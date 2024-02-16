@@ -32,7 +32,7 @@ matplotlib = "^3.2.1"
 GDAL = "3.2.0"
 typing_extensions = "^3.7.4"
 scipy = "^1.4.1"
-opencv-python-headless = "^4.4.0"
+opencv-python-headless = "^4.4.0,<=4.8.1.78"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^6.0"

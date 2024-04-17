@@ -32,35 +32,26 @@ jobs:
           gdal=3.2.0
     - name: Install dependencies
       shell: bash -l {0}
-      run: |
-        conda activate test
-        poetry install --no-interaction --all-extras
+      run: poetry install --no-interaction --all-extras
     - name: Lint
       shell: bash -l {0}
-      run: |
-        conda activate test
-        flake8 src tests
+      run: flake8 src tests
     - name: Test
       if: env.coverage == 'false'
       shell: bash -l {0}
-      run: |
-        conda activate test
-        pytest --doctest-modules src tests
+      run: pytest --doctest-modules src tests
       env:
         MPLBACKEND: agg
     - name: Test with coverage
       if: env.coverage == 'true'
       shell: bash -l {0}
-      run: |
-        conda activate test
-        pytest --cov --doctest-modules src tests
+      run: pytest --cov --doctest-modules src tests
       env:
         MPLBACKEND: agg
     - name: Upload coverage to Codecov
       if: env.coverage == 'true'
       shell: bash -l {0}
       run: |
-        conda activate test
         coverage xml --fail-under=0
         codecov
       env:

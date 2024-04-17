@@ -44,7 +44,7 @@ The installation requires [`gdal`](https://gdal.org/download.html#binaries) to b
 ```bash
 conda create -n glimpse -c conda-forge python=3.8 gdal=3.2.0
 conda activate glimpse
-pip install git+https://github.com/ezwelty/glimpse@reanalysis
+pip install git+https://github.com/ezwelty/glimpse
 ```
 
 # Contribute

@@ -30,6 +30,15 @@ jobs:
         create-args: >-
           python=${{ matrix.python-version }}
           gdal=3.2.0
+    - name: Check environment
+      shell: bash -l {0}
+      run: |
+        micromamba env
+        micromamba list
+        python --version
+        poetry run python --version
+        flake8 --version
+        pytest --version
     - name: Install dependencies
       shell: bash -l {0}
       run: poetry install --no-interaction --all-extras

@@ -26,10 +26,11 @@ jobs:
         auto-activate-base: true
         auto-update-conda: true
         channels: conda-forge
-    - name: Install poetry and export requirements
+    - name: Install poetry
+      uses: snok/install-poetry@v1
+    - name: Export poetry requirements
       shell: bash -l {0}
       run: |
-        conda install -y poetry=1.1.3
         poetry export -o requirements.txt --without-hashes
         poetry export -o constraints.txt --dev --without-hashes
     - name: Create test conda environment

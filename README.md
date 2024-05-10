@@ -36,7 +36,7 @@ The methods implemented in this software are described in great detail across tw
 `glimpse` has not yet been released for distribution, but can still be installed with [`pip`](https://pip.pypa.io/en/stable/installing) from the source code on GitHub:
 
 ```bash
-pip install https://github.com/ezwelty/glimpse/tarball/main#egg=glimpse
+pip install git+https://github.com/ezwelty/glimpse
 ```
 
 The installation requires [`gdal`](https://gdal.org/download.html#binaries) to be present. The simplest way of achieving this is to install `gdal` into a [`conda`](https://docs.conda.io/projects/conda/en/latest/user-guide/install) environment:

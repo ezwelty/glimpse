@@ -4,7 +4,15 @@ from .camera import Camera
 from .exif import Exif
 from .image import Image
 from .raster import Grid, Raster, RasterInterpolant
-from .track import CartesianMotion, CylindricalMotion, Observer, Tracker, Tracks
+from .track import (
+    CartesianMotion,
+    CylindricalMotion,
+    Observer,
+    TangentCartesianMotion,
+    TangentCylindricalMotion,
+    Tracker,
+    Tracks,
+)
 
 __all__ = [
     "config",
@@ -19,6 +27,8 @@ __all__ = [
     "Tracks",
     "CartesianMotion",
     "CylindricalMotion",
+    "TangentCartesianMotion",
+    "TangentCylindricalMotion",
     "Grid",
     "Raster",
     "RasterInterpolant",

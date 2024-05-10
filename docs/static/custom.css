@@ -7,3 +7,10 @@
   /* Increase content width */
   max-width: 960px !important;
 }
+
+/* Format autosummary table */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+  white-space: normal;
+  vertical-align: top !important;
+}

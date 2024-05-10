@@ -105,14 +105,15 @@ def test_parses_path_commands(
 ) -> None:
     """Parses all possible path commands."""
     xo, yo = 1, 2
-    # Uppercase
-    fp = io.StringIO(f"<svg><path d='M {xo},{yo} {cmd}' /></svg>")
-    coords = glimpse.svg.read(fp)
-    assert coords["path"][1] == (dxy[0] or xo, dxy[1] or yo)
-    # Lowercase
-    fp = io.StringIO(f"<svg><path d='M {xo},{yo} {cmd.lower()}' /></svg>")
-    coords = glimpse.svg.read(fp)
-    assert coords["path"][1] == (xo + dxy[0], yo + dxy[1])
+    for start in ("M", "m"):
+        # Uppercase command
+        fp = io.StringIO(f"<svg><path d='{start} {xo},{yo} {cmd}' /></svg>")
+        coords = glimpse.svg.read(fp)
+        assert coords["path"][1] == (dxy[0] or xo, dxy[1] or yo)
+        # Lowercase command
+        fp = io.StringIO(f"<svg><path d='{start} {xo},{yo} {cmd.lower()}' /></svg>")
+        coords = glimpse.svg.read(fp)
+        assert coords["path"][1] == (xo + dxy[0], yo + dxy[1])
 
 
 def test_errors_for_invalid_path_command() -> None:

@@ -679,7 +679,11 @@ class Points:
             # moveTo: m (dx,dy)+ | lineTo: l (dx,dy)+ | curveTo: T (dx,dy)+
             elif cmd in ("m", "l", "t"):
                 for dx, dy in _chunks(params, 2):
-                    xy.append((xy[-1][0] + dx, xy[-1][1] + dy))
+                    if not xy:
+                        # Treat first point as absolute
+                        xy.append((dx, dy))
+                    else:
+                        xy.append((xy[-1][0] + dx, xy[-1][1] + dy))
             # lineTo: H (x)+
             elif cmd == "H":
                 for (x,) in _chunks(params, 1):

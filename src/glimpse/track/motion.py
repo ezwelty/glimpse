@@ -134,10 +134,10 @@ class CartesianMotion(Motion):
         self.xy = xy
         self.time_unit = time_unit
         if not isinstance(dem, Raster):
-            dem = Raster(dem)
+            dem = Raster(dem, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem = dem
         if not isinstance(dem_sigma, Raster):
-            dem_sigma = Raster(dem_sigma)
+            dem_sigma = Raster(dem_sigma, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma
@@ -245,10 +245,10 @@ class CylindricalMotion(CartesianMotion):
         self.xy = xy
         self.time_unit = time_unit
         if not isinstance(dem, Raster):
-            dem = Raster(dem)
+            dem = Raster(dem, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem = dem
         if not isinstance(dem_sigma, Raster):
-            dem_sigma = Raster(dem_sigma)
+            dem_sigma = Raster(dem_sigma, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma
@@ -363,10 +363,10 @@ class TangentCartesianMotion(Motion):
         self.xy = xy
         self.time_unit = time_unit
         if not isinstance(dem, Raster):
-            dem = Raster(dem)
+            dem = Raster(dem, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem = dem
         if not isinstance(dem_sigma, Raster):
-            dem_sigma = Raster(dem_sigma)
+            dem_sigma = Raster(dem_sigma, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma
@@ -454,10 +454,10 @@ class TangentCylindricalMotion(Motion):
         self.xy = xy
         self.time_unit = time_unit
         if not isinstance(dem, Raster):
-            dem = Raster(dem)
+            dem = Raster(dem, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem = dem
         if not isinstance(dem_sigma, Raster):
-            dem_sigma = Raster(dem_sigma)
+            dem_sigma = Raster(dem_sigma, x=[-np.inf, np.inf], y=[-np.inf, np.inf])
         self.dem_sigma = dem_sigma
         self.n = n
         self.xy_sigma = xy_sigma

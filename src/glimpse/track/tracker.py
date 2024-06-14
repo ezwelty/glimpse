@@ -24,7 +24,7 @@ class Tracker:
     Estimate the trajectory of world points through time.
 
     Attributes:
-        observers (iterable): Observers.
+        observers (list): Observers.
         viewshed (Raster): Binary viewshed.
         resample_method (str): Particle resampling method.
             See :meth:`resample_particles`.
@@ -59,7 +59,7 @@ class Tracker:
         highpass: dict = {"size": (5, 5)},
         interpolation: dict = {"kx": 3, "ky": 3},
     ) -> None:
-        self.observers = observers
+        self.observers = list(observers)
         self.viewshed = viewshed
         self.resample_method = resample_method
         self.highpass = highpass

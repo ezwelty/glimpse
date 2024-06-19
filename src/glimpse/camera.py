@@ -427,7 +427,16 @@ class Camera:
 
     def to_dict(
         self,
-        attributes: Iterable[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+        attributes: Iterable[str] = (
+            "xyz",
+            "viewdir",
+            "imgsz",
+            "f",
+            "c",
+            "k",
+            "p",
+            "correction",
+        ),
     ) -> Dict[str, tuple]:
         """
         Return this camera as a dictionary.
@@ -450,7 +459,16 @@ class Camera:
     def to_json(
         self,
         path: str = None,
-        attributes: Iterable[str] = ("xyz", "viewdir", "imgsz", "f", "c", "k", "p"),
+        attributes: Iterable[str] = (
+            "xyz",
+            "viewdir",
+            "imgsz",
+            "f",
+            "c",
+            "k",
+            "p",
+            "correction",
+        ),
         **kwargs: Any,
     ) -> Optional[str]:
         """
@@ -480,7 +498,8 @@ class Camera:
                 "f": [7.9, 6.1],
                 "c": [0.0, 0.0],
                 "k": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                "p": [0.0, 0.0]
+                "p": [0.0, 0.0],
+                "correction": false
             }
         """
         obj = self.to_dict(attributes=attributes)

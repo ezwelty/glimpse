@@ -2,6 +2,7 @@
 import re
 import warnings
 import xml.etree.ElementTree
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 import numpy as np
@@ -137,7 +138,7 @@ class OpenCV:
         return cls(imgsz=imgsz, **kwargs)
 
     @classmethod
-    def from_xml(cls, path: str, imgsz: Tuple[int, int]) -> "OpenCV":
+    def from_xml(cls, path: Union[str, Path], imgsz: Tuple[int, int]) -> "OpenCV":
         """
         From Agisoft XML file.
 

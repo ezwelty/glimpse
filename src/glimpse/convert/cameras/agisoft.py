@@ -1,5 +1,6 @@
 """Agisoft camera models."""
 import xml.etree.ElementTree
+from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple, Union, cast
 
 import numpy as np
@@ -55,7 +56,7 @@ class Agisoft:
         self.b1, self.b2 = b1, b2
 
     @classmethod
-    def from_xml(cls, path: str) -> "Agisoft":
+    def from_xml(cls, path: Union[str, Path]) -> "Agisoft":
         """
         Read from Agisoft XML file.
 

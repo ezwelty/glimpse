@@ -3,9 +3,9 @@ import datetime
 import gzip
 import json
 import os
-import pathlib
 import pickle
 import re
+from pathlib import Path
 from typing import Any, Callable, Iterable, List, Match, Optional, Tuple, Union
 
 import numpy as np
@@ -131,7 +131,7 @@ def numpy_to_native(x: Any) -> Any:
     return getattr(x, "tolist", lambda: x)()
 
 
-def strip_path(path: str, extensions: bool = True) -> str:
+def strip_path(path: Union[str, Path], extensions: bool = True) -> str:
     """
     Return the final component of a path with file extensions removed.
 
@@ -149,7 +149,7 @@ def strip_path(path: str, extensions: bool = True) -> str:
         >>> strip_path('foo/bar.ext.ext2', extensions=1)
         'bar.ext'
     """
-    basename = os.path.basename(path)
+    basename = Path(path).name
     if extensions:
         if extensions is True:
             extensions = -1
@@ -205,7 +205,11 @@ def sorted_nearest(x: Iterable, y: Iterable) -> np.ndarray:
 
 
 def write_pickle(
-    obj: Any, path: str, gz: bool = False, binary: bool = True, **kwargs: Any
+    obj: Any,
+    path: Union[str, Path],
+    gz: bool = False,
+    binary: bool = True,
+    **kwargs: Any,
 ) -> None:
     """
     Write object to pickle file.
@@ -217,7 +221,8 @@ def write_pickle(
         binary: Whether to write a binary pickle.
         **kwargs: Optional arguments to :func:`pickle.dump`.
     """
-    pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     mode = "wb" if binary else "w"
     if gz:
         fp = gzip.open(path, mode=mode)
@@ -227,7 +232,9 @@ def write_pickle(
     fp.close()
 
 
-def read_pickle(path: str, gz: bool = False, binary: bool = True, **kwargs: Any) -> Any:
+def read_pickle(
+    path: Union[str, Path], gz: bool = False, binary: bool = True, **kwargs: Any
+) -> Any:
     """
     Read object from pickle file.
 
@@ -250,7 +257,7 @@ def read_pickle(path: str, gz: bool = False, binary: bool = True, **kwargs: Any)
 # ---- JSON ---- #
 
 
-def read_json(path: str, **kwargs: Any) -> Union[dict, list]:
+def read_json(path: Union[str, Path], **kwargs: Any) -> Union[dict, list]:
     """
     Read JSON from file.
 
@@ -263,7 +270,10 @@ def read_json(path: str, **kwargs: Any) -> Union[dict, list]:
 
 
 def write_json(
-    obj: Union[dict, list], path: str = None, flat_arrays: bool = False, **kwargs: Any
+    obj: Union[dict, list],
+    path: Union[str, Path] = None,
+    flat_arrays: bool = False,
+    **kwargs: Any,
 ) -> Optional[str]:
     r"""
     Write object to JSON.
@@ -298,7 +308,7 @@ def write_json(
 
         txt = re.sub(r"(\[\s*)+[^\]\{]*(\s*\])+", flatten, txt)
     if path:
-        path = pathlib.Path(path)
+        path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(txt)
         return None
@@ -519,7 +529,7 @@ def crs_to_wkt(crs: Union[int, str]) -> str:
 
 
 def gdal_driver_from_path(
-    path: str, raster: bool = True, vector: bool = True
+    path: Union[str, Path], raster: bool = True, vector: bool = True
 ) -> Optional[osgeo.gdal.Driver]:
     """
     Infer GDAL driver from file path.
@@ -532,7 +542,7 @@ def gdal_driver_from_path(
     Returns:
         Inferred GDAL driver.
     """
-    ext = os.path.splitext(path)[1][1:].lower()
+    ext = Path(path).suffix[1:].lower()
     for i in range(osgeo.gdal.GetDriverCount()):
         driver = osgeo.gdal.GetDriver(i)
         meta = driver.GetMetadata()
@@ -547,7 +557,7 @@ def gdal_driver_from_path(
 
 def write_raster(
     a: np.ndarray,
-    path: str,
+    path: Union[str, Path],
     driver: str = None,
     nan: Union[float, int] = None,
     crs: Union[int, str] = None,
@@ -1558,6 +1568,41 @@ def elevation_corrections(
     # http://desktop.arcgis.com/en/arcmap/10.3/tools/3d-analyst-toolbox/how-line-of-sight-works.htm
     # https://en.wikipedia.org/wiki/Atmospheric_refraction#Terrestrial_refraction
     return (refraction - 1) * squared_distances / (2 * radius)
+
+
+def average_rasters(paths: Iterable[Union[str, Path]]) -> np.ndarray:
+    """
+    Return the average of multiple rasters.
+
+    Arguments:
+        paths: Paths to rasters. Rasters must all have the same shape.
+
+    Returns:
+        Average raster.
+
+    Raises:
+        ValueError: Inconsistent shape at path.
+    """
+    paths = [str(path) for path in paths]
+    ds: osgeo.gdal.Dataset = osgeo.gdal.Open(paths[0])
+    base_shape = ds.RasterYSize, ds.RasterXSize, ds.RasterCount
+    base_array = np.zeros(base_shape)
+    n = len(paths)
+    for path in paths:
+        print(path)
+        ds = osgeo.gdal.Open(path)
+        shape = ds.RasterYSize, ds.RasterXSize, ds.RasterCount
+        if shape != base_shape:
+            raise ValueError(
+                f"Inconsistent shape at {path}: {shape} (expected {base_shape})"
+            )
+        base_array += (
+            np.dstack(
+                [ds.GetRasterBand(i + 1).ReadAsArray() for i in range(base_shape[2])]
+            )
+            / n
+        )
+    return base_array
 
 
 # ---- Time ----

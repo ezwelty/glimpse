@@ -1,14 +1,15 @@
 """Optimize camera models to fit observations taken from images and the world."""
 import copyreg
 import datetime
-import os
 import sys
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import cv2
 import lmfit
 import matplotlib.pyplot
 import numpy as np
+import scipy.interpolate
 import scipy.optimize
 import scipy.sparse
 
@@ -147,7 +148,7 @@ class Points:
         index: Index = slice(None),
         selected: ColorArgs = "red",
         unselected: ColorArgs = "gray",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Dict[str, Optional[matplotlib.quiver.Quiver]]:
         """
         Plot reprojection errors as quivers.
@@ -381,7 +382,7 @@ class Lines(Points):
         unselected: ColorArgs = "gray",
         observed: ColorArgs = "green",
         predicted: ColorArgs = "yellow",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Dict[
         str, Optional[Union[matplotlib.quiver.Quiver, List[matplotlib.lines.Line2D]]]
     ]:
@@ -594,7 +595,7 @@ class Matches:
         index: Index = slice(None),
         selected: ColorArgs = "red",
         unselected: ColorArgs = "gray",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Dict[str, matplotlib.quiver.Quiver]:
         """
         Plot reprojection errors as quivers.
@@ -1075,7 +1076,7 @@ class Polynomial:
         selected: ColorArgs = "red",
         unselected: ColorArgs = "gray",
         predicted: ColorArgs = "red",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Dict[
         str,
         Optional[
@@ -1784,7 +1785,7 @@ class Cameras:
         group_params: List[List[Params]] = None,
         full: bool = False,
         method: str = "least_squares",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> FitParams:
         """
         Return optimal camera parameter values.
@@ -1863,7 +1864,7 @@ class Cameras:
             kws={"index": index},
             iter_cb=callback,
             method=method,
-            **kwargs
+            **kwargs,
         )
         sys.stdout.write("\n")
         if iterations:
@@ -1885,7 +1886,7 @@ class Cameras:
         unselected: ColorArgs = "gray",
         lines_observed: ColorArgs = "green",
         lines_predicted: ColorArgs = "yellow",
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[
         Dict[
             str,
@@ -1933,7 +1934,7 @@ class Cameras:
                     unselected=unselected,
                     observed=lines_observed,
                     predicted=lines_predicted,
-                    **kwargs
+                    **kwargs,
                 )
             elif isinstance(control, Points):
                 result = control.plot(
@@ -1945,7 +1946,7 @@ class Cameras:
                     index=index,
                     selected=selected,
                     unselected=unselected,
-                    **kwargs
+                    **kwargs,
                 )
             results.append(result)
         if params is not None:
@@ -2093,7 +2094,7 @@ def ransac(
     max_error: float,
     min_inliers: int,
     iterations: int = 100,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Fit model parameters using the Random Sample Consensus (RANSAC) algorithm.
@@ -2193,7 +2194,7 @@ def detect_keypoints(
     mask: np.ndarray = None,
     method: Type[cv2.Feature2D] = cv2.SIFT,
     root: bool = False,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
     """
     Return keypoints and descriptors for an image.
@@ -2352,12 +2353,12 @@ class KeypointMatcher:
     def build_keypoints(
         self,
         masks: Union[np.ndarray, Iterable[np.ndarray]] = None,
-        path: str = None,
+        path: Union[str, Path] = None,
         overwrite: bool = False,
         clear_images: bool = True,
         clear_keypoints: bool = False,
         parallel: Union[int, bool] = False,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Build image keypoints and their descriptors.
@@ -2368,8 +2369,7 @@ class KeypointMatcher:
         Arguments:
             masks (iterable): Boolean array(s) (uint8) indicating regions in which to
                 detect keypoints
-            path (str): Directory path for keypoint files.
-                If `None`, no files are written.
+            path: Directory path for keypoint files. If `None`, no files are written.
             overwrite (bool): Whether to recompute and overwrite existing file or
                 in-memory keypoints.
             clear_images (bool): Whether to clear cached image data
@@ -2381,9 +2381,11 @@ class KeypointMatcher:
                 defaults to `os.cpu_count()`.
             **kwargs: Optional arguments to :func:`detect_keypoints`.
         """
+        if path:
+            path = Path(path)
         if clear_keypoints and not path:
             raise ValueError("path is required when clear_keypoints is True")
-        if path and os.path.isfile(path):
+        if path and path.is_file():
             raise ValueError("path must be a directory")
         basenames = self._prepare_image_basenames()
         # Enforce defaults
@@ -2397,8 +2399,8 @@ class KeypointMatcher:
         def process(i: int, img: Image) -> Tuple[List[cv2.KeyPoint], np.ndarray]:
             print(img.path)
             if path:
-                outpath = os.path.join(path, basenames[i] + ".pkl")
-                written = os.path.isfile(outpath)
+                outpath = path / f"{basenames[i]}.pkl"
+                written = outpath.exists()
             else:
                 written = False
             keypoints = self.keypoints[i]
@@ -2433,8 +2435,8 @@ class KeypointMatcher:
         maxdt: datetime.timedelta = None,
         seq: Iterable[int] = None,
         imgs: Iterable[int] = None,
-        keypoints_path: str = None,
-        path: str = None,
+        keypoints_path: Union[str, Path] = None,
+        path: Union[str, Path] = None,
         overwrite: bool = False,
         clear_keypoints: bool = True,
         clear_matches: bool = False,
@@ -2442,7 +2444,7 @@ class KeypointMatcher:
         weights: bool = False,
         mtype: Union[RotationMatches, RotationMatchesXY, RotationMatchesXYZ] = None,
         filter: dict = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Build matches between each image and its nearest neighbors.
@@ -2479,9 +2481,13 @@ class KeypointMatcher:
                 to :attr:`matches`. Ignored if `clear_matches=True`.
             **kwargs: Optional arguments to :func:`match_keypoints`.
         """
+        if path:
+            path = Path(path)
+        if keypoints_path:
+            keypoints_path = Path(keypoints_path)
         if clear_matches and not path:
             raise ValueError("path is required when clear_matches is True")
-        if path and os.path.isfile(path):
+        if path and path.is_file():
             raise ValueError("path must be a directory")
         parallel = helpers._parse_parallel(parallel)
         kwargs = {**kwargs, **{"return_ratios": weights}}
@@ -2531,19 +2537,17 @@ class KeypointMatcher:
                 imgA = self.images[i]
                 if self.keypoints[i] is None:
                     self.keypoints[i] = helpers.read_pickle(
-                        os.path.join(keypoints_path, basenames[i] + ".pkl")
+                        keypoints_path / f"{basenames[i]}.pkl"
                     )
                 for j in js:
                     imgB = self.images[j]
                     if self.keypoints[j] is None:
                         self.keypoints[j] = helpers.read_pickle(
-                            os.path.join(keypoints_path, basenames[j] + ".pkl")
+                            keypoints_path / f"{basenames[j]}.pkl"
                         )
                     if path:
-                        outfile = os.path.join(
-                            path, basenames[i] + "-" + basenames[j] + ".pkl"
-                        )
-                    if path and not overwrite and os.path.exists(outfile):
+                        outfile = path / f"{basenames[i]}-{basenames[j]}.pkl"
+                    if path and not overwrite and outfile.exists():
                         if not clear_matches:
                             match = helpers.read_pickle(outfile)
                             # Point matches to existing Camera objects
@@ -2750,3 +2754,87 @@ class KeypointMatcher:
                 np.concatenate((breaks, np.where(counts < min_matches)[0]))
             )
         return breaks
+
+
+def project_images(
+    cam: Camera,
+    images: Iterable[Image],
+    paths: Iterable[Union[str, Path]],
+    overwrite: bool = False,
+    method: str = "linear",
+    grayscale: bool = False,
+    parallel: Union[bool, int] = False,
+    options: Union[list, dict] = None,
+) -> None:
+    """
+    Project images into a camera.
+
+    Arguments:
+        images: Images to project.
+        parallel: Number of parallel processes (int),
+            or whether to work in parallel (bool). If `True`,
+            defaults to :func:`os.cpu_count`.
+
+    Returns:
+        Projected images.
+    """
+    # Prepare file system
+    paths = [str(path) for path in paths]
+    if len(paths) != len(set(paths)):
+        raise ValueError("Image output paths are not unique")
+    # Construct grid in target image
+    u = np.linspace(0.5, cam.imgsz[0] - 0.5, cam.imgsz[0])
+    v = np.linspace(0.5, cam.imgsz[1] - 0.5, cam.imgsz[1])
+    U, V = np.meshgrid(u, v)
+    uv = np.column_stack((U.flatten(), V.flatten()))
+    # Project grid out of target image
+    dxyz = cam.uv_to_xyz(uv)
+    # Define parallel process
+    parallel = helpers._parse_parallel(parallel)
+    bar = helpers._progress_bar(max=len(images))
+
+    def process(image: Image, path: str) -> None:
+        path: Path = Path(path)
+        if path.exists() and not overwrite:
+            return None
+        # Project target grid onto source image (flip for RegularGridInterpolator)
+        puv = np.fliplr(image.cam.xyz_to_uv(dxyz, directions=True))
+        # Construct grid in source image
+        if cam.imgsz[0] == image.cam.imgsz[0]:
+            pu = u
+        else:
+            pu = np.linspace(0.5, image.cam.imgsz[0] - 0.5, image.cam.imgsz[0])
+        if cam.imgsz[1] == image.cam.imgsz[1]:
+            pv = v
+        else:
+            pv = np.linspace(0.5, image.cam.imgsz[1] - 0.5, image.cam.imgsz[1])
+        # Prepare source image
+        array = image.read()
+        if array.ndim < 3:
+            array = np.expand_dims(array, axis=2)
+        if grayscale:
+            array = array.mean(axis=2, keepdims=True)
+        # Sample source image at target grid
+        bands = []
+        for i in range(array.shape[2]):
+            f = scipy.interpolate.RegularGridInterpolator(
+                (pv, pu), array[:, :, i], method=method, bounds_error=False
+            )
+            band = f(puv).reshape(cam.imgsz[1], cam.imgsz[0]).astype(array.dtype)
+            bands.append(band)
+        projected = np.dstack(bands)
+        # Write to file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        helpers.write_raster(projected, path=str(path), options=options)
+        return None
+
+    def reduce(result: None) -> None:
+        bar.next()
+        return None
+
+    with config.backend(np=parallel) as pool:
+        pool.map(
+            func=process, sequence=tuple(zip(images, paths)), star=True, reduce=reduce
+        )
+    bar.finish()
+    return None

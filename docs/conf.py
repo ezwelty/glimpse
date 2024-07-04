@@ -1,14 +1,16 @@
 """Sphinx configuration."""
 import datetime
-import os
 import sys
+from pathlib import Path
+from typing import Any
 
 # -- Path setup --------------------------------------------------------------
 
-sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, str(Path("..").absolute()))
 
 
-def setup(app):
+def setup(app: Any) -> None:
+    """Configure application."""
     app.add_css_file("custom.css")
 
 

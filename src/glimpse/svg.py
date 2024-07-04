@@ -5,6 +5,9 @@ import re
 import warnings
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+
+# Rename Path to avoid collision with SVG <path> element
+from pathlib import Path as FilePath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, TextIO, Tuple, Union
 
 from typing_extensions import TypedDict
@@ -40,7 +43,7 @@ def _strip_etree_namespaces(tree: ET.ElementTree) -> None:
 
 
 def read(
-    path: Union[str, TextIO], key: str = None, imgsz: Tuple[int, int] = None
+    path: Union[str, FilePath, TextIO], key: str = None, imgsz: Tuple[int, int] = None
 ) -> dict:
     """
     Get SVG element vertices as image coordinates.
@@ -371,7 +374,7 @@ def _etree_to_string(e: ET.Element, indent: Union[int, str] = None) -> str:
 
 
 def write(
-    e: ET.Element, path: str = None, indent: Union[int, str] = None
+    e: ET.Element, path: Union[str, FilePath] = None, indent: Union[int, str] = None
 ) -> Optional[str]:
     r"""
     Returns XML as a string or writes it to file.

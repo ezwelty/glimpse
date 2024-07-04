@@ -1,18 +1,18 @@
 """Tests of the image module."""
 import datetime
-import os
+from pathlib import Path
 
 import numpy as np
 
 import glimpse
 
-path = os.path.join("tests", "AK10b_20141013_020336.JPG")
+path = Path("tests", "AK10b_20141013_020336.JPG")
 
 
 def test_initializes_with_attributes_from_file() -> None:
     """Initializes with default attributes loaded from file."""
     img = glimpse.Image(path)
-    assert img.path == path
+    assert img.path == str(path)
     assert img.datetime == img.exif.datetime
     np.testing.assert_equal(img.cam.imgsz, img.exif.imgsz)
     np.testing.assert_allclose(

@@ -1,7 +1,7 @@
 """Tests of the raster module."""
 import datetime
 import itertools
-import os
+from pathlib import Path
 
 import numpy as np
 import osgeo.osr
@@ -153,7 +153,7 @@ def test_writes_and_reads_raster() -> None:
         crs="+init=epsg:4326",
     )
     # Write to file and read
-    tempfile = "temp.tif"
+    tempfile = Path("temp.tif")
     old.write(tempfile)
     new = glimpse.Raster.open(tempfile)
     np.testing.assert_equal(old.array, new.array)
@@ -165,15 +165,15 @@ def test_writes_and_reads_raster() -> None:
     new_crs.ImportFromWkt(new.crs)
     assert old_crs.IsSame(new_crs)
     # Delete file
-    os.remove(tempfile)
+    tempfile.unlink()
 
 
 def test_interpolates_rasters() -> None:
     """Interpolates Rasters."""
     # Read rasters
     mean_paths = [
-        os.path.join("tests", "000nan.tif"),
-        os.path.join("tests", "11-1nan.tif"),
+        Path("tests", "000nan.tif"),
+        Path("tests", "11-1nan.tif"),
     ]
     means = [glimpse.Raster.open(path) for path in mean_paths]
     Zs = [mean.array for mean in means]

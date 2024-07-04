@@ -1,5 +1,6 @@
 """Read, write, and manipulate photographic images."""
 import datetime
+from pathlib import Path
 from typing import Any, Iterable, Optional, Tuple, Union
 
 import matplotlib.pyplot
@@ -84,12 +85,12 @@ class Image:
 
     def __init__(
         self,
-        path: str,
+        path: Union[str, Path],
         cam: Union[dict, Camera] = None,
         datetime: datetime.datetime = None,
         exif: Exif = None,
     ) -> None:
-        self.path = path
+        self.path = str(path)
         if not cam:
             cam = {}
         if isinstance(cam, dict):
@@ -207,7 +208,9 @@ class Image:
             array = array[box[1] : box[3], box[0] : box[2]]
         return array
 
-    def write(self, path: str, array: np.ndarray = None, driver: str = None) -> None:
+    def write(
+        self, path: Union[str, Path], array: np.ndarray = None, driver: str = None
+    ) -> None:
         """
         Write image data to file.
 

@@ -1,6 +1,7 @@
 """Read and write exchangeable image file format (exif) metadata."""
 import copy
 import datetime
+from pathlib import Path
 from typing import Optional, Tuple, Union
 
 import piexif
@@ -50,7 +51,7 @@ class Exif:
         (23.6, 15.8)
 
     Arguments:
-        path (str): Path to JPEG, TIFF, or WebP image.
+        path: Path to JPEG, TIFF, or WebP image.
         thumbnail (bool): Whether to retain the image thumbnail.
 
     Attributes:
@@ -81,8 +82,8 @@ class Exif:
             their article https://dpreview.com/articles/8095816568/sensorsizes.
     """
 
-    def __init__(self, path: str, thumbnail: bool = False) -> None:
-        self.tags = piexif.load(path, key_is_name=True)
+    def __init__(self, path: Union[str, Path], thumbnail: bool = False) -> None:
+        self.tags = piexif.load(str(path), key_is_name=True)
         if not thumbnail:
             self.tags.pop("thumbnail", None)
             self.tags.pop("1st", None)
@@ -223,7 +224,7 @@ class Exif:
         # Encode to bytes
         return piexif.dump(tags)
 
-    def insert(self, path: str) -> None:
+    def insert(self, path: Union[str, Path]) -> None:
         """
         Insert :attr:`tags` into an image.
 
@@ -246,4 +247,4 @@ class Exif:
             >>> Exif(path).iso
             100
         """
-        piexif.insert(self.dump(), path)
+        piexif.insert(self.dump(), str(path))

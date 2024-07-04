@@ -1,5 +1,6 @@
 """Convert between world and image coordinates using a distorted camera model."""
 import copy
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import matplotlib.pyplot
@@ -328,14 +329,14 @@ class Camera:
     # ----- Methods (class) ----
 
     @classmethod
-    def from_json(cls, path: str, **kwargs: Any) -> "Camera":
+    def from_json(cls, path: Union[str, Path], **kwargs: Any) -> "Camera":
         """
         Read Camera from JSON.
 
         See :meth:`to_json` for the reverse.
 
         Arguments:
-            path (str): Path to JSON file
+            path: Path to JSON file
             **kwargs: Additional parameters passed to :meth:`Camera`.
                 These override any parameters read from **path**.
 
@@ -458,7 +459,7 @@ class Camera:
 
     def to_json(
         self,
-        path: str = None,
+        path: Union[str, Path] = None,
         attributes: Iterable[str] = (
             "xyz",
             "viewdir",

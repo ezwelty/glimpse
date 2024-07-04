@@ -1,5 +1,5 @@
 """Tests of the convert module."""
-import os
+from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
@@ -21,7 +21,7 @@ def test_reads_matlab_means_from_report() -> None:
         "kc": (-0.1, 0.1, 0.0, 0.0, -0.0),
         "imgsz": (4288, 2848),
     }
-    path = os.path.join("tests", "Calib_Results.m")
+    path = Path("tests", "Calib_Results.m")
     xcam_auto = Matlab.from_report(path, sigmas=False)
     xcam_manual = Matlab(**means)
     assert vars(xcam_auto) == vars(xcam_manual)
@@ -36,7 +36,7 @@ def test_reads_matlab_sigmas_from_report() -> None:
         "kc": (0.002 / 3, 0.004 / 3, 0.000, 0.000, 0.000),
         "imgsz": (0, 0),
     }
-    path = os.path.join("tests", "Calib_Results.m")
+    path = Path("tests", "Calib_Results.m")
     xcam_auto = Matlab.from_report(path, sigmas=True)
     xcam_manual = Matlab(**sigmas)
     assert vars(xcam_auto) == vars(xcam_manual)
@@ -102,7 +102,7 @@ def test_reads_agisoft_from_xml() -> None:
         "p1": 0.01,
         "p2": -0.01,
     }
-    path = os.path.join("tests", "agisoft.xml")
+    path = Path("tests", "agisoft.xml")
     xcam_auto = Agisoft.from_xml(path)
     xcam_manual = Agisoft(**xml)
     assert vars(xcam_auto) == vars(xcam_manual)
@@ -170,7 +170,7 @@ def test_reads_photomodeler_means_from_report() -> None:
         "p1": 3.703e-006,
         "p2": 0.0,
     }
-    path = os.path.join("tests", "CalibrationReport.txt")
+    path = Path("tests", "CalibrationReport.txt")
     xcam_auto = PhotoModeler.from_report(path, imgsz=imgsz)
     xcam_manual = PhotoModeler(imgsz=imgsz, **means)
     assert vars(xcam_auto) == vars(xcam_manual)
@@ -191,7 +191,7 @@ def test_reads_photomodeler_sigmas_from_report() -> None:
         "p1": 3.5e-007,
         "p2": 0.0,
     }
-    path = os.path.join("tests", "CalibrationReport.txt")
+    path = Path("tests", "CalibrationReport.txt")
     xcam_auto = PhotoModeler.from_report(path, imgsz=imgsz, sigmas=True)
     xcam_manual = PhotoModeler(imgsz=imgsz, **sigmas)
     assert vars(xcam_auto) == vars(xcam_manual)
@@ -271,7 +271,7 @@ def test_reads_opencv_from_xml() -> None:
         "cameraMatrix": [(f["fx"], 0, c["cx"]), (0, f["fy"], c["cy"]), (0, 0, 1)],
         "distCoeffs": list(coeffs.values()),
     }
-    path = os.path.join("tests", "opencv.xml")
+    path = Path("tests", "opencv.xml")
     xcam_auto = OpenCV.from_xml(path, imgsz=imgsz)
     xcam_params = OpenCV(imgsz=imgsz, **{**f, **c, **coeffs})
     assert vars(xcam_auto) == vars(xcam_params)

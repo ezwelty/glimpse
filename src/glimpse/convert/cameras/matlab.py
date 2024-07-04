@@ -1,5 +1,6 @@
 """MATLAB camera models."""
 import re
+from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple, Union, cast
 
 import numpy as np
@@ -44,7 +45,7 @@ class Matlab:
         self.alpha_c = alpha_c
 
     @classmethod
-    def from_report(cls, path: str, sigmas: bool = False) -> "Matlab":
+    def from_report(cls, path: Union[str, Path], sigmas: bool = False) -> "Matlab":
         """
         Read from calibration report (Calib_Result.m).
 

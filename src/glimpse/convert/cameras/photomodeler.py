@@ -1,5 +1,6 @@
 """PhotoModeler camera models."""
 import re
+from pathlib import Path
 from typing import Any, Dict, Iterable, Tuple, Union, cast
 
 import numpy as np
@@ -54,7 +55,7 @@ class PhotoModeler:
 
     @classmethod
     def from_report(
-        cls, path: str, imgsz: Tuple[int, int], sigmas: bool = False
+        cls, path: Union[str, Path], imgsz: Tuple[int, int], sigmas: bool = False
     ) -> "PhotoModeler":
         """
         Read from camera calibration project report.

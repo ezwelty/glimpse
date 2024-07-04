@@ -1,6 +1,6 @@
 """Tests of the optimize module."""
 import copy
-import os
+from pathlib import Path
 
 import glimpse
 
@@ -14,7 +14,7 @@ def test_optimizes_camera_viewdir_with_ransac() -> None:
     filters the matches with RANSAC,
     and solves for the rotation.
     """
-    path = os.path.join("tests", "AK10b_20141013_020336.JPG")
+    path = Path("tests", "AK10b_20141013_020336.JPG")
     imgA = glimpse.Image(path)
     imgA.cam.resize(0.5)
     imgB = copy.deepcopy(imgA)

@@ -3,6 +3,7 @@ import copy
 import datetime
 import numbers
 import warnings
+from pathlib import Path
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import matplotlib.colors
@@ -182,7 +183,7 @@ class Grid:
     @classmethod
     def read(
         cls,
-        path: str,
+        path: Union[str, Path],
         d: Number = None,
         xlim: Iterable[Number] = None,
         ylim: Iterable[Number] = None,
@@ -196,7 +197,7 @@ class Grid:
             xlim: Target outer bounds of crop in x.
             ylim: Target outer bounds of crop in y.
         """
-        raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
+        raster = osgeo.gdal.Open(str(path), osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         size = (raster.RasterXSize, raster.RasterYSize)
         crs = raster.GetProjection()
@@ -694,7 +695,7 @@ class Raster(Grid):
     @classmethod
     def open(
         cls,
-        path: str,
+        path: Union[str, Path],
         band: int = 1,
         d: float = None,
         xlim: Iterable[Number] = None,
@@ -720,6 +721,7 @@ class Raster(Grid):
             nan: Raster value to replace with `null`. If provided, raster values are
                 cast to :class:`float`.
         """
+        path = str(path)
         raster = osgeo.gdal.Open(path, osgeo.gdal.GA_ReadOnly)
         transform = raster.GetGeoTransform()
         grid = Grid(
@@ -1473,7 +1475,7 @@ class Raster(Grid):
         dzdy, dzdx = np.gradient(self.array, self.d[1], self.d[0])
         return dzdx, dzdy
 
-    def write(self, path: str, **kwargs: Any) -> None:
+    def write(self, path: Union[str, Path], **kwargs: Any) -> None:
         """
         Write to file.
 
@@ -1542,8 +1544,8 @@ class RasterInterpolant:
 
     def __init__(
         self,
-        means: Iterable[Union[Raster, str, Number]],
-        sigmas: Iterable[Union[Raster, str, Number]] = None,
+        means: Iterable[Union[Raster, Number, str, Path]],
+        sigmas: Iterable[Union[Raster, Number, str, Path]] = None,
         x: Iterable[Union[Number, datetime.datetime]] = None,
     ) -> None:
         self.means = means
@@ -1554,7 +1556,7 @@ class RasterInterpolant:
 
     def _parse_as_raster(
         self,
-        obj: Union[Raster, str, Number],
+        obj: Union[Raster, Number, str, Path],
         xi: Union[Number, datetime.datetime] = None,
         d: Number = None,
         xlim: Iterable[Number] = None,
@@ -1585,7 +1587,7 @@ class RasterInterpolant:
                 scale = d / np.abs(obj.d).mean()
                 obj.resize(scale)
             return obj
-        if isinstance(obj, str):
+        if isinstance(obj, (str, Path)):
             # Path to raster
             # Read from file
             return Raster.open(obj, d=d, xlim=xlim, ylim=ylim, datetime=t)
@@ -1633,7 +1635,7 @@ class RasterInterpolant:
         obj = self.means[index]
         if isinstance(obj, Raster):
             return obj.grid
-        if isinstance(obj, str):
+        if isinstance(obj, (str, Path)):
             return Grid.read(obj)
         if isinstance(obj, numbers.Number):
             return Grid((1, 1), x=(-np.inf, np.inf), y=(-np.inf, np.inf))

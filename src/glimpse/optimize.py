@@ -3,7 +3,7 @@ import copyreg
 import datetime
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Generator, Iterable, List, Optional, Tuple, Type, Union
 
 import cv2
 import lmfit
@@ -2150,7 +2150,9 @@ def ransac(
     return params, inliers
 
 
-def _ransac_samples(n: int, size: int, iterations: int = 100) -> List[int]:
+def _ransac_samples(
+    n: int, size: int, iterations: int = 100
+) -> Generator[List[int], List[int], List[int]]:
     """
     Generate non-repeating combinations of indices for random samples.
 

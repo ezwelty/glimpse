@@ -209,7 +209,7 @@ class Image:
         return array
 
     def write(
-        self, path: Union[str, Path], array: np.ndarray = None, driver: str = None
+        self, path: Union[str, Path], array: np.ndarray = None, **kwargs: Any
     ) -> None:
         """
         Write image data to file.
@@ -217,12 +217,11 @@ class Image:
         Arguments:
             path: File path to write to.
             array: Image data. If `None`, the original image data is read.
-            driver: GDAL drivers to use (see https://gdal.org/drivers/raster).
-                If `None`, tries to guess the driver based on the file extension.
+            **kwargs: Additional parameters to :func:`helpers.write_raster`.
         """
         if array is None:
             array = self.read()
-        helpers.write_raster(a=array, path=path, driver=driver)
+        helpers.write_raster(a=array, path=path, **kwargs)
 
     def plot(self, **kwargs: Any) -> matplotlib.image.AxesImage:
         """

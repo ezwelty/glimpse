@@ -552,6 +552,7 @@ def write_raster(
     nan: Union[float, int] = None,
     crs: Union[int, str] = None,
     transform: Iterable[Union[int, float]] = None,
+    options: Union[list, dict] = None,
 ) -> None:
     """
     Write array to raster dataset.
@@ -565,6 +566,7 @@ def write_raster(
         crs: Coordinate reference system as either EPSG code or Proj4 or WKT string.
         transform: Affine transform mapping pixel positions to map positions
             (see https://gdal.org/user/raster_data_model.html?#affine-geotransform).
+        options: Driver creation options (e.g. ['QUALITY=95'] or {'QUALITY': 95}).
 
     Raises:
         ValueError: Unsupported array data type.
@@ -588,6 +590,12 @@ def write_raster(
         driver = gdal_driver_from_path(path, vector=False)
         if not driver:
             raise ValueError(f"Could not guess GDAL driver from path: {path}")
+    if options is None:
+        # NOTE: gdal.Driver.Create(Copy) throws error with options=None
+        options = []
+    elif isinstance(options, dict):
+        # NOTE: gdal.Driver.Create(Copy) throws error with options={}
+        options = [f"{key}={value}" for key, value in options.items()]
     meta = driver.GetMetadata()
     can_create = meta.get(osgeo.gdal.DCAP_CREATE)
     can_copy = meta.get(osgeo.gdal.DCAP_CREATECOPY)
@@ -595,11 +603,12 @@ def write_raster(
         raise ValueError(f"GDAL driver {driver.ShortName} cannot write files")
     create_driver = driver if can_create else osgeo.gdal.GetDriverByName("mem")
     output = create_driver.Create(
-        utf8_path=path if can_create else "",
+        utf8_path=str(path) if can_create else "",
         xsize=a.shape[1],
         ysize=a.shape[0],
         bands=a.shape[2],
         eType=dtype,
+        options=options if can_create else [],
     )
     if transform:
         output.SetGeoTransform(transform)
@@ -611,7 +620,9 @@ def write_raster(
             output.GetRasterBand(i + 1).SetNoDataValue(nan)
         output.GetRasterBand(i + 1).WriteArray(a[:, :, i])
     if not can_create:
-        output = driver.CreateCopy(path, output, 0)
+        output = driver.CreateCopy(
+            utf8_path=str(path), src=output, strict=0, options=options
+        )
     output.FlushCache()
 
 

@@ -139,6 +139,28 @@ class Tracks:
                     value = value[:, ::-1, ...]
                 setattr(self, key, value)
 
+    def average_vxyz(self, ignore_nan: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Time-averaged velocity distribution (mean and sigma) for each track.
+
+        Computes the average as a weighted sum,
+        weighing the distributions at each time step by the
+        inverse of their variance and assuming that they are correlated.
+
+        Arguments:
+            ignore_nan: Whether to ignore timesteps with missing velocity when computing
+                the average.
+        """
+        return helpers.sum_normals(
+            means=self.vxyz,
+            sigmas=self.vxyz_sigma,
+            weights=self.vxyz_sigma ** -2,
+            normalize=True,
+            correlation=1,
+            axis=1,
+            ignore_nan=ignore_nan,
+        )
+
     def endpoints(
         self, tracks: Index = slice(None)
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

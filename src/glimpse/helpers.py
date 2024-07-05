@@ -5,6 +5,7 @@ import json
 import os
 import pickle
 import re
+import warnings
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Match, Optional, Tuple, Union
 
@@ -487,6 +488,121 @@ def match_cdf(
         cdf = compute_cdf(cdf, return_inverse=False)
     values = np.interp(quantiles, cdf[1], cdf[0])
     return values[inverse].reshape(a.shape)
+
+
+def _numpy_dropdims(
+    a: np.ndarray, axis: int = None, keepdims: bool = False
+) -> np.ndarray:
+    """
+    Drop array dimensions along an axis.
+
+    Simulates numpy methods with axis and keepdims arguments:
+    * Input is cast to array.
+    * Array is returned as-is if keepdims is True.
+    * Scalar is returned if array has size 1 and axis is None.
+    * Array with squeezed axis is returned if axis has length 1.
+
+    Arguments:
+        a: Array-like object.
+        axis: Axis to drop.
+        keepdims: Whether to keep (or drop) dimensions.
+    """
+    a = np.asarray(a)
+    if keepdims:
+        return a
+    if axis is None and a.size == 1:
+        return a.item()
+    if axis is not None and a.shape[axis] == 1:
+        return a.squeeze(axis=axis)
+    return a
+
+
+def sum_normals(
+    means: np.ndarray,
+    sigmas: np.ndarray,
+    weights: np.ndarray = None,
+    normalize: bool = False,
+    correlation: float = 0,
+    axis: int = None,
+    keepdims: bool = False,
+    ignore_nan: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Return the mean and sigma of the sum of normally-distributed random variables.
+
+    See https://en.wikipedia.org/wiki/Propagation_of_uncertainty#Linear_combinations.
+
+    Arguments:
+        means: Means.
+        sigmas: Standard deviations (same shape as means).
+        weights: Weights (same shape as means), or 1 for all by default.
+        normalize: Whether to normalize weights to sum to 1 (for all non-missing values)
+            to calculate a (weighted) average.
+        correlation: Correlation to assume between variables.
+        axis: Axis along which to sum, or all if None.
+        keepdims: Whether to not drop reduced axis.
+        ignore_nan: Whether to drop (ignore) missing values before computing sum.
+
+    Raises:
+        ValueError: Means and sigmas have missing values at different indices
+        ValueError: Sigmas cannot be zero
+
+    Examples:
+        >>> means = np.array([[1, np.nan]])
+        >>> sigmas = np.array([[1, np.nan]])
+        >>> sum_normals(means, sigmas, ignore_nan=False)
+        (nan, nan)
+        >>> sum_normals(means, sigmas, ignore_nan=True)
+        (1.0, 1.0)
+        >>> sum_normals(means, sigmas, keepdims=True)
+        (array([[nan]]), array([[nan]]))
+        >>> sum_normals(means, sigmas, axis=1)
+        (array([nan]), array([nan]))
+    """
+    # Check inputs
+    isnan = np.isnan(means)
+    if np.any(isnan != np.isnan(sigmas)):
+        raise ValueError("Means and sigmas have missing values at different indices")
+    if np.any(sigmas == 0):
+        raise ValueError("Sigmas cannot be zero")
+    # Prepare weights
+    if weights is None:
+        weights = np.ones(means.shape)
+    if normalize:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="divide by zero encountered in true_divide"
+            )
+        weights = weights * (1 / np.nansum(weights * ~isnan, axis=axis, keepdims=True))
+    # Sum weighted means
+    wmeans = np.nansum(weights * means, axis=axis, keepdims=True)
+    # Initialize variance as sum of diagonal elements
+    variances = np.nansum(weights ** 2 * sigmas ** 2, axis=axis, keepdims=True)
+    # Propagate missing values
+    if ignore_nan:
+        # np.nansum interprets sum of nans as 0
+        mask = isnan.all(axis=axis, keepdims=True)
+    else:
+        mask = isnan.any(axis=axis, keepdims=True)
+    wmeans[mask] = np.nan
+    variances[mask] = np.nan
+    if correlation:
+        # Add off-diagonal elements
+        n = means.size if axis is None else means.shape[axis]
+        pairs = np.triu_indices(n=n, k=1)
+        variances += 2 * np.nansum(
+            correlation
+            * np.take(weights, pairs[0], axis=axis)
+            * np.take(weights, pairs[1], axis=axis)
+            * np.take(sigmas, pairs[0], axis=axis)
+            * np.take(sigmas, pairs[1], axis=axis),
+            axis=axis,
+            keepdims=True,
+        )
+    return (
+        _numpy_dropdims(wmeans, axis=axis, keepdims=keepdims),
+        _numpy_dropdims(np.sqrt(variances), axis=axis, keepdims=keepdims),
+    )
 
 
 # ---- GIS ---- #

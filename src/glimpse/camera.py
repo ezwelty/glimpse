@@ -96,6 +96,8 @@ class Camera:
             raise ValueError(
                 "Principal point offset provided in both pixels and mm (c, cmm)"
             )
+        if imgsz is None:
+            raise ValueError("Image size (imgsz) cannot be None")
         self._vector = np.full(20, np.nan, dtype=float)
         self.xyz = xyz
         self.viewdir = viewdir

@@ -22,6 +22,7 @@ class Image:
         path: Path to image file.
         cam: :class:`Camera` or arguments passed to :class:`Camera`.
             If missing, `imgsz`, `fmm`, and `sensorsz` are read from **exif**.
+            If still missing, `imgsz` is determined from **path**.
         datetime: Image capture date and time. If `None`, read from **exif**.
         exif: Image metadata. If `None` and needed for **cam** or **datetime**,
             read from **path**.
@@ -91,19 +92,23 @@ class Image:
         exif: Exif = None,
     ) -> None:
         self.path = str(path)
-        if not cam:
+        if cam is None:
             cam = {}
         if isinstance(cam, dict):
-            if not (
-                "imgsz" in cam and "f" in cam or ("fmm" in cam and "sensorsz" in cam)
-            ):
+            needs_imgsz = cam.get("imgsz") is None
+            needs_fmm = cam.get("f") is None and cam.get("fmm") is None
+            needs_sensorsz = cam.get("f") is None and cam.get("sensorsz") is None
+            if any([needs_imgsz, needs_fmm, needs_sensorsz]):
                 exif = exif or Exif(path)
-                cam = {
-                    "imgsz": exif.imgsz,
-                    "fmm": exif.fmm,
-                    "sensorsz": exif.sensorsz,
-                    **cam,
-                }
+                # Prevent modifying input inplace
+                cam = cam.copy()
+                if needs_imgsz:
+                    # Read size from file if needed
+                    cam["imgsz"] = exif.imgsz or self._path_imgsz
+                if needs_fmm and exif.fmm:
+                    cam["fmm"] = exif.fmm
+                if needs_sensorsz and exif.sensorsz:
+                    cam["sensorsz"] = exif.sensorsz
             cam = Camera(**cam)
         self.cam = cam
         if not datetime:

@@ -40,6 +40,7 @@ def format_list(
             If `None`, data is left as-is.
 
     Raises:
+        ValueError: Input cannot be None
         ValueError: Output length is not multiple of input length.
 
     Examples:
@@ -55,11 +56,9 @@ def format_list(
         [0, 1, 0, 1]
         >>> format_list([0, 1], dtype=float)
         [0.0, 1.0]
-        >>> format_list(None) is None
-        True
     """
     if x is None:
-        return x
+        raise ValueError("Input cannot be None")
     if not np.iterable(x):
         x = [x]
     elif not isinstance(x, list):

@@ -119,6 +119,26 @@ class Tracks:
         if self.errors is not None:
             return np.array([error is None for error in self.errors])
 
+    def reverse(self) -> None:
+        """Reverse temporal order of tracks."""
+        attributes = [
+            "datetimes",
+            "means",
+            "sigmas",
+            "covariances",
+            "particles",
+            "weights",
+            "images",
+        ]
+        for key in attributes:
+            value = getattr(self, key)
+            if value is not None:
+                if value.ndim == 1:
+                    value = value[::-1]
+                else:
+                    value = value[:, ::-1, ...]
+                setattr(self, key, value)
+
     def endpoints(
         self, tracks: Index = slice(None)
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

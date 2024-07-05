@@ -1035,8 +1035,8 @@ def bresenham_circle(center: Iterable, radius: float) -> np.ndarray:
         xy[2 * octant_size + i - 1, :] = [x0 + y, y0 - x]
         # 8th octant
         xy[6 * octant_size - i, :] = [x0 - y, y0 - x]
-    # Remove duplicate points
-    unique = [True] + (np.diff(xy, axis=0).sum(axis=1) != 0).tolist()
+    # Remove sequential duplicate points
+    unique = [True] + (np.diff(xy, axis=0) != 0).any(axis=1).tolist()
     return xy[unique]
 
 

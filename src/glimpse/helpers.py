@@ -9,6 +9,9 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Match, Optional, Tuple, Union
 
+import matplotlib.axes
+import matplotlib.pyplot as plt
+import matplotlib.quiver
 import numpy as np
 import osgeo.gdal
 import osgeo.gdal_array
@@ -1847,6 +1850,44 @@ def select_datetimes(
         temp[nearest] = True
         selected &= temp
     return selected
+
+
+# ---- Plotting ----
+
+
+def plot_quivers(
+    x: Union[np.ndarray, Iterable[Iterable[Union[int, float]]]],
+    dx: Union[np.ndarray, Iterable[Iterable[Union[int, float]]]],
+    ax: matplotlib.axes.Axes = None,
+    **kwargs: Any,
+) -> matplotlib.quiver.Quiver:
+    """
+    Plot quivers.
+
+    Uses defaults optimized for plotting quivers on a map at scale.
+
+    Arguments:
+        x: Position [(x, y), ...].
+        dx: Displacements [(dx, dy), ...].
+        ax: Plotting axis.
+        **kwargs: Optional parameters to :meth:`matplotlib.pyplot.quiver`.
+    """
+    x = np.asarray(x)
+    dx = np.asarray(dx)
+    kwargs = {
+        "width": 5,
+        "headaxislength": 0,
+        "headwidth": 1,
+        "minlength": 0,
+        "pivot": "tail",
+        "angles": "xy",
+        "scale_units": "xy",
+        "scale": 1,
+        **kwargs,
+    }
+    ax = ax or plt.gca()
+    result = ax.quiver(x[:, 0], x[:, 1], dx[:, 0], dx[:, 1], **kwargs)
+    return result
 
 
 # ---- Internal ----

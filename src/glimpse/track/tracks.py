@@ -114,6 +114,15 @@ class Tracks:
             return np.sqrt(self.covariances[:, :, (3, 4, 5), (3, 4, 5)])
 
     @property
+    def endpoints(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Mask of non-null tracks and indices of first and last valid datetimes."""
+        valid = ~np.isnan(self.means[:, :, 0])
+        first = np.argmax(valid, axis=1)
+        last = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
+        first_valid = valid[np.arange(len(first)), first]
+        return first_valid, first[first_valid], last[first_valid]
+
+    @property
     def success(self) -> np.ndarray:
         """Whether track completed without errors (n,)."""
         if self.errors is not None:
@@ -202,38 +211,6 @@ class Tracks:
             axis=1,
             ignore_nan=ignore_nan,
         )
-
-    def endpoints(
-        self, tracks: Index = slice(None)
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Return endpoints of each track.
-
-        Arguments:
-            tracks: Indices of tracks to return.
-
-        Returns:
-            For each selected track, the indices of the first and last valid datetimes.
-        """
-        valid = ~np.isnan(self.means[tracks, :, 0])
-        first = np.argmax(valid, axis=1)
-        last = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
-        first_valid = valid[np.arange(len(first)), first]
-        return first_valid, first[first_valid], last[first_valid]
-
-    # @property
-    # def first(self):
-    #     valid = ~np.isnan(self.means[:, :, 0])
-    #     idx = np.argmax(valid, axis=1)
-    #     still_valid = valid[np.arange(len(idx)), idx]
-    #     return np.nonzero(still_valid)[0], idx[idx]
-    #
-    # @property
-    # def last(self):
-    #     valid = ~np.isnan(self.means[:, :, 0])
-    #     idx = valid.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
-    #     still_valid = valid[np.arange(len(idx)), idx]
-    #     return np.nonzero(still_valid)[0], idx[idx]
 
     def plot_xy(
         self,

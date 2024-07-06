@@ -573,7 +573,9 @@ def sum_normals(
             warnings.filterwarnings(
                 "ignore", message="divide by zero encountered in true_divide"
             )
-        weights = weights * (1 / np.nansum(weights * ~isnan, axis=axis, keepdims=True))
+            weights = weights * (
+                1 / np.nansum(weights * ~isnan, axis=axis, keepdims=True)
+            )
     # Sum weighted means
     wmeans = np.nansum(weights * means, axis=axis, keepdims=True)
     # Initialize variance as sum of diagonal elements

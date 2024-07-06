@@ -139,9 +139,51 @@ class Tracks:
                     value = value[:, ::-1, ...]
                 setattr(self, key, value)
 
-    def average_vxyz(self, ignore_nan: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    @classmethod
+    def from_multiple(
+        cls, runs: Iterable["Tracks"], ignore_nan: bool = False
+    ) -> "Tracks":
         """
-        Time-averaged velocity distribution (mean and sigma) for each track.
+        Merge multiple tracks with identical timesteps.
+
+        Computes their average at each time step by weighing their distributions by the
+        inverse of their variance and assuming that they are uncorrelated.
+
+        Arguments:
+            runs: Tracks with identical :attr:`datetimes` and :attr:`time_units`.
+            ignore_nan: Whether to ignore missing values when merging tracks.
+        """
+        # Check datetimes are equal for all runs
+        datetimes = {tuple(run.datetimes) for run in runs}
+        if len(datetimes) != 1:
+            raise ValueError("Datetimes are not equal for all runs")
+        # Check timeunits are equal for all runs
+        time_unit = {run.time_unit for run in runs}
+        if len(time_unit) != 1:
+            raise ValueError(f"Time units are not equal for all runs: {time_unit}")
+        # Merge runs
+        means = np.stack([run.means for run in runs], axis=3)
+        sigmas = np.stack([run.sigmas for run in runs], axis=3)
+        means, sigmas = helpers.sum_normals(
+            means=means,
+            sigmas=sigmas,
+            weights=sigmas ** -2,
+            normalize=True,
+            correlation=0,
+            axis=3,
+            keepdims=False,
+            ignore_nan=ignore_nan,
+        )
+        return cls(
+            datetimes=datetimes.pop(),
+            time_unit=time_unit.pop(),
+            means=means,
+            sigmas=sigmas,
+        )
+
+    def average(self, ignore_nan: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Time-averaged distribution (mean and sigma) for each track.
 
         Computes the average as a weighted sum,
         weighing the distributions at each time step by the
@@ -152,9 +194,9 @@ class Tracks:
                 the average.
         """
         return helpers.sum_normals(
-            means=self.vxyz,
-            sigmas=self.vxyz_sigma,
-            weights=self.vxyz_sigma ** -2,
+            means=self.means,
+            sigmas=self.sigmas,
+            weights=self.sigmas ** -2,
             normalize=True,
             correlation=1,
             axis=1,
@@ -251,7 +293,7 @@ class Tracks:
                         self.xyz[i, :, 1],
                         xerr=self.xyz_sigma[i, :, 0],
                         yerr=self.xyz_sigma[i, :, 1],
-                        **sigma
+                        **sigma,
                     )
                 )
         return results
@@ -276,7 +318,7 @@ class Tracks:
                     self.xyz[i, :, 1],
                     self.vxyz[i, :, 0],
                     self.vxyz[i, :, 1],
-                    **kwargs
+                    **kwargs,
                 )
             )
         return results
@@ -327,7 +369,7 @@ class Tracks:
                         self.datetimes,
                         y1=self.vxyz[i, :, dim] + self.vxyz_sigma[i, :, dim],
                         y2=self.vxyz[i, :, dim] - self.vxyz_sigma[i, :, dim],
-                        **sigma
+                        **sigma,
                     )
                 )
         return results

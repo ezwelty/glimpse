@@ -1001,6 +1001,106 @@ def intersect_rays_box(
     return origin + tmin[:, None] * directions, origin + tmax[:, None] * directions
 
 
+def intersect_ray_planes(
+    ray: Tuple[float, float, float, float, float, float],
+    planes: Iterable[
+        Tuple[float, float, float, float, float, float, float, float, float]
+    ],
+) -> np.ndarray:
+    """
+    Intersect a ray with many planes.
+
+    Args:
+        ray: Ray (x0, y0, z0, dx, dy, dz).
+        planes: Planes [(x0, y0, z0, dx1, dy1, dz1, dx2, dy2, dz2), ...].
+
+    Returns:
+        Ray-plane intersections [(x, y, z), ...] or NaN if they do not intersect
+        (parallel or the plane is behind the ray origin).
+
+    Examples:
+        >>> planes = [
+        ...     (0, 0, 0, 1, 0, 0, 0, 1, 0),  # xy-plane through z=0
+        ...     (0, 0, 2, 1, 0, 0, 0, 1, 0),  # xy-plane through z=2
+        ... ]
+        >>> ray = (0, 0, 1, 0, 0, -1)  # down from z=1
+        >>> intersect_ray_planes(ray, planes)
+        array([[ 0.,  0.,  0.],
+               [nan, nan, nan]])
+    """
+    # Format inputs
+    ray = np.asarray(ray)
+    planes = np.atleast_2d(planes)
+    # Initialize intersection points
+    points = np.full((planes.shape[0], 3), np.nan)
+    # Plane normals
+    normals = np.cross(planes[:, 3:6], planes[:, 6:9])
+    # Select non-parallel rays
+    dots = (ray[3:6] * normals).sum(axis=1)
+    mask = np.abs(dots) > 1e-14
+    # Shift between origins of plane and ray
+    shifts = planes[mask, :3] - ray[:3]
+    # Relative position of intersections along rays
+    t = (normals[mask] * shifts).sum(axis=1) / dots[mask]
+    infront = t >= 0
+    # Select rays pointing towards the plane
+    mask[mask] &= infront
+    # Absolute position of intersection
+    points[mask] = ray[:3] + t[infront] * ray[3:6]
+    return points
+
+
+def intersect_rays_plane(
+    rays: Iterable[Tuple[float, float, float, float, float, float]],
+    plane: Tuple[float, float, float, float, float, float, float, float, float],
+) -> np.ndarray:
+    """
+    Intersect rays with an infinite plane.
+
+    Args:
+        rays: Rays [(x0, y0, z0, dx, dy, dz), ...].
+        plane: Plane (x0, y0, z0, dx1, dy1, dz1, dx2, dy2, dz2).
+
+    Returns:
+        Ray-plane intersections [(x, y, z), ...] or NaN if they do not intersect
+        (parallel or the plane is behind the ray origin).
+
+    Examples:
+        >>> plane = (0, 0, 0, 1, 0, 0, 0, 1, 0)  # xy-plane through z=0
+        >>> rays = [
+        ...     (0, 0, 1, 0, 0, -1),  # down from z=1
+        ...     (0, 0, 1, 0, 0, 1),   # up from z=1 (behind)
+        ...     (0, 0, 1, 1, 0, 0),   # x-axis at z=1 (parallel)
+        ...     (0, 0, 0, 1, 0, 0),   # x-axis at z=0 (overlap)
+        ... ]
+        >>> intersect_rays_plane(rays, plane)
+        array([[ 0.,  0.,  0.],
+               [nan, nan, nan],
+               [nan, nan, nan],
+               [nan, nan, nan]])
+    """
+    # Format inputs
+    rays = np.atleast_2d(rays)
+    plane = np.asarray(plane)
+    # Initialize intersection points
+    points = np.full((rays.shape[0], 3), np.nan)
+    # Plane normal
+    normal = np.cross(plane[3:6], plane[6:9])
+    dots = (normal * rays[:, 3:6]).sum(axis=1)
+    # Select non-parallel rays
+    mask = np.abs(dots) > 1e-14
+    # Shift between origins of plane and rays
+    shifts = plane[:3] - rays[mask, :3]
+    # Relative position of intersections along rays
+    t = (normal * shifts).sum(axis=1) / dots[mask]
+    infront = t >= 0
+    # Select rays pointing towards the plane
+    mask[mask] &= infront
+    # Absolute position of intersection
+    points[mask] = rays[mask, :3] + t[infront] * rays[mask, 3:6]
+    return points
+
+
 # TODO: Implement faster run-slice
 # (http://www.phatcode.net/res/224/files/html/ch36/36-03.html)
 def bresenham_line(start: Iterable[int], end: Iterable[int]) -> np.ndarray:

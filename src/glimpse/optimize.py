@@ -1874,7 +1874,7 @@ class Cameras:
             print(result.message)
         if full:
             return result
-        elif result.success:
+        if result.success:
             return np.array(list(result.params.valuesdict().values()))
 
     def plot(

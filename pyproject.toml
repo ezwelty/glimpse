@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "glimpse"
-version = "0.1.0b1"
+version = "0.1.1"
 description = "Timelapse camera calibration and surface motion extraction"
 authors = ["Ethan Welty <ethan.welty@gmail.com>", "Douglas Brinkerhoff"]
 readme = "README.md"

@@ -2531,7 +2531,10 @@ class KeypointMatcher:
         # Filter matched image pairs
         if imgs is not None:
             for i, m in enumerate(matching_images):
-                matching_images[i] = m[np.isin(m, imgs)]
+                if i in imgs:
+                    matching_images[i] = m
+                else:
+                    matching_images[i] = m[np.isin(m, imgs)]
 
         def reduce(matches: Iterable[Matches]) -> Iterable[Matches]:
             if filter:

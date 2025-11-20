@@ -2266,6 +2266,19 @@ def match_keypoints(
         Coordinates of matches in second image (n, [ub, vb]).
         (optional) Ratio of each match (n,).
     """
+
+    def _build_empty(
+        return_ratios: bool,
+    ) -> Union[
+        Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray]
+    ]:
+        empty = np.array([], dtype=float).reshape(0, 2)
+        uva, uvb = empty, empty.copy()
+        ratios = np.array([], dtype=float)
+        if return_ratios:
+            return uva, uvb, ratios
+        return uva, uvb
+
     if mask is not None:
         mask = np.asarray(mask, dtype=np.uint8)
     compute_ratios = max_ratio or return_ratios
@@ -2278,6 +2291,8 @@ def match_keypoints(
             matches = [m for m in matches if (m[0].queryIdx, m[0].trainIdx) in ba]
         if max_ratio:
             matches = [m for m in matches if m[0].distance / m[1].distance < max_ratio]
+        if not matches:
+            return _build_empty(return_ratios)
         uva = np.asarray([ka[0][m[0].queryIdx].pt for m in matches])
         uvb = np.asarray([kb[0][m[0].trainIdx].pt for m in matches])
         if return_ratios:
@@ -2288,10 +2303,7 @@ def match_keypoints(
             if return_ratios:
                 ratios = ratios[valid]
     else:
-        # Not enough keypoints to match
-        empty = np.array([], dtype=float).reshape(0, 2)
-        uva, uvb = empty, empty.copy()
-        ratios = np.array([], dtype=float)
+        return _build_empty(return_ratios)
     if return_ratios:
         return uva, uvb, ratios
     return uva, uvb

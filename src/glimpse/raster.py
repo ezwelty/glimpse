@@ -1442,6 +1442,9 @@ class Raster(Grid):
             idx = self.rowcol_to_idx(rowcol)
             # TODO: Precompute Z.flatten()?
             dz = self.array.flat[idx] - origin[2]
+            is_nan = np.isnan(dz)
+            if np.all(is_nan):
+                continue
             xy = self.rowcol_to_xy(rowcol)
             dxy = np.sum((xy - origin[0:2]) ** 2, axis=1)  # wait to take square root
             if isinstance(correction, dict):
@@ -1450,19 +1453,14 @@ class Raster(Grid):
             else:
                 maxi = np.nanargmax(dz / np.sqrt(dxy))
             # Save point if not last non-nan value
-            if maxi < (len(dz) - 1) and np.any(~np.isnan(dz[maxi + 1 :])):
+            if maxi < (len(dz) - 1) and np.any(~is_nan[maxi + 1 :]):
                 hxyz[i, 0:2] = xy[maxi, :]
                 hxyz[i, 2] = dz[maxi]
         hxyz[:, 2] += origin[2]
         # Split at NaN
         mask = np.isnan(hxyz[:, 0])
         splits = helpers.boolean_split(hxyz, mask, axis=0, circular=True)
-        if mask[0]:
-            # Starts with isnan group
-            return splits[1::2]
-        else:
-            # Starts with not-isnan group
-            return splits[0::2]
+        return splits[mask[0] :: 2]
 
     def gradient(self) -> Tuple[np.ndarray, np.ndarray]:
         """

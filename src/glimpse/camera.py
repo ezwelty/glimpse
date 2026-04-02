@@ -1490,7 +1490,7 @@ class Camera:
             xyz = np.dot(xy, self.R[0:2, :])
         # Simulate z = 1 by adding 3rd column of rotation matrix
         xyz += self.R.T[:, 2]
-        if depth != 1:
+        if not isinstance(depth, (int, float)) or depth != 1:
             xyz *= np.atleast_1d(depth).reshape(-1, 1)
         if not directions:
             xyz += self.xyz

@@ -1097,7 +1097,7 @@ def intersect_rays_plane(
     # Select rays pointing towards the plane
     mask[mask] &= infront
     # Absolute position of intersection
-    points[mask] = rays[mask, :3] + t[infront] * rays[mask, 3:6]
+    points[mask] = rays[mask, :3] + t[infront, np.newaxis] * rays[mask, 3:6]
     return points
 
 
@@ -1958,6 +1958,7 @@ def select_datetimes(
 def plot_quivers(
     x: Union[np.ndarray, Iterable[Iterable[Union[int, float]]]],
     dx: Union[np.ndarray, Iterable[Iterable[Union[int, float]]]],
+    c: Iterable[Union[int, float]] = None,
     ax: matplotlib.axes.Axes = None,
     **kwargs: Any,
 ) -> matplotlib.quiver.Quiver:
@@ -1968,6 +1969,7 @@ def plot_quivers(
 
     Arguments:
         x: Position [(x, y), ...].
+        c: Quiver colors.
         dx: Displacements [(dx, dy), ...].
         ax: Plotting axis.
         **kwargs: Optional parameters to :meth:`matplotlib.pyplot.quiver`.
@@ -1986,7 +1988,7 @@ def plot_quivers(
         **kwargs,
     }
     ax = ax or plt.gca()
-    result = ax.quiver(x[:, 0], x[:, 1], dx[:, 0], dx[:, 1], **kwargs)
+    result = ax.quiver(x[:, 0], x[:, 1], dx[:, 0], dx[:, 1], c, **kwargs)
     return result
 
 

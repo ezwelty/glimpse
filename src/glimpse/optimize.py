@@ -2777,6 +2777,8 @@ def project_images(
     cam: Camera,
     images: Iterable[Image],
     paths: Iterable[Union[str, Path]],
+    u: np.ndarray = None,
+    v: np.ndarray = None,
     overwrite: bool = False,
     method: str = "linear",
     grayscale: bool = False,
@@ -2787,21 +2789,33 @@ def project_images(
     Project images into a camera.
 
     Arguments:
+        cam: Target camera to project into.
         images: Images to project.
+        paths: Output file paths for projected images.
+            Must be the same length as `images`.
+        u: Horizontal pixel coordinates in target image (m, ).
+            If `None`, defaults to all pixel centers.
+        v: Vertical pixel coordinates in target image (n, ).
+            If `None`, defaults to all pixel centers.
+        overwrite: Whether to overwrite existing files.
+        method: Interpolation method for sampling source images at target grid
+            (see `scipy.interpolate.RegularGridInterpolator`).
+        grayscale: Whether to convert source images to grayscale before sampling.
+            Otherwise, each band is sampled independently and stacked in the output.
         parallel: Number of parallel processes (int),
             or whether to work in parallel (bool). If `True`,
             defaults to :func:`os.cpu_count`.
-
-    Returns:
-        Projected images.
+        options: Additional options to `helpers.write_raster()`.
     """
     # Prepare file system
     paths = [str(path) for path in paths]
     if len(paths) != len(set(paths)):
         raise ValueError("Image output paths are not unique")
     # Construct grid in target image
-    u = np.linspace(0.5, cam.imgsz[0] - 0.5, cam.imgsz[0])
-    v = np.linspace(0.5, cam.imgsz[1] - 0.5, cam.imgsz[1])
+    if u is None:
+        u = np.linspace(0.5, cam.imgsz[0] - 0.5, cam.imgsz[0])
+    if v is None:
+        v = np.linspace(0.5, cam.imgsz[1] - 0.5, cam.imgsz[1])
     U, V = np.meshgrid(u, v)
     uv = np.column_stack((U.flatten(), V.flatten()))
     # Project grid out of target image
@@ -2814,19 +2828,19 @@ def project_images(
         path: Path = Path(path)
         if path.exists() and not overwrite:
             return None
-        # Project target grid onto source image (flip for RegularGridInterpolator)
-        puv = np.fliplr(image.cam.xyz_to_uv(dxyz, directions=True))
+        # Project target grid onto source image
+        puv = image.cam.xyz_to_uv(dxyz, directions=True)
+        # Compute bounding box of projected grid
+        box_min = np.floor(puv.min(axis=0)).astype(int)
+        box_max = np.ceil(puv.max(axis=0)).astype(int)
+        box = [*box_min, *box_max]
+        puv -= box_min
+        imgsz = box_max - box_min
         # Construct grid in source image
-        if cam.imgsz[0] == image.cam.imgsz[0]:
-            pu = u
-        else:
-            pu = np.linspace(0.5, image.cam.imgsz[0] - 0.5, image.cam.imgsz[0])
-        if cam.imgsz[1] == image.cam.imgsz[1]:
-            pv = v
-        else:
-            pv = np.linspace(0.5, image.cam.imgsz[1] - 0.5, image.cam.imgsz[1])
+        pu = np.linspace(0.5, imgsz[0] - 0.5, imgsz[0])
+        pv = np.linspace(0.5, imgsz[1] - 0.5, imgsz[1])
         # Prepare source image
-        array = image.read()
+        array = image.read(box=box)
         if array.ndim < 3:
             array = np.expand_dims(array, axis=2)
         if grayscale:
@@ -2837,7 +2851,8 @@ def project_images(
             f = scipy.interpolate.RegularGridInterpolator(
                 (pv, pu), array[:, :, i], method=method, bounds_error=False
             )
-            band = f(puv).reshape(cam.imgsz[1], cam.imgsz[0]).astype(array.dtype)
+            # Flip for RegularGridInterpolator
+            band = f(np.fliplr(puv)).reshape(len(v), len(u)).astype(array.dtype)
             bands.append(band)
         projected = np.dstack(bands)
         # Write to file

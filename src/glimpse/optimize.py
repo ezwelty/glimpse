@@ -2831,8 +2831,8 @@ def project_images(
         # Project target grid onto source image
         puv = image.cam.xyz_to_uv(dxyz, directions=True)
         # Compute bounding box of projected grid
-        box_min = np.floor(puv.min(axis=0)).astype(int)
-        box_max = np.ceil(puv.max(axis=0)).astype(int)
+        box_min = np.maximum([0, 0], np.floor(puv.min(axis=0))).astype(int)
+        box_max = np.minimum(cam.imgsz, np.ceil(puv.max(axis=0))).astype(int)
         box = [*box_min, *box_max]
         puv -= box_min
         imgsz = box_max - box_min

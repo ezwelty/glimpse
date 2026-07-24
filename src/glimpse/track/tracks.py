@@ -451,6 +451,7 @@ class Tracks:
         frames = frames[:-1]
 
         def update_plot(i: int) -> tuple:
+            i_scales = list(frames).index(i)
             # PathCollections cannot set x, y, so new objects have to be created
             for ax in axes:
                 ax.collections = []
@@ -458,7 +459,7 @@ class Tracks:
             if particles:
                 # Map: Particles
                 particle_xyz = self.particles[track, i, :, 0:3]
-                particle_vxy = self.particles[track, i, :, 3:5] * scales[i]
+                particle_vxy = self.particles[track, i, :, 3:5] * scales[i_scales]
                 axes[0].quiver(
                     particle_xyz[:, 0],
                     particle_xyz[:, 1],
@@ -506,8 +507,8 @@ class Tracks:
             axes[0].quiver(
                 self.xyz[track, i, 0],
                 self.xyz[track, i, 1],
-                self.vxyz[track, i, 0] * scales[i],
-                self.vxyz[track, i, 1] * scales[i],
+                self.vxyz[track, i, 0] * scales[i_scales],
+                self.vxyz[track, i, 1] * scales[i_scales],
                 color="red",
                 alpha=1,
                 angles="xy",

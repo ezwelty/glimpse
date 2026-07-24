@@ -2545,7 +2545,6 @@ class KeypointMatcher:
 
         # Run process in parallel
         with config.backend(np=parallel) as pool:
-
             # Define parallel process
             def process(i: int, js: np.ndarray) -> Optional[List[Matches]]:
                 if len(js) > 0:
